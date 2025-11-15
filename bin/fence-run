@@ -1,0 +1,58 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+if [[ $# -ne 2 ]]; then
+  echo "Usage: fence-run MODE PROBE_NAME" >&2
+  exit 1
+fi
+
+mode="$1"
+probe_name="$2"
+probe_path="probes/${probe_name}.sh"
+
+if [[ ! -x "${probe_path}" ]]; then
+  if [[ -f "${probe_path}" ]]; then
+    chmod +x "${probe_path}" 2>/dev/null || true
+  fi
+fi
+
+if [[ ! -x "${probe_path}" ]]; then
+  echo "Probe not found or not executable: ${probe_path}" >&2
+  exit 1
+fi
+
+sandbox_mode=""
+run_cmd=()
+case "${mode}" in
+  baseline)
+    sandbox_mode=""
+    run_cmd=("${probe_path}")
+    ;;
+  codex-sandbox)
+    sandbox_mode="workspace-write"
+    platform=$(uname -s)
+    case "${platform}" in
+      Darwin)
+        run_cmd=(codex sandbox macos --full-auto -- "${probe_path}")
+        ;;
+      Linux)
+        run_cmd=(codex sandbox linux --full-auto -- "${probe_path}")
+        ;;
+      *)
+        echo "Unsupported platform for codex-sandbox: ${platform}" >&2
+        exit 1
+        ;;
+    esac
+    ;;
+  codex-full)
+    sandbox_mode="danger-full-access"
+    # TODO: wire up dedicated codex profile that disables sandboxing entirely.
+    run_cmd=("${probe_path}")
+    ;;
+  *)
+    echo "Unknown mode: ${mode}" >&2
+    exit 1
+    ;;
+esac
+
+FENCE_RUN_MODE="${mode}" FENCE_SANDBOX_MODE="${sandbox_mode}" "${run_cmd[@]}"

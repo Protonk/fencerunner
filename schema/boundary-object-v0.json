@@ -1,0 +1,111 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://example.com/codex-fence/boundary-object-v0",
+  "title": "Codex Fence Boundary Object",
+  "description": "Record of a single probe execution against a specific runtime fence.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "stack",
+    "env",
+    "operation",
+    "outcome",
+    "payload"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "const": "bo-v0"
+    },
+    "stack": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "codex_cli_version",
+        "codex_profile",
+        "codex_model",
+        "sandbox_mode",
+        "os",
+        "container_tag"
+      ],
+      "properties": {
+        "codex_cli_version": {"type": ["string", "null"]},
+        "codex_profile": {"type": ["string", "null"]},
+        "codex_model": {"type": ["string", "null"]},
+        "sandbox_mode": {
+          "type": ["string", "null"],
+          "enum": ["read-only", "workspace-write", "danger-full-access", null]
+        },
+        "os": {"type": "string"},
+        "container_tag": {"type": "string"}
+      }
+    },
+    "env": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "run_mode",
+        "probe_name",
+        "probe_version",
+        "workspace_root"
+      ],
+      "properties": {
+        "run_mode": {
+          "type": "string",
+          "enum": ["baseline", "codex-sandbox", "codex-full"]
+        },
+        "probe_name": {"type": "string"},
+        "probe_version": {"type": "string"},
+        "workspace_root": {"type": ["string", "null"]}
+      }
+    },
+    "operation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "category",
+        "verb",
+        "target",
+        "args"
+      ],
+      "properties": {
+        "category": {"type": "string"},
+        "verb": {"type": "string"},
+        "target": {"type": "string"},
+        "args": {
+          "type": "object"
+        }
+      }
+    },
+    "outcome": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "errno",
+        "message",
+        "duration_ms"
+      ],
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": ["allowed", "denied", "error", "inconclusive"]
+        },
+        "errno": {"type": ["string", "null"]},
+        "message": {"type": ["string", "null"]},
+        "duration_ms": {"type": ["integer", "null"]}
+      }
+    },
+    "payload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["stdout_snippet", "stderr_snippet", "raw"],
+      "properties": {
+        "stdout_snippet": {"type": ["string", "null"]},
+        "stderr_snippet": {"type": ["string", "null"]},
+        "raw": {"type": "object"}
+      }
+    }
+  }
+}

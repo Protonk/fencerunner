@@ -1,0 +1,153 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)
+detect_stack_bin="${script_dir}/detect-stack"
+
+usage() {
+  cat >&2 <<'USAGE'
+Usage: emit-record --run-mode MODE --probe-name NAME --probe-version VERSION \
+  --category CATEGORY --verb VERB --target TARGET --status STATUS [options]
+
+Options:
+  --errno ERRNO
+  --message MESSAGE
+  --duration-ms MILLIS
+  --payload-file PATH
+  --operation-args JSON_OBJECT
+USAGE
+  exit 1
+}
+
+run_mode=""
+probe_name=""
+probe_version=""
+category=""
+verb=""
+target=""
+status=""
+errno_value=""
+message=""
+duration_ms=""
+payload_file=""
+operation_args='{}'
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --run-mode)
+      run_mode="$2"; shift 2 ;;
+    --probe-name)
+      probe_name="$2"; shift 2 ;;
+    --probe-version)
+      probe_version="$2"; shift 2 ;;
+    --category)
+      category="$2"; shift 2 ;;
+    --verb)
+      verb="$2"; shift 2 ;;
+    --target)
+      target="$2"; shift 2 ;;
+    --status)
+      status="$2"; shift 2 ;;
+    --errno)
+      errno_value="$2"; shift 2 ;;
+    --message)
+      message="$2"; shift 2 ;;
+    --duration-ms)
+      duration_ms="$2"; shift 2 ;;
+    --payload-file)
+      payload_file="$2"; shift 2 ;;
+    --operation-args)
+      operation_args="$2"; shift 2 ;;
+    --help|-h)
+      usage ;;
+    *)
+      echo "Unknown flag: $1" >&2
+      usage ;;
+  esac
+done
+
+for var in run_mode probe_name probe_version category verb target status; do
+  if [[ -z "${!var}" ]]; then
+    echo "Missing required flag: --${var//_/-}" >&2
+    usage
+  fi
+done
+
+if [[ ! -x "${detect_stack_bin}" ]]; then
+  echo "detect-stack helper not found at ${detect_stack_bin}" >&2
+  exit 1
+fi
+
+workspace_root="${FENCE_WORKSPACE_ROOT:-}"
+if [[ -z "${workspace_root}" ]]; then
+  if repo_root=$(git rev-parse --show-toplevel 2>/dev/null); then
+    workspace_root="${repo_root}"
+  else
+    workspace_root=$(pwd)
+  fi
+fi
+
+payload_json='{"stdout_snippet": null, "stderr_snippet": null, "raw": {}}'
+if [[ -n "${payload_file}" ]]; then
+  if [[ ! -f "${payload_file}" ]]; then
+    echo "Payload file not found: ${payload_file}" >&2
+    exit 1
+  fi
+  payload_json=$(jq -c '.' "${payload_file}")
+fi
+
+operation_args=$(jq -c '.' <<<"${operation_args}")
+
+stack_json=$("${detect_stack_bin}" "${run_mode}")
+
+env_json=$(jq -n \
+  --arg run_mode "${run_mode}" \
+  --arg probe_name "${probe_name}" \
+  --arg probe_version "${probe_version}" \
+  --arg workspace_root "${workspace_root}" \
+  '{
+    run_mode: $run_mode,
+    probe_name: $probe_name,
+    probe_version: $probe_version,
+    workspace_root: ($workspace_root | select(length > 0)) // null
+  }')
+
+operation_json=$(jq -n \
+  --arg category "${category}" \
+  --arg verb "${verb}" \
+  --arg target "${target}" \
+  --argjson args "${operation_args}" \
+  '{
+    category: $category,
+    verb: $verb,
+    target: $target,
+    args: $args
+  }')
+
+outcome_json=$(jq -n \
+  --arg status "${status}" \
+  --arg errno_value "${errno_value}" \
+  --arg message "${message}" \
+  --arg duration_ms "${duration_ms}" \
+  '{
+    status: $status,
+    errno: ($errno_value | select(length > 0)) // null,
+    message: ($message | select(length > 0)) // null,
+    duration_ms: ($duration_ms | select(length > 0) | tonumber) // null
+  }')
+
+jq -n \
+  --arg schema_version "bo-v0" \
+  --argjson stack "${stack_json}" \
+  --argjson env "${env_json}" \
+  --argjson operation "${operation_json}" \
+  --argjson outcome "${outcome_json}" \
+  --argjson payload "${payload_json}" \
+  '{
+    schema_version: $schema_version,
+    stack: $stack,
+    env: $env,
+    operation: $operation,
+    outcome: $outcome,
+    payload: $payload
+  }'

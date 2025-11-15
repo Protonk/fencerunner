@@ -1,0 +1,72 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+usage() {
+  echo "Usage: detect-stack [RUN_MODE]" >&2
+  exit 1
+}
+
+run_mode="${1:-${FENCE_RUN_MODE:-}}"
+if [[ -z "${run_mode}" ]]; then
+  usage
+fi
+
+codex_cli_version=""
+if command -v codex >/dev/null 2>&1; then
+  if codex_output=$(codex --version 2>/dev/null | head -n1); then
+    codex_cli_version=${codex_output}
+  fi
+fi
+
+codex_profile="${FENCE_CODEX_PROFILE:-}"
+codex_model="${FENCE_CODEX_MODEL:-}"
+
+sandbox_mode=""
+case "${run_mode}" in
+  baseline)
+    sandbox_mode=""
+    ;;
+  codex-sandbox)
+    sandbox_mode="${FENCE_SANDBOX_MODE:-workspace-write}"
+    ;;
+  codex-full)
+    sandbox_mode="${FENCE_SANDBOX_MODE:-danger-full-access}"
+    ;;
+  *)
+    echo "Unknown run mode: ${run_mode}" >&2
+    exit 1
+    ;;
+esac
+
+os_info=$(uname -srm)
+
+container_tag="${FENCE_CONTAINER_TAG:-}"
+if [[ -z "${container_tag}" ]]; then
+  case "$(uname -s)" in
+    Darwin)
+      container_tag="local-macos"
+      ;;
+    Linux)
+      container_tag="local-linux"
+      ;;
+    *)
+      container_tag="local-unknown"
+      ;;
+  esac
+fi
+
+jq -n \
+  --arg codex_cli_version "${codex_cli_version}" \
+  --arg codex_profile "${codex_profile}" \
+  --arg codex_model "${codex_model}" \
+  --arg sandbox_mode "${sandbox_mode}" \
+  --arg os "${os_info}" \
+  --arg container_tag "${container_tag}" \
+  '{
+    codex_cli_version: ($codex_cli_version | select(length > 0)) // null,
+    codex_profile: ($codex_profile | select(length > 0)) // null,
+    codex_model: ($codex_model | select(length > 0)) // null,
+    sandbox_mode: ($sandbox_mode | select(length > 0)) // null,
+    os: $os,
+    container_tag: $container_tag
+  }'
