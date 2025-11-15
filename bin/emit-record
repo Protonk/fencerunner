@@ -109,7 +109,7 @@ env_json=$(jq -n \
     run_mode: $run_mode,
     probe_name: $probe_name,
     probe_version: $probe_version,
-    workspace_root: ($workspace_root | select(length > 0)) // null
+    workspace_root: (($workspace_root | select(length > 0)) // null)
   }')
 
 operation_json=$(jq -n \
@@ -131,9 +131,9 @@ outcome_json=$(jq -n \
   --arg duration_ms "${duration_ms}" \
   '{
     status: $status,
-    errno: ($errno_value | select(length > 0)) // null,
-    message: ($message | select(length > 0)) // null,
-    duration_ms: ($duration_ms | select(length > 0) | tonumber) // null
+    errno: (($errno_value | select(length > 0)) // null),
+    message: (($message | select(length > 0)) // null),
+    duration_ms: (($duration_ms | select(length > 0) | tonumber) // null)
   }')
 
 jq -n \

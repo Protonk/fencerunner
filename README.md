@@ -10,7 +10,7 @@ how the runtime fence reacts to filesystem, network, process, or other system in
 - POSIX shell utilities + `bash`
 - `jq`
 - `make`
-- The `codex` CLI (to exercise Codex modes)
+- The `codex` CLI (only if you plan to exercise Codex modes)
 
 ## Usage
 

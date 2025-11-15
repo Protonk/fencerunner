@@ -63,10 +63,10 @@ jq -n \
   --arg os "${os_info}" \
   --arg container_tag "${container_tag}" \
   '{
-    codex_cli_version: ($codex_cli_version | select(length > 0)) // null,
-    codex_profile: ($codex_profile | select(length > 0)) // null,
-    codex_model: ($codex_model | select(length > 0)) // null,
-    sandbox_mode: ($sandbox_mode | select(length > 0)) // null,
+    codex_cli_version: (($codex_cli_version | select(length > 0)) // null),
+    codex_profile: (($codex_profile | select(length > 0)) // null),
+    codex_model: (($codex_model | select(length > 0)) // null),
+    sandbox_mode: (($sandbox_mode | select(length > 0)) // null),
     os: $os,
     container_tag: $container_tag
   }'
