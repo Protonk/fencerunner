@@ -42,8 +42,10 @@
     ]
   },
   "cap_proc_fork_and_child_spawn": {
-    "has_probe": false,
-    "probe_ids": []
+    "has_probe": true,
+    "probe_ids": [
+      "proc_fork_child_spawn"
+    ]
   },
   "cap_proc_unsandboxed_escalation": {
     "has_probe": true,
@@ -74,8 +76,10 @@
     "probe_ids": []
   },
   "cap_sysctl_read_sensitive": {
-    "has_probe": false,
-    "probe_ids": []
+    "has_probe": true,
+    "probe_ids": [
+      "sysctl_kern_boottime_read"
+    ]
   },
   "cap_mach_lookup_system_logger": {
     "has_probe": false,
@@ -98,15 +102,21 @@
     "probe_ids": []
   },
   "cap_agent_approvals_mode": {
-    "has_probe": false,
-    "probe_ids": []
+    "has_probe": true,
+    "probe_ids": [
+      "agent_approvals_mode_env"
+    ]
   },
   "cap_agent_command_trust_list": {
-    "has_probe": false,
-    "probe_ids": []
+    "has_probe": true,
+    "probe_ids": [
+      "agent_command_trust_file_read"
+    ]
   },
   "cap_agent_default_sandboxing": {
-    "has_probe": false,
-    "probe_ids": []
+    "has_probe": true,
+    "probe_ids": [
+      "agent_default_sandbox_env"
+    ]
   }
 }
