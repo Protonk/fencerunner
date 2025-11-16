@@ -58,6 +58,9 @@ The test runner (`tests/run.sh`) executes four lightweight suites:
 * `harness_smoke` – runs a fixture probe through `bin/fence-run` baseline mode to prove the orchestration pipeline still works.
 
 All suites rely on standard Bash utilities and `jq`, so they run unchanged on macOS and inside the provided Codex containers.
+macOS still ships `/bin/bash` 3.2, which lacks associative arrays and other newer niceties, so the harness deliberately stays
+within that feature set. When adding new tests, stick to portable Bash so `make test` continues to work everywhere Codex probes
+run.
 
 ## How probes work
 
