@@ -1,7 +1,7 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "$id": "https://example.com/codex-fence/boundary-object-v1",
-  "title": "Codex Fence Boundary Object v1",
+  "$id": "https://example.com/codex-fence/boundary-object-cfbo-v1",
+  "title": "Codex Fence Boundary Object (cfbo-v1)",
   "description": "Record of a single probe execution aligned with the capability map.",
   "type": "object",
   "additionalProperties": false,
@@ -17,7 +17,7 @@
   "properties": {
     "schema_version": {
       "type": "string",
-      "const": "bo-v1"
+      "const": "cfbo-v1"
     },
     "stack": {
       "type": "object",

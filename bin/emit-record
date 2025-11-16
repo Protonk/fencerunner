@@ -231,7 +231,7 @@ result_json=$(jq -n \
   }')
 
 jq -n \
-  --arg schema_version "bo-v1" \
+  --arg schema_version "cfbo-v1" \
   --argjson stack "${stack_json}" \
   --argjson probe "${probe_json}" \
   --argjson run "${run_json}" \

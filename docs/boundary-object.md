@@ -1,6 +1,6 @@
-# Probe Contract and Boundary Object (bo-v1)
+# Probe Contract and Boundary Object (cfbo-v1)
 
-`codex-fence` records every probe run as a versioned JSON "boundary object". Version `bo-v1` is the canonical contract for new probes and ties directly into the capability map defined in `spec/capabilities.yaml`. Older `bo-v0` records remain readable for historical data but are no longer emitted.
+`codex-fence` records every probe run as a versioned JSON "boundary object". Version `cfbo-v1` is the canonical contract for new probes and ties directly into the capability map defined in `spec/capabilities.yaml`.
 
 Each boundary object captures *one* focused probe operation executed under a single run mode. Probes are tiny scripts stored in `probes/` that:
 
@@ -12,13 +12,13 @@ Each boundary object captures *one* focused probe operation executed under a sin
 
 See `AGENTS.md` for the detailed "Probe Author" workflow.
 
-## Boundary object layout (bo-v1)
+## Boundary object layout (cfbo-v1)
 
 The machine-readable definition lives in `schema/boundary-object-v1.json`. The same schema is enforced by `bin/emit-record`.
 
 | Field | Required | Description |
 | --- | --- | --- |
-| `schema_version` | yes | Always `"bo-v1"`. |
+| `schema_version` | yes | Always `"cfbo-v1"`. |
 | `stack` | yes | Fingerprint of the Codex CLI + OS stack that hosted the probe. |
 | `probe` | yes | Identity and capability linkage for the probe implementation. |
 | `run` | yes | Execution metadata for this invocation (mode, workspace, command, timestamp). |
@@ -110,7 +110,7 @@ A trimmed record from `probes/fs_outside_workspace.sh` (writes outside the works
 
 ```json
 {
-  "schema_version": "bo-v1",
+  "schema_version": "cfbo-v1",
   "probe": {
     "id": "fs_outside_workspace",
     "version": "1",
@@ -152,7 +152,3 @@ A trimmed record from `probes/fs_outside_workspace.sh` (writes outside the works
   }
 }
 ```
-
-## Legacy bo-v0 records
-
-`schema/boundary-object-v0.json` is still present so older exports continue to validate, but new probes **must** emit `bo-v1`. The `bin/emit-record` helper now targets the v1 schema exclusively.

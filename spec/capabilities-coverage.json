@@ -1,7 +1,9 @@
 {
   "cap_fs_read_workspace_tree": {
-    "has_probe": false,
-    "probe_ids": []
+    "has_probe": true,
+    "probe_ids": [
+      "fs_read_workspace_readme"
+    ]
   },
   "cap_fs_write_workspace_tree": {
     "has_probe": true,
@@ -16,8 +18,10 @@
     ]
   },
   "cap_fs_read_system_roots": {
-    "has_probe": false,
-    "probe_ids": []
+    "has_probe": true,
+    "probe_ids": [
+      "fs_read_system_version_plist"
+    ]
   },
   "cap_fs_read_user_content": {
     "has_probe": true,
@@ -42,8 +46,10 @@
     "probe_ids": []
   },
   "cap_proc_unsandboxed_escalation": {
-    "has_probe": false,
-    "probe_ids": []
+    "has_probe": true,
+    "probe_ids": [
+      "proc_unsandboxed_escalation_retry"
+    ]
   },
   "cap_net_outbound_any": {
     "has_probe": true,
@@ -52,12 +58,16 @@
     ]
   },
   "cap_net_localhost_only": {
-    "has_probe": false,
-    "probe_ids": []
+    "has_probe": true,
+    "probe_ids": [
+      "net_localhost_loopback"
+    ]
   },
   "cap_net_disabled_with_tag": {
-    "has_probe": false,
-    "probe_ids": []
+    "has_probe": true,
+    "probe_ids": [
+      "net_disabled_env_tag"
+    ]
   },
   "cap_sysctl_read_basic": {
     "has_probe": false,

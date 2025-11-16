@@ -2,7 +2,7 @@
 
 As the Probe Author, you:
 - Read `spec/capabilities.yaml` to understand the supported capability IDs, their categories, and descriptions.
-- Read `schema/boundary-object-*.json` and `docs/boundary_object.md` to understand the probe result contract.
+- Read `schema/boundary-object-v1.json` and `docs/boundary_object.md` to understand the probe result contract.
 - Inspect `probes/` to see existing probes and which capabilities they target.
 
 Prefer to add probes that:
@@ -16,7 +16,7 @@ Keep each probe:
 Never:
 - Print anything besides the JSON boundary object to stdout. Use stderr for debugging only when necessary.
 
-## Probe description and agent guidance (bo-v1)
+## Probe description and agent guidance (cfbo-v1)
 
 A probe: 
 1. Is an executable script under `probes/`. Use `#!/usr/bin/env bash` and enable `set -euo pipefail`. Name the script `probes/<probe_id>.sh` so the filename matches the `probe.id`.
@@ -67,7 +67,7 @@ Matching JSON output (trimmed for brevity):
 
 ```
 {
-  "schema_version": "bo-v1",
+  "schema_version": "cfbo-v1",
   "probe": {
     "id": "fs_outside_workspace",
     "version": "1",
