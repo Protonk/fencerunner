@@ -17,7 +17,8 @@
     "has_probe": true,
     "probe_ids": [
       "fs_git_metadata_write_guard",
-      "fs_git_metadata_read_config"
+      "fs_git_metadata_read_config",
+      "fs_git_like_name_write"
     ]
   },
   "cap_fs_read_system_roots": {
@@ -37,7 +38,8 @@
     "has_probe": true,
     "probe_ids": [
       "fs_symlink_escape_read",
-      "fs_symlink_escape_relative_read"
+      "fs_symlink_escape_relative_read",
+      "fs_symlink_bounce_write"
     ]
   },
   "cap_proc_exec_toolchain_outside_workspace": {
