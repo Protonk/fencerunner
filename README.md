@@ -25,6 +25,9 @@ Three reasons:
 * `jq`
 * `make`
 * The `codex` CLI (only if you plan to exercise Codex modes)
+* Compatibility with macOS' system `/bin/bash` 3.2. That shell lacks associative arrays, `mapfile`, and other conveniences, so
+  every probe and test must stick to the portable subset of Bash features to guarantee `make test` and `make matrix` behave
+  the same inside Codex containers and on host Macs.
 
 ## Usage
 
@@ -58,9 +61,8 @@ The test runner (`tests/run.sh`) executes four lightweight suites:
 * `harness_smoke` – runs a fixture probe through `bin/fence-run` baseline mode to prove the orchestration pipeline still works.
 
 All suites rely on standard Bash utilities and `jq`, so they run unchanged on macOS and inside the provided Codex containers.
-macOS still ships `/bin/bash` 3.2, which lacks associative arrays and other newer niceties, so the harness deliberately stays
-within that feature set. When adding new tests, stick to portable Bash so `make test` continues to work everywhere Codex probes
-run.
+When adding new suites, remember the [Requirements](#requirements) constraint about `/bin/bash` 3.2 compatibility so `make
+test` continues to work everywhere Codex probes run.
 
 ## How probes work
 
