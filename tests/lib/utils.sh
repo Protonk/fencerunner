@@ -8,7 +8,7 @@ fi
 extract_probe_var() {
   local file="$1"
   local var="$2"
-  local line value trimmed first last
+  local line value trimmed first last value_length
   line=$(grep -E "^[[:space:]]*${var}=" "$file" | head -n1 || true)
   if [[ -z "${line}" ]]; then
     return 1
@@ -19,10 +19,11 @@ extract_probe_var() {
   if [[ -n "${value}" ]]; then
     first=${value:0:1}
     last=${value: -1}
-    if [[ "${first}" == '"' && "${last}" == '"' && ${#value} -ge 2 ]]; then
-      value=${value:1:-1}
-    elif [[ "${first}" == "'" && "${last}" == "'" && ${#value} -ge 2 ]]; then
-      value=${value:1:-1}
+    value_length=${#value}
+    if [[ "${first}" == '"' && "${last}" == '"' && ${value_length} -ge 2 ]]; then
+      value=${value:1:value_length-2}
+    elif [[ "${first}" == "'" && "${last}" == "'" && ${value_length} -ge 2 ]]; then
+      value=${value:1:value_length-2}
     fi
   fi
   printf '%s\n' "${value}"

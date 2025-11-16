@@ -123,6 +123,7 @@ for idx in "${!coverage_cap_ids[@]}"; do
   if [[ -n "${coverage_value}" ]]; then
     IFS=',' read -r -a coverage_array <<< "${coverage_value}"
   fi
+  coverage_array_len=${#coverage_array[@]}
 
   actual_array=()
   for probe_idx in "${!probe_names[@]}"; do
@@ -130,44 +131,49 @@ for idx in "${!coverage_cap_ids[@]}"; do
       actual_array+=("${probe_names[$probe_idx]}")
     fi
   done
+  actual_array_len=${#actual_array[@]}
 
-  if [[ "${has_probe_flag}" == "true" && ${#actual_array[@]} -eq 0 ]]; then
+  if [[ "${has_probe_flag}" == "true" && ${actual_array_len} -eq 0 ]]; then
     echo "  [FAIL] capability_map_sync: ${cap_id} marked has_probe=true but no probes declare it" >&2
     status=1
   fi
 
-  if [[ "${has_probe_flag}" == "false" && ${#actual_array[@]} -gt 0 ]]; then
+  if [[ "${has_probe_flag}" == "false" && ${actual_array_len} -gt 0 ]]; then
     echo "  [FAIL] capability_map_sync: ${cap_id} marked has_probe=false but probes ${actual_array[*]} target it" >&2
     status=1
   fi
 
-  for listed_probe in "${coverage_array[@]}"; do
-    if [[ -z "${listed_probe}" ]]; then
-      continue
-    fi
-    if ! list_contains "${listed_probe}" "${probe_names[@]}"; then
-      echo "  [FAIL] capability_map_sync: ${cap_id} lists unknown probe '${listed_probe}'" >&2
-      status=1
-      continue
-    fi
-    if ! listed_cap=$(probe_cap_for_name "${listed_probe}"); then
-      echo "  [FAIL] capability_map_sync: unable to resolve capability for probe '${listed_probe}'" >&2
-      status=1
-      continue
-    fi
-    if [[ "${listed_cap}" != "${cap_id}" ]]; then
-      echo "  [FAIL] capability_map_sync: ${listed_probe} in coverage for ${cap_id} but script targets ${listed_cap}" >&2
-      status=1
-    fi
-  done
+  if (( coverage_array_len > 0 )); then
+    for listed_probe in "${coverage_array[@]}"; do
+      if [[ -z "${listed_probe}" ]]; then
+        continue
+      fi
+      if ! list_contains "${listed_probe}" "${probe_names[@]}"; then
+        echo "  [FAIL] capability_map_sync: ${cap_id} lists unknown probe '${listed_probe}'" >&2
+        status=1
+        continue
+      fi
+      if ! listed_cap=$(probe_cap_for_name "${listed_probe}"); then
+        echo "  [FAIL] capability_map_sync: unable to resolve capability for probe '${listed_probe}'" >&2
+        status=1
+        continue
+      fi
+      if [[ "${listed_cap}" != "${cap_id}" ]]; then
+        echo "  [FAIL] capability_map_sync: ${listed_probe} in coverage for ${cap_id} but script targets ${listed_cap}" >&2
+        status=1
+      fi
+    done
+  fi
 
-  for actual_probe in "${actual_array[@]}"; do
-    if list_contains "${actual_probe}" "${coverage_array[@]}"; then
-      continue
-    fi
-    echo "  [FAIL] capability_map_sync: ${cap_id} missing probe '${actual_probe}' in coverage list" >&2
-    status=1
-  done
+  if (( actual_array_len > 0 )); then
+    for actual_probe in "${actual_array[@]}"; do
+      if (( coverage_array_len > 0 )) && list_contains "${actual_probe}" "${coverage_array[@]}"; then
+        continue
+      fi
+      echo "  [FAIL] capability_map_sync: ${cap_id} missing probe '${actual_probe}' in coverage list" >&2
+      status=1
+    done
+  fi
 
 done
 
