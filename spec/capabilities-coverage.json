@@ -2,7 +2,8 @@
   "cap_fs_read_workspace_tree": {
     "has_probe": true,
     "probe_ids": [
-      "fs_read_workspace_readme"
+      "fs_read_workspace_readme",
+      "fs_read_workspace_spec_tail"
     ]
   },
   "cap_fs_write_workspace_tree": {
@@ -22,7 +23,8 @@
   "cap_fs_read_system_roots": {
     "has_probe": true,
     "probe_ids": [
-      "fs_read_system_version_plist"
+      "fs_read_system_version_plist",
+      "fs_read_system_library_ls"
     ]
   },
   "cap_fs_read_user_content": {
@@ -34,7 +36,8 @@
   "cap_fs_follow_symlinks_out_of_workspace": {
     "has_probe": true,
     "probe_ids": [
-      "fs_symlink_escape_read"
+      "fs_symlink_escape_read",
+      "fs_symlink_escape_relative_read"
     ]
   },
   "cap_proc_exec_toolchain_outside_workspace": {
@@ -66,7 +69,8 @@
   "cap_net_localhost_only": {
     "has_probe": true,
     "probe_ids": [
-      "net_localhost_loopback"
+      "net_localhost_loopback",
+      "net_localhost_udp_echo"
     ]
   },
   "cap_net_disabled_with_tag": {
@@ -84,7 +88,8 @@
   "cap_sysctl_read_sensitive": {
     "has_probe": true,
     "probe_ids": [
-      "sysctl_kern_boottime_read"
+      "sysctl_kern_boottime_read",
+      "sysctl_security_mac_proc_enforce"
     ]
   },
   "cap_mach_lookup_system_logger": {
