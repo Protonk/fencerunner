@@ -3,16 +3,22 @@ set -euo pipefail
 
 script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)
 detect_stack_bin="${script_dir}/detect-stack"
+repo_root=$(cd "${script_dir}/.." >/dev/null 2>&1 && pwd)
+capabilities_file="${repo_root}/spec/capabilities.yaml"
 
 usage() {
   cat >&2 <<'USAGE'
 Usage: emit-record --run-mode MODE --probe-name NAME --probe-version VERSION \
+  --primary-capability-id CAP_ID --command COMMAND \
   --category CATEGORY --verb VERB --target TARGET --status STATUS [options]
 
 Options:
   --errno ERRNO
   --message MESSAGE
   --duration-ms MILLIS
+  --raw-exit-code CODE
+  --error-detail TEXT
+  --secondary-capability-id CAP_ID   # repeat for multiple entries
   --payload-file PATH
   --operation-args JSON_OBJECT
 USAGE
@@ -20,7 +26,7 @@ USAGE
 }
 
 run_mode=""
-probe_name=""
+probe_id=""
 probe_version=""
 category=""
 verb=""
@@ -31,13 +37,18 @@ message=""
 duration_ms=""
 payload_file=""
 operation_args='{}'
+primary_capability_id=""
+secondary_capability_ids=()
+command_executed=""
+raw_exit_code=""
+error_detail=""
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --run-mode)
       run_mode="$2"; shift 2 ;;
-    --probe-name)
-      probe_name="$2"; shift 2 ;;
+    --probe-name|--probe-id)
+      probe_id="$2"; shift 2 ;;
     --probe-version)
       probe_version="$2"; shift 2 ;;
     --category)
@@ -54,10 +65,20 @@ while [[ $# -gt 0 ]]; do
       message="$2"; shift 2 ;;
     --duration-ms)
       duration_ms="$2"; shift 2 ;;
+    --raw-exit-code)
+      raw_exit_code="$2"; shift 2 ;;
+    --error-detail)
+      error_detail="$2"; shift 2 ;;
     --payload-file)
       payload_file="$2"; shift 2 ;;
     --operation-args)
       operation_args="$2"; shift 2 ;;
+    --primary-capability-id)
+      primary_capability_id="$2"; shift 2 ;;
+    --secondary-capability-id)
+      secondary_capability_ids+=("$2"); shift 2 ;;
+    --command)
+      command_executed="$2"; shift 2 ;;
     --help|-h)
       usage ;;
     *)
@@ -66,16 +87,65 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-for var in run_mode probe_name probe_version category verb target status; do
+for var in run_mode probe_id probe_version category verb target status primary_capability_id command_executed; do
   if [[ -z "${!var}" ]]; then
     echo "Missing required flag: --${var//_/-}" >&2
     usage
   fi
 done
 
+case "${status}" in
+  success|denied|partial|error)
+    ;;
+  *)
+    echo "Unknown status: ${status} (expected success|denied|partial|error)" >&2
+    exit 1
+    ;;
+esac
+
 if [[ ! -x "${detect_stack_bin}" ]]; then
   echo "detect-stack helper not found at ${detect_stack_bin}" >&2
   exit 1
+fi
+
+if [[ ! -f "${capabilities_file}" ]]; then
+  echo "Capability map not found at ${capabilities_file}" >&2
+  exit 1
+fi
+
+known_capability_ids=()
+while IFS= read -r cap_line; do
+  if [[ -n "${cap_line}" ]]; then
+    known_capability_ids+=("${cap_line}")
+  fi
+done < <(awk '$1=="-" && $2=="id:" {print $3}' "${capabilities_file}")
+
+if [[ ${#known_capability_ids[@]} -eq 0 ]]; then
+  echo "No capability IDs defined in ${capabilities_file}" >&2
+  exit 1
+fi
+
+require_capability_id() {
+  local value="$1"
+  local label="$2"
+  local found=1
+  for cap in "${known_capability_ids[@]}"; do
+    if [[ "${cap}" == "${value}" ]]; then
+      found=0
+      break
+    fi
+  done
+  if [[ ${found} -ne 0 ]]; then
+    echo "Unknown ${label}: ${value}. Expected one of the IDs in spec/capabilities.yaml." >&2
+    exit 1
+  fi
+}
+
+require_capability_id "${primary_capability_id}" "primary capability id"
+if [[ ${#secondary_capability_ids[@]} -gt 0 ]]; then
+  for sec_cap in "${secondary_capability_ids[@]}"; do
+    require_capability_id "${sec_cap}" "secondary capability id"
+  done
 fi
 
 workspace_root="${FENCE_WORKSPACE_ROOT:-}"
@@ -100,16 +170,36 @@ operation_args=$(jq -c '.' <<<"${operation_args}")
 
 stack_json=$("${detect_stack_bin}" "${run_mode}")
 
-env_json=$(jq -n \
-  --arg run_mode "${run_mode}" \
-  --arg probe_name "${probe_name}" \
+if [[ ${#secondary_capability_ids[@]} -gt 0 ]]; then
+  secondary_caps_json=$(printf '%s\n' "${secondary_capability_ids[@]}" | jq -R -s 'split("\n") | map(select(length > 0)) | unique')
+else
+  secondary_caps_json='[]'
+fi
+
+probe_json=$(jq -n \
+  --arg probe_id "${probe_id}" \
   --arg probe_version "${probe_version}" \
-  --arg workspace_root "${workspace_root}" \
+  --arg primary_capability_id "${primary_capability_id}" \
+  --argjson secondary_capability_ids "${secondary_caps_json}" \
   '{
-    run_mode: $run_mode,
-    probe_name: $probe_name,
-    probe_version: $probe_version,
-    workspace_root: (($workspace_root | select(length > 0)) // null)
+    id: $probe_id,
+    version: $probe_version,
+    primary_capability_id: $primary_capability_id,
+    secondary_capability_ids: $secondary_capability_ids
+  }')
+
+observed_at=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+
+run_json=$(jq -n \
+  --arg run_mode "${run_mode}" \
+  --arg workspace_root "${workspace_root}" \
+  --arg command "${command_executed}" \
+  --arg observed_at "${observed_at}" \
+  '{
+    mode: $run_mode,
+    workspace_root: (($workspace_root | select(length > 0)) // null),
+    command: $command,
+    observed_at: $observed_at
   }')
 
 operation_json=$(jq -n \
@@ -124,30 +214,36 @@ operation_json=$(jq -n \
     args: $args
   }')
 
-outcome_json=$(jq -n \
-  --arg status "${status}" \
+result_json=$(jq -n \
+  --arg observed_result "${status}" \
   --arg errno_value "${errno_value}" \
   --arg message "${message}" \
   --arg duration_ms "${duration_ms}" \
+  --arg raw_exit_code "${raw_exit_code}" \
+  --arg error_detail "${error_detail}" \
   '{
-    status: $status,
+    observed_result: $observed_result,
+    raw_exit_code: (($raw_exit_code | select(length > 0) | tonumber) // null),
     errno: (($errno_value | select(length > 0)) // null),
     message: (($message | select(length > 0)) // null),
-    duration_ms: (($duration_ms | select(length > 0) | tonumber) // null)
+    duration_ms: (($duration_ms | select(length > 0) | tonumber) // null),
+    error_detail: (($error_detail | select(length > 0)) // null)
   }')
 
 jq -n \
-  --arg schema_version "bo-v0" \
+  --arg schema_version "bo-v1" \
   --argjson stack "${stack_json}" \
-  --argjson env "${env_json}" \
+  --argjson probe "${probe_json}" \
+  --argjson run "${run_json}" \
   --argjson operation "${operation_json}" \
-  --argjson outcome "${outcome_json}" \
+  --argjson result "${result_json}" \
   --argjson payload "${payload_json}" \
   '{
     schema_version: $schema_version,
     stack: $stack,
-    env: $env,
+    probe: $probe,
+    run: $run,
     operation: $operation,
-    outcome: $outcome,
+    result: $result,
     payload: $payload
   }'

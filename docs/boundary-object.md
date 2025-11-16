@@ -1,66 +1,158 @@
-# Boundary Object (bo-v0)
+# Probe Contract and Boundary Object (bo-v1)
 
-`codex-fence` represents every probe result as a "boundary object": a stable JSON record that carries just enough structure for automated processing while allowing input flexibility.
+`codex-fence` records every probe run as a versioned JSON "boundary object". Version `bo-v1` is the canonical contract for new probes and ties directly into the capability map defined in `spec/capabilities.yaml`. Older `bo-v0` records remain readable for historical data but are no longer emitted.
 
-Each record tracks *one* attempted operation executed against *one* runtime stack and is designed to survive copy/paste and log aggregation.
+Each boundary object captures *one* focused probe operation executed under a single run mode. Probes are tiny scripts stored in `probes/` that:
 
-## Top-level fields
+1. Use `#!/usr/bin/env bash` with `set -euo pipefail`.
+2. Perform exactly one observable action (write a file, open a socket, read sysctl, ...).
+3. Capture the stdout/stderr snippets needed to describe that action.
+4. Call `bin/emit-record` once with `--run-mode "$FENCE_RUN_MODE"` plus metadata described below.
+5. Exit with status `0` after `emit-record` prints JSON. They must not write anything else to stdout; use stderr only for debugging.
+
+See `AGENTS.md` for the detailed "Probe Author" workflow.
+
+## Boundary object layout (bo-v1)
+
+The machine-readable definition lives in `schema/boundary-object-v1.json`. The same schema is enforced by `bin/emit-record`.
 
 | Field | Required | Description |
 | --- | --- | --- |
-| `schema_version` | yes | Always `"bo-v0"`. Keeps the document extensible without breaking older readers. |
-| `stack` | yes | Fingerprint of the Codex + OS stack that hosted the probe (see below). |
-| `env` | yes | Logical execution environment information (which probe, which run mode, workspace root). |
-| `operation` | yes | What the probe attempted to do (category/verb/target/args). |
-| `outcome` | yes | Result classification (`allowed`, `denied`, `error`, `inconclusive`). |
-| `payload` | yes | Opaque probe-specific data captured alongside the outcome. |
+| `schema_version` | yes | Always `"bo-v1"`. |
+| `stack` | yes | Fingerprint of the Codex CLI + OS stack that hosted the probe. |
+| `probe` | yes | Identity and capability linkage for the probe implementation. |
+| `run` | yes | Execution metadata for this invocation (mode, workspace, command, timestamp). |
+| `operation` | yes | Description of the sandbox-facing operation being attempted. |
+| `result` | yes | Normalized observed outcome plus error metadata. |
+| `payload` | yes | Small probe-specific diagnostics and structured raw data. |
 
 ### `stack`
 
+Populated automatically by `bin/detect-stack`.
+
 | Field | Required | Meaning |
 | --- | --- | --- |
-| `codex_cli_version` | yes (nullable) | Output of `codex --version` if available, otherwise `null`. |
-| `codex_profile` | yes (nullable) | Codex profile name if known (e.g. from `FENCE_CODEX_PROFILE`). |
+| `codex_cli_version` | yes (nullable) | Output of `codex --version` if available, else `null`. |
+| `codex_profile` | yes (nullable) | Codex profile name if known (`FENCE_CODEX_PROFILE`). |
 | `codex_model` | yes (nullable) | Model used for the run if known, else `null`. |
-| `sandbox_mode` | yes (nullable) | One of `read-only`, `workspace-write`, `danger-full-access`, or `null` for baseline runs. |
+| `sandbox_mode` | yes (nullable) | `read-only`, `workspace-write`, `danger-full-access`, or `null` for baseline runs. |
 | `os` | yes | Value from `uname -srm`. |
-| `container_tag` | yes | Short label for the host/container (e.g. `local-macos`, `openai-universal`). |
+| `container_tag` | yes | Host/container label (e.g. `local-macos`, `local-linux`). |
 
-### `env`
+### `probe`
+
+Probe identity is now explicit and tied to the capability map in `spec/capabilities.yaml`.
 
 | Field | Required | Meaning |
 | --- | --- | --- |
-| `run_mode` | yes | `baseline`, `codex-sandbox`, or `codex-full`. Matches the mode passed to `bin/fence-run`. |
-| `probe_name` | yes | Short slug (filename without extension) that identifies the probe. |
-| `probe_version` | yes | Probe-local semantic version string. Increment whenever behavior changes. |
-| `workspace_root` | yes (nullable) | Absolute path to the workspace root if known, else `null`. |
+| `id` | yes | Stable slug (usually the probe filename) such as `fs_outside_workspace`. |
+| `version` | yes | Probe-local semantic/string version; bump when behavior changes. |
+| `primary_capability_id` | yes | Capability tested by this probe. **Must** match `capabilities[*].id`. |
+| `secondary_capability_ids` | yes | Zero or more supporting capability ids (unique, may be empty). |
+
+`bin/emit-record` validates all capability ids against `spec/capabilities.yaml`, so select them from that file before writing a probe.
+
+### `run`
+
+Execution context specific to the current invocation.
+
+| Field | Required | Meaning |
+| --- | --- | --- |
+| `mode` | yes | `baseline`, `codex-sandbox`, or `codex-full`; matches `bin/fence-run`. |
+| `workspace_root` | yes (nullable) | Root detected from `FENCE_WORKSPACE_ROOT` or `git rev-parse`. |
+| `command` | yes | Human/machine-usable string describing the command that actually ran. |
+| `observed_at` | yes | UTC timestamp when the record was emitted (ISO 8601). |
 
 ### `operation`
 
-| Field | Required | Meaning |
-| --- | --- | --- |
-| `category` | yes | High-level area such as `fs`, `net`, `proc`, `sysinfo`, `env`, `time`, etc. |
-| `verb` | yes | `read`, `write`, `stat`, `exec`, `connect`, ... depending on the probe. |
-| `target` | yes | Path/host/syscall being touched. |
-| `args` | yes | Free-form JSON object with structured parameters (modes, flags, payload sizes). Empty object if unused. |
-
-### `outcome`
+Same structure as before; used to describe the resource being touched.
 
 | Field | Required | Meaning |
 | --- | --- | --- |
-| `status` | yes | `allowed`, `denied`, `error`, or `inconclusive`. |
-| `errno` | yes (nullable) | Platform errno mnemonic (e.g. `EACCES`), or `null` if not inferred. |
-| `message` | yes (nullable) | Short human-friendly summary. |
-| `duration_ms` | yes (nullable) | Wall-clock milliseconds spent performing the operation, or `null` if not measured. |
+| `category` | yes | High-level domain: `fs`, `net`, `proc`, `sysctl`, `agent_policy`, etc. |
+| `verb` | yes | `read`, `write`, `exec`, `connect`, ... depending on the probe. |
+| `target` | yes | Path/host/syscall/descriptor being addressed. |
+| `args` | yes | Free-form JSON object with structured flags (modes, sizes, offsets). Use `{}` if unused. |
+
+### `result`
+
+Normalized observation of what happened, regardless of how the probe implemented it.
+
+| Field | Required | Meaning |
+| --- | --- | --- |
+| `observed_result` | yes | One of `success`, `denied`, `partial`, `error`. |
+| `raw_exit_code` | yes (nullable) | Exit code from the command that performed the operation. |
+| `errno` | yes (nullable) | Errno mnemonic (`EACCES`, `EPERM`, ...) if inferred. |
+| `message` | yes (nullable) | Short human summary of the outcome. |
+| `duration_ms` | yes (nullable) | Wall-clock time spent on the operation if measured. |
+| `error_detail` | yes (nullable) | Additional diagnostics for unexpected failures. |
+
+Interpretation of `observed_result`:
+
+- `success`: the sandbox allowed the operation outright.
+- `denied`: explicitly blocked by sandbox/policy (permission denied, EPERM, etc.).
+- `partial`: some sub-step succeeded while another failed; note details in `message` / `payload.raw`.
+- `error`: probe failed for reasons unrelated to sandbox policy (implementation bug, transient infra error).
 
 ### `payload`
 
-The payload keeps probe-specific scraps that would be lossy if converted to fixed fields.
+Remains the catch-all for probe-specific breadcrumbs. Keep these small (<4 KB).
 
 | Field | Required | Meaning |
 | --- | --- | --- |
-| `stdout_snippet` | yes (nullable) | Up to ~400 characters of captured stdout (truncated with an ellipsis). |
+| `stdout_snippet` | yes (nullable) | Up to ~400 characters of stdout (truncated if needed). |
 | `stderr_snippet` | yes (nullable) | Same for stderr. |
-| `raw` | yes | Arbitrary JSON object with structured data for the probe (counts, timings, metadata). |
+| `raw` | yes | Structured JSON object for any other data (timings, file stats, HTTP responses). |
 
-Probes should only place *small* data in the payload—ideally <4 KB per record. Large logs should live elsewhere and be referenced via the `raw` object. Maintaining this discipline keeps the boundary objects portable and easy to diff.
+## Example
+
+A trimmed record from `probes/fs_outside_workspace.sh` (writes outside the workspace tree and expects a denial):
+
+```json
+{
+  "schema_version": "bo-v1",
+  "probe": {
+    "id": "fs_outside_workspace",
+    "version": "1",
+    "primary_capability_id": "cap_fs_write_workspace_tree",
+    "secondary_capability_ids": []
+  },
+  "run": {
+    "mode": "codex-sandbox",
+    "workspace_root": "/Users/example/project",
+    "command": "printf 'codex-fence write ...' >> '/tmp/codex-fence-outside-root-test'",
+    "observed_at": "2024-03-04T17:18:19Z"
+  },
+  "operation": {
+    "category": "fs",
+    "verb": "write",
+    "target": "/tmp/codex-fence-outside-root-test",
+    "args": {"write_mode": "append", "attempt_bytes": 43}
+  },
+  "result": {
+    "observed_result": "denied",
+    "raw_exit_code": 1,
+    "errno": "EACCES",
+    "message": "Permission denied",
+    "duration_ms": null,
+    "error_detail": null
+  },
+  "payload": {
+    "stdout_snippet": "",
+    "stderr_snippet": "bash: /tmp/codex-fence-outside-root-test: Permission denied",
+    "raw": {}
+  },
+  "stack": {
+    "codex_cli_version": "codex 1.2.3",
+    "codex_profile": "Auto",
+    "codex_model": "gpt-4",
+    "sandbox_mode": "workspace-write",
+    "os": "Darwin 23.3.0 arm64",
+    "container_tag": "local-macos"
+  }
+}
+```
+
+## Legacy bo-v0 records
+
+`schema/boundary-object-v0.json` is still present so older exports continue to validate, but new probes **must** emit `bo-v1`. The `bin/emit-record` helper now targets the v1 schema exclusively.

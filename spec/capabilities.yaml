@@ -6,6 +6,7 @@
 #
 # Conventions:
 # - capabilities[*].id is a stable slug for use in probe names (e.g. probes/cap_fs_read_workspace_tree.*).
+#   The same slug must appear in boundary records as probe.primary_capability_id / secondary_capability_ids.
 # - operations is expressed in terms of Seatbelt/SBPL operation names where possible (file-read*, network-outbound, etc).
 # - references[*].doc must be one of:
 #     apple-sandbox-guide-v1.0 | chromium-v2-design-doc | run-code-macos-sandbox | deep-dive-agent-sandboxes
