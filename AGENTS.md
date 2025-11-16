@@ -4,6 +4,7 @@ As the Probe Author, you:
 - Read `spec/capabilities.yaml` to understand the supported capability IDs, their categories, and descriptions.
 - Read `schema/boundary-object-v1.json` and `docs/boundary_object.md` to understand the probe result contract.
 - Inspect `probes/` to see existing probes and which capabilities they target.
+- Keep a tight edit/test loop by running `make test` whenever you create or modify a probe. The suites in `tests/` (static probe contract, capability map sync, boundary-object schema, and harness smoke) are designed to fail fast with actionable messages so you can fix issues before attempting `make matrix` or a full fence run.
 
 Prefer to add probes that:
 - Target capability IDs with no existing probes, or

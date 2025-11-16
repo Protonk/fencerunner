@@ -21,10 +21,12 @@ Three reasons:
 
 ## Requirements
 
-* POSIX shell utilities + `bash`
+* POSIX shell utilities + `bash 3.2`
 * `jq`
 * `make`
 * The `codex` CLI (only if you plan to exercise Codex modes)
+
+The goal is to limit probe noise by keeping things lightweight and compatible with the toolchain shipped in macOS. We use `jq`, which must be installed, but that's merely a concession to sanity and could be relaxed in the future. 
 
 ## Usage
 
@@ -41,6 +43,21 @@ Matrix all probes across all modes and store the JSON output in `out/`:
 ```sh
 make matrix
 ```
+
+## Tests
+
+Run the fast authoring checks with:
+
+```sh
+make test
+```
+
+The test runner (`tests/run.sh`) executes four lightweight suites:
+
+* `static_probe_contract` – lints every probe for the documented Bash contract (shebang, `set -euo pipefail`, syntax, ID wiring).
+* `capability_map_sync` – keeps `spec/capabilities.yaml`, `spec/capabilities-coverage.json`, and the probes in sync.
+* `boundary_object_schema` – validates the `bin/emit-record` output against the cfbo-v1 structure using `jq` only.
+* `harness_smoke` – runs a fixture probe through `bin/fence-run` baseline mode to prove the orchestration pipeline still works.
 
 ## How probes work
 

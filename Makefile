@@ -6,7 +6,7 @@ OUTDIR := out
 
 MATRIX_TARGETS := $(foreach mode,$(MODES),$(addprefix $(OUTDIR)/,$(addsuffix .$(mode).json,$(PROBES))))
 
-.PHONY: all matrix clean
+.PHONY: all matrix clean test
 
 all: matrix
 
@@ -27,3 +27,6 @@ $(OUTDIR)/%.codex-full.json: probes/%.sh | $(OUTDIR)
 
 clean:
 	rm -rf $(OUTDIR)
+
+test:
+	tests/run.sh
