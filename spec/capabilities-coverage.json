@@ -10,6 +10,9 @@
     "has_probe": true,
     "probe_ids": [
       "fs_outside_workspace",
+      "fs_symlink_workspace_self_ref_write_ok",
+      "fs_workspace_relative_segments_write_ok",
+      "fs_workspace_unicode_filename_write_ok",
       "fs_workspace_write_create"
     ]
   },
@@ -45,8 +48,9 @@
   "cap_proc_exec_toolchain_outside_workspace": {
     "has_probe": true,
     "probe_ids": [
-      "proc_exec_toolchain_python3",
-      "proc_exec_toolchain_clang_version"
+      "proc_exec_env_python3",
+      "proc_exec_toolchain_clang_version",
+      "proc_exec_toolchain_python3"
     ]
   },
   "cap_proc_fork_and_child_spawn": {
@@ -71,6 +75,7 @@
   "cap_net_localhost_only": {
     "has_probe": true,
     "probe_ids": [
+      "net_localhost_ipv6_loopback_ok",
       "net_localhost_loopback",
       "net_localhost_udp_echo"
     ]
