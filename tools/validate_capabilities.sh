@@ -65,7 +65,7 @@ extract_var() {
 }
 
 shopt -s nullglob
-probe_files=("${repo_root}/probes/"*.sh "${repo_root}/tests/fixtures/"*.sh)
+probe_files=("${repo_root}/probes/"*.sh "${repo_root}/tests/library/fixtures/"*.sh)
 shopt -u nullglob
 
 for script in "${probe_files[@]}"; do

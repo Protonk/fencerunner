@@ -2,6 +2,7 @@ SHELL := /bin/bash
 PROBE_SCRIPTS := $(wildcard probes/*.sh)
 PROBES := $(patsubst probes/%.sh,%,$(PROBE_SCRIPTS))
 OUTDIR := out
+PROBE ?=
 
 HAS_CODEX := $(shell command -v codex >/dev/null 2>&1 && echo yes || true)
 ifeq ($(HAS_CODEX),yes)
@@ -14,7 +15,7 @@ MODES ?= $(DEFAULT_MODES)
 
 MATRIX_TARGETS := $(foreach mode,$(MODES),$(addprefix $(OUTDIR)/,$(addsuffix .$(mode).json,$(PROBES))))
 
-.PHONY: all matrix clean test validate-capabilities
+.PHONY: all matrix clean test validate-capabilities probe
 
 all: matrix
 
@@ -38,6 +39,13 @@ clean:
 
 test:
 	tests/run.sh
+
+probe:
+	@if [[ -z "$(PROBE)" ]]; then \
+		echo "Usage: make probe PROBE=<probe_id_or_path>"; \
+		exit 1; \
+	fi
+	tests/run.sh --probe "$(PROBE)"
 
 validate-capabilities:
 	tools/validate_capabilities.sh

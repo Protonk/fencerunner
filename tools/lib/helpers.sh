@@ -86,3 +86,33 @@ PY
   fi
   printf '%s' "${target}"
 }
+
+resolve_probe_script_path() {
+  local repo_root="$1"
+  local identifier="$2"
+  local trimmed attempts=() candidate resolved
+  if [[ -z "${identifier}" || -z "${repo_root}" ]]; then
+    return 1
+  fi
+  if [[ "${identifier}" == /* ]]; then
+    attempts+=("${identifier}")
+  else
+    trimmed=${identifier#./}
+    attempts+=("${repo_root}/${trimmed}")
+    attempts+=("${repo_root}/probes/${trimmed}")
+    if [[ "${trimmed}" != *.sh ]]; then
+      attempts+=("${repo_root}/probes/${trimmed}.sh")
+    fi
+  fi
+  for candidate in "${attempts[@]}"; do
+    if [[ -f "${candidate}" ]]; then
+      resolved=$(portable_realpath "${candidate}")
+      if [[ -z "${resolved}" ]]; then
+        resolved=$(cd "$(dirname "${candidate}")" >/dev/null 2>&1 && pwd)/$(basename "${candidate}")
+      fi
+      printf '%s\n' "${resolved}"
+      return 0
+    fi
+  done
+  return 1
+}

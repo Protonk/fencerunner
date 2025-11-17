@@ -2,14 +2,14 @@
 set -euo pipefail
 
 script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)
-# shellcheck source=tests/lib/utils.sh
-source "${script_dir}/lib/utils.sh"
+# shellcheck source=tests/library/utils.sh
+source "${script_dir}/../library/utils.sh"
 
 cd "${REPO_ROOT}"
 
 fixture_name="tests_fixture_probe"
 probe_path="probes/${fixture_name}.sh"
-fixture_source="tests/fixtures/probe_fixture.sh"
+fixture_source="tests/library/fixtures/probe_fixture.sh"
 
 if [[ -e "${probe_path}" ]]; then
   echo "harness_smoke: fixture probe already exists at ${probe_path}" >&2

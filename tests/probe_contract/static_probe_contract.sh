@@ -2,13 +2,68 @@
 set -euo pipefail
 
 script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)
-# shellcheck source=tests/lib/utils.sh
-source "${script_dir}/lib/utils.sh"
+# shellcheck source=tests/library/utils.sh
+source "${script_dir}/../library/utils.sh"
+
+usage() {
+  cat <<'USAGE' >&2
+Usage: tests/probe_contract/static_probe_contract.sh [--probe <probe>]
+
+Without arguments, all probes under probes/ (including nested directories) are
+validated. Use --probe to restrict the run to a single probe id or path.
+USAGE
+}
+
+target_probe=""
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --probe)
+      if [[ $# -lt 2 ]]; then
+        usage
+        exit 1
+      fi
+      if [[ -n "${target_probe}" ]]; then
+        echo "static_probe_contract: only one --probe value is supported" >&2
+        exit 1
+      fi
+      target_probe="$2"
+      shift 2
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    *)
+      echo "static_probe_contract: unknown argument '$1'" >&2
+      usage
+      exit 1
+      ;;
+  esac
+done
 
 cd "${REPO_ROOT}"
 
-shopt -s nullglob
-probe_scripts=(probes/*.sh)
+probe_scripts=()
+if [[ -n "${target_probe}" ]]; then
+  resolved_probe=$(resolve_probe_script_path "${REPO_ROOT}" "${target_probe}" || true)
+  if [[ -z "${resolved_probe}" ]]; then
+    echo "static_probe_contract: unable to resolve probe '${target_probe}'" >&2
+    exit 1
+  fi
+  if [[ "${resolved_probe}" != "${REPO_ROOT}/probes/"* ]]; then
+    echo "static_probe_contract: '${resolved_probe}' is outside probes/" >&2
+    exit 1
+  fi
+  probe_scripts=("${resolved_probe}")
+else
+  probes_root="${REPO_ROOT}/probes"
+  if [[ -d "${probes_root}" ]]; then
+    while IFS= read -r script; do
+      probe_scripts+=("${script}")
+    done < <(find "${probes_root}" -type f -name '*.sh' -print | LC_ALL=C sort)
+  fi
+fi
+
 if [[ ${#probe_scripts[@]} -eq 0 ]]; then
   echo "static_probe_contract: no probe scripts found" >&2
   exit 1
