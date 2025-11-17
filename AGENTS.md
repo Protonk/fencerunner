@@ -1,8 +1,8 @@
 ## Probe Author contract
 
 As the Probe Author, you:
-- Read `spec/capabilities.yaml` to understand the supported capability IDs, their categories, and descriptions.
-- Read `schema/boundary-object-v1.json` and `docs/boundary_object.md` to understand the probe result contract.
+- Read `spec/capabilities.yaml` (or the normalized view from `tools/capabilities_adapter.sh`) to understand the supported capability IDs, their categories, and descriptions.
+- Read `schema/boundary-object-cfbo-v2.json` and `docs/boundary_object.md` to understand the probe result contract.
 - Inspect `probes/` to see existing probes and which capabilities they target.
 - Keep a tight edit/test loop by running `make test` whenever you create or modify a probe. The suites in `tests/` (static probe contract, capability map sync, boundary-object schema, and harness smoke) are designed to fail fast with actionable messages so you can fix issues before attempting `make matrix` or a full fence run.
 
@@ -12,12 +12,12 @@ Prefer to add probes that:
 
 Keep each probe:
 - Small and single-purpose.
-- Clearly labeled with `primary_capability_id`. Open `spec/capabilities.yaml` and choose the `capabilities[*].id` that best represents what you are exercising. That id becomes `primary_capability_id`. Optionally list related capabilities in `secondary_capability_ids`. `bin/emit-record` validates all ids against `spec/capabilities.yaml`, so use the exact slugs.
+- Clearly labeled with `primary_capability_id`. Open `spec/capabilities.yaml` (or pipe it through `tools/capabilities_adapter.sh`) and choose the `capabilities[*].id` that best represents what you are exercising. That id becomes `primary_capability_id`. Optionally list related capabilities in `secondary_capability_ids`. `bin/emit-record` validates all ids through the adapter, so use the exact slugs.
 
 Never:
 - Print anything besides the JSON boundary object to stdout. Use stderr for debugging only when necessary.
 
-## Probe description and agent guidance (cfbo-v1)
+## Probe description and agent guidance (cfbo-v2)
 
 A probe: 
 1. Is an executable script under `probes/`. Use `#!/usr/bin/env bash` and enable `set -euo pipefail`. Name the script `probes/<probe_id>.sh` so the filename matches the `probe.id`.
@@ -36,7 +36,7 @@ Call `bin/emit-record` exactly once with:
 - `--category`, `--verb`, `--target`, and `--operation-args '{}'`.
 - Outcome metadata (`--status` → `result.observed_result`, `--errno`, `--message`, `--raw-exit-code`, etc.) plus `--payload-file`.
 
-See `docs/boundary-object.md` for a complete field description.
+See `docs/boundary-object.md` for a complete field description (cfbo-v2 adds `capabilities_schema_version` and `capability_context` snapshots to every record).
 
 ## Minimal example
 
@@ -66,9 +66,10 @@ printf -v command_executed "printf %q >> %q" "${attempt_line}" "${target_path}"
 
 Matching JSON output (trimmed for brevity):
 
-```
+```json
 {
-  "schema_version": "cfbo-v1",
+  "schema_version": "cfbo-v2",
+  "capabilities_schema_version": 2,
   "probe": {
     "id": "fs_outside_workspace",
     "version": "1",
@@ -99,6 +100,16 @@ Matching JSON output (trimmed for brevity):
     "stdout_snippet": "",
     "stderr_snippet": "bash: /tmp/codex-fence-outside-root-test: Permission denied",
     "raw": {}
+  },
+  "capability_context": {
+    "primary": {
+      "id": "cap_fs_write_workspace_tree",
+      "category": "filesystem",
+      "platform": ["macos"],
+      "layer": "os_sandbox",
+      "status": "core"
+    },
+    "secondary": []
   },
   "stack": { "codex_cli_version": "codex 1.2.3", "codex_profile": "Auto", "codex_model": "gpt-4", "sandbox_mode": "workspace-write", "os": "Darwin 23.3.0 arm64", "container_tag": "local-macos" }
 }

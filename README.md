@@ -55,9 +55,17 @@ make test
 The test runner (`tests/run.sh`) executes four lightweight suites:
 
 * `static_probe_contract` – lints every probe for the documented Bash contract (shebang, `set -euo pipefail`, syntax, ID wiring).
-* `capability_map_sync` – keeps `spec/capabilities.yaml`, `spec/capabilities-coverage.json`, and the probes in sync.
-* `boundary_object_schema` – validates the `bin/emit-record` output against the cfbo-v1 structure using `jq` only.
+* `capability_map_sync` – keeps `spec/capabilities.yaml`, `spec/capabilities-coverage.json`, and the probes in sync via the v2 adapter.
+* `boundary_object_schema` – validates the `bin/emit-record` output against the cfbo-v2 structure using `jq` only.
 * `harness_smoke` – runs a fixture probe through `bin/fence-run` baseline mode to prove the orchestration pipeline still works.
+
+Need to double-check new capability IDs against the catalog? Run:
+
+```sh
+make validate-capabilities
+```
+
+It uses `tools/capabilities_adapter.sh` to ensure every probe, fixture, and boundary-object sample references real capability IDs.
 
 ## How probes work
 

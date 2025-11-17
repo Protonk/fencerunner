@@ -1,17 +1,30 @@
-# First-pass capability map distilled from:
-# - apple-sandbox-guide-v1.0    : https://reverse.put.as/wp-content/uploads/2011/09/Apple-Sandbox-Guide-v1.0.pdf
-# - chromium-v2-design-doc      : https://chromium.googlesource.com/chromium/src/+/HEAD/sandbox/mac/seatbelt_sandbox_design.md
-# - run-code-macos-sandbox      : https://mybyways.com/blog/run-code-in-a-macos-sandbox
-# - deep-dive-agent-sandboxes   : https://pierce.dev/notes/a-deep-dive-on-agent-sandboxes
-#
-# Conventions:
-# - capabilities[*].id is a stable slug for use in probe names (e.g. probes/cap_fs_read_workspace_tree.*).
-#   The same slug must appear in boundary records as probe.primary_capability_id / secondary_capability_ids.
-# - operations are expressed in terms of Seatbelt/SBPL operation names where possible (file-read*, network-outbound, etc).
-# - references[*].doc must be one of:
-#     apple-sandbox-guide-v1.0 | chromium-v2-design-doc | run-code-macos-sandbox | deep-dive-agent-sandboxes
+schema_version: 2
+
+scope:
+  description: "Subset of macOS Seatbelt + Codex agent policy modeled for codex-fence"
+  platforms: [macos]
+  notes: >
+    This file intentionally models only the operations and behaviors that codex-fence
+    currently probes. It is not a complete Seatbelt or OS sandbox reference and is
+    designed to grow across platforms over time.
+
+docs:
+  apple_sandbox_guide:
+    title: "Apple Sandbox Guide v1.0"
+    url: "https://reverse.put.as/wp-content/uploads/2011/09/Apple-Sandbox-Guide-v1.0.pdf"
+  deep_dive_agent_sandboxes:
+    title: "A Deep Dive on Agent Sandboxes"
+    url: "https://pierce.dev/notes/a-deep-dive-on-agent-sandboxes"
+  chromium_sandbox_v2:
+    title: "Mac Chromium Sandbox V2 Design Doc"
+    url: "https://chromium.googlesource.com/chromium/src/+/HEAD/sandbox/mac/seatbelt_sandbox_design.md"
+  run_code_sandbox:
+    title: "Run Code in a macOS Sandbox"
+    url: "https://mybyways.com/blog/run-code-in-a-macos-sandbox"
 
 capabilities:
+
+  # …capability objects…
 
   # -------------------------
   # Filesystem – workspace and git
@@ -19,120 +32,162 @@ capabilities:
 
   - id: cap_fs_read_workspace_tree
     category: filesystem
+    platform: [macos]
+    layer: os_sandbox
+    status: core
     description: Ability for commands to read files anywhere under the Codex workspace root(s).
     operations:
-      - file-read*
-      - file-read-data
-      - file-read-metadata
+      allow:
+        - file-read*
+        - file-read-data
+        - file-read-metadata
+      deny: []
+    meta_ops: []
+    agent_controls: []
     level: medium
     notes: >
       This is the “normal” mode for Auto / Full access in Codex – agents must be able to read the
       checked-out project tree, but not arbitrary user directories. Expect to be implemented as
       allow file-read* (subpath WRITABLE_ROOT_i) for each workspace root, with deny default.
-    references:
-      - doc: apple-sandbox-guide-v1.0
+    sources:
+      - doc: apple_sandbox_guide
         section: "2, 5.2 – File operations and allow/deny model"
-      - doc: chromium-v2-design-doc
+      - doc: chromium_sandbox_v2
         section: "SBPL example using (subpath (param \"USER_HOME_DIR\"))"
-      - doc: run-code-macos-sandbox
+      - doc: run_code_sandbox
         section: "Profile that allows read/write to $PWD only"
-      - doc: deep-dive-agent-sandboxes
+      - doc: deep_dive_agent_sandboxes
         section: "Codex Auto mode workspace access and SandboxPolicy.writable_roots"
 
   - id: cap_fs_write_workspace_tree
     category: filesystem
+    platform: [macos]
+    layer: os_sandbox
+    status: core
     description: Ability for commands to create/modify/delete files inside the workspace roots.
     operations:
-      - file-write*
-      - file-write-data
-      - file-write-create
-      - file-write-unlink
+      allow:
+        - file-write*
+        - file-write-data
+      deny: []
+    meta_ops: []
+    agent_controls: []
     level: high
     notes: >
       Codex enumerates a set of writable roots from SandboxPolicy and passes them as WRITABLE_ROOT_i
       parameters into the Seatbelt profile; writes are allowed only under these roots, with everything
       else denied by default. Probes should verify both creation and deletion semantics inside a known
       workspace subdirectory.
-    references:
-      - doc: apple-sandbox-guide-v1.0
+    sources:
+      - doc: apple_sandbox_guide
         section: "5.2 – file-write* family"
-      - doc: run-code-macos-sandbox
+      - doc: run_code_sandbox
         section: "Deny-by-default Python sandbox with explicit file-read* and file-write* rules"
-      - doc: deep-dive-agent-sandboxes
+      - doc: deep_dive_agent_sandboxes
         section: "Seatbelt WRITABLE_ROOT_i construction and writable_folder_policies"
 
   - id: cap_fs_read_git_metadata
     category: filesystem
-    description: Workspace .git directories are readable but protected from writes.
+    platform: [macos]
+    layer: os_sandbox          # kernel/Seatbelt-style behavior
+    status: core               # core | experimental | planned
+    description: Read-only access to .git directories under each workspace root.
     operations:
-      - file-read*
-      - file-read-data
-      - file-read-metadata
-      - file-write*   # should be denied inside .git
+      allow:
+        - file-read*
+        - file-read-data
+        - file-read-metadata
+      deny:
+        - file-write*
+    meta_ops: []               # non-SBPL policy mechanisms; none needed here
+    agent_controls: []         # agent-level controls; none here
     level: high
     notes: >
-      Codex explicitly carves .git directories out as read-only subpaths under each writable root:
-      writes are blocked while normal reads (e.g. git status, reading config) continue to work.
-      A useful probe is to attempt creating or modifying a file in .git and confirm failure while
-      a neighboring non-.git path is writable.
-    references:
-      - doc: deep-dive-agent-sandboxes
-        section: "Seatbelt profile generation – WRITABLE_ROOT_i with read_only_subpaths = .git"
-      - doc: apple-sandbox-guide-v1.0
-        section: "5.3.1 – path/regex/subpath filters for file operations"
+      Codex treats .git as a read-only subpath under each writable root: attempts to write
+      within .git should be denied while neighboring paths in the workspace remain writable.
+      Probes can exercise this by creating or modifying files inside .git and comparing the
+      result with writes to adjacent non-.git paths under the same root.
+    sources:
+      - doc: deep_dive_agent_sandboxes
+        section: "Seatbelt profile generation — WRITABLE_ROOT_i and read_only_subpaths"
+        url_hint: "deep-dive-agent-sandboxes#seatbelt-profile-generation"
+      - doc: apple_sandbox_guide
+        section: "File operations and path/subpath filters"
+        url_hint: "Apple-Sandbox-Guide-v1.0.pdf#file-operations"
 
   - id: cap_fs_read_system_roots
     category: filesystem
+    platform: [macos]
+    layer: os_sandbox
+    status: core
     description: Read-only access to core system directories needed for toolchains and runtimes.
     operations:
-      - file-read*
-      - file-read-data
-      - file-read-metadata
+      allow:
+        - file-read*
+        - file-read-data
+        - file-read-metadata
+      deny: []
+    meta_ops: []
+    agent_controls: []
     level: medium
     notes: >
       Typical profiles allow read-only traversal of /, /System, /Library, /private, /dev, /usr, and
       sometimes ~/Library, while keeping user content folders more restricted. This is required
       for compilers, interpreters, and language runtimes to function inside the sandbox.
-    references:
-      - doc: run-code-macos-sandbox
+    sources:
+      - doc: run_code_sandbox
         section: "Profile allowing file-read-data on root, /System, /Library, /private, /dev, /usr, ~/Library"
-      - doc: apple-sandbox-guide-v1.0
+      - doc: apple_sandbox_guide
         section: "5.2 – file-read* semantics and examples"
 
   - id: cap_fs_read_user_content
     category: filesystem
+    platform: [macos]
+    layer: os_sandbox
+    status: core
     description: Ability to read user content folders (Documents, Desktop, etc.) from within the sandbox.
     operations:
-      - file-read*
-      - file-read-data
-      - file-read-metadata
+      allow:
+        - file-read*
+        - file-read-data
+        - file-read-metadata
+      deny: []
+    meta_ops: []
+    agent_controls: []
     level: high
     notes: >
       Some sandbox setups intentionally deny file-read-data for specific user directories while allowing
       system paths and workspace roots. Probes should check for read access to common user content paths
       such as ~/Documents or ~/Desktop, which are sensitive from a data-exfiltration perspective.
-    references:
-      - doc: run-code-macos-sandbox
+    sources:
+      - doc: run_code_sandbox
         section: "Allow-by-default profile that explicitly denies network* and selected user folders"
-      - doc: apple-sandbox-guide-v1.0
+      - doc: apple_sandbox_guide
         section: "5.3.1 – path filters and subpath semantics for file-read*"
 
   - id: cap_fs_follow_symlinks_out_of_workspace
     category: filesystem
+    platform: [macos]
+    layer: os_sandbox
+    status: core
     description: Whether a process can escape workspace constraints via symlinks pointing outside writable roots.
     operations:
-      - file-read*
-      - file-write*
+      allow:
+        - file-read*
+        - file-write*
+      deny: []
+    meta_ops: []
+    agent_controls: []
     level: high
     notes: >
       Seatbelt resolves symlinks before applying path filters, so a profile written against canonical
       /private/tmp instead of /tmp can avoid obvious bypasses. A probe can create a symlink in the
       workspace pointing to a sensitive directory (e.g. home dotfiles) and then attempt reads/writes
       through the symlink to see if the sandbox enforces canonical paths.
-    references:
-      - doc: apple-sandbox-guide-v1.0
+    sources:
+      - doc: apple_sandbox_guide
         section: "5.3.1 – note on symlink resolution for path filters"
-      - doc: deep-dive-agent-sandboxes
+      - doc: deep_dive_agent_sandboxes
         section: "Discussion of writable_roots canonicalization on macOS"
 
   # -------------------------
@@ -141,53 +196,74 @@ capabilities:
 
   - id: cap_proc_exec_toolchain_outside_workspace
     category: process
+    platform: [macos]
+    layer: os_sandbox
+    status: core
     description: Ability to execute binaries located outside the workspace (e.g., system compilers, language runtimes).
     operations:
-      - process-exec*
+      allow:
+        - process-exec
+      deny: []
+    meta_ops: []
+    agent_controls: []
     level: medium
     notes: >
       A common pattern is to permit process-exec for specific toolchain paths (e.g., /usr/bin/python3,
       Xcode CLT paths) while still restricting filesystem writes. Codex’s Auto mode can fail when a
       needed toolchain lives outside the allowed roots; describing and probing this failure is important
       for understanding effective capabilities.
-    references:
-      - doc: run-code-macos-sandbox
+    sources:
+      - doc: run_code_sandbox
         section: "Profile that explicitly allows process-exec for python3 and CLT paths"
-      - doc: apple-sandbox-guide-v1.0
+      - doc: apple_sandbox_guide
         section: "5.2 – process-exec operation"
-      - doc: deep-dive-agent-sandboxes
+      - doc: deep_dive_agent_sandboxes
         section: "Codex Auto mode failing to access external swift/clang toolchain"
 
   - id: cap_proc_fork_and_child_spawn
     category: process
+    platform: [macos]
+    layer: os_sandbox
+    status: core
     description: Ability to fork and spawn child processes within the sandbox.
     operations:
-      - process-fork
-      - process-exec*
+      allow:
+        - process-fork
+        - process-exec
+      deny: []
+    meta_ops: []
+    agent_controls: []
     level: medium
     notes: >
       For coding agents, spawning child processes is essential (compilers, tests, servers). Seatbelt
       can restrict process-fork/exec, but Codex typically allows a controlled set via sandboxed
       spawn_child_async with explicit stdio and env policies.
-    references:
-      - doc: apple-sandbox-guide-v1.0
+    sources:
+      - doc: apple_sandbox_guide
         section: "2 – Process operations (execution, fork)"
-      - doc: deep-dive-agent-sandboxes
+      - doc: deep_dive_agent_sandboxes
         section: "spawn_child_async: central child process management and env clearing"
 
   - id: cap_proc_unsandboxed_escalation
     category: process
+    platform: [macos]
+    layer: os_sandbox
+    status: core
     description: Ability for a command to be re-run outside the OS-level sandbox after a denied attempt.
     operations:
-      - process-exec*
+      allow:
+        - process-exec
+      deny: []
+    meta_ops: []
+    agent_controls: []
     level: high
     notes: >
       Codex can fall back to SandboxType::None when a sandboxed command fails for permissions reasons
       and the user approves escalation. This is primarily a policy/UI behavior rather than a Seatbelt
       operation, but it is a critical capability surface: probes can attempt operations likely to be
       denied and then observe whether the agent can re-run them unsandboxed if allowed.
-    references:
-      - doc: deep-dive-agent-sandboxes
+    sources:
+      - doc: deep_dive_agent_sandboxes
         section: "assess_command_safety, session trust lists, and retrying with SandboxType::None"
 
   # -------------------------
@@ -196,57 +272,80 @@ capabilities:
 
   - id: cap_net_outbound_any
     category: network
+    platform: [macos]
+    layer: os_sandbox
+    status: core
     description: Ability to open arbitrary outbound network connections (non-localhost).
     operations:
-      - network-outbound
-      - network*
+      allow:
+        - network-outbound
+        - network*
+      deny: []
+    meta_ops: []
+    agent_controls: []
     level: high
     notes: >
       Codex’s Seatbelt profile toggles network access in a coarse all-or-nothing way – either network
       outbound/inbound/system-socket are allowed or omitted entirely. Probes should attempt HTTP/HTTPS
-      connections to external hosts to detect whether outbound networking is enabled.
-    operations_detail:
-      allow_profile_example: "(allow network-outbound)\n(allow network-inbound)\n(allow system-socket)"
-    references:
-      - doc: apple-sandbox-guide-v1.0
+      connections to external hosts to detect whether outbound networking is enabled. Example allow
+      profile:
+      (allow network-outbound)
+      (allow network-inbound)
+      (allow system-socket)
+    sources:
+      - doc: apple_sandbox_guide
         section: "5.3.2 – network filters; example (deny network* (remote ip \"*:*\"))"
-      - doc: run-code-macos-sandbox
+      - doc: run_code_sandbox
         section: "Profiles that deny all networking or allow outbound/localhost selectively"
-      - doc: deep-dive-agent-sandboxes
+      - doc: deep_dive_agent_sandboxes
         section: "Seatbelt network policy – simple enable/disable via has_full_network_access"
 
   - id: cap_net_localhost_only
     category: network
+    platform: [macos]
+    layer: os_sandbox
+    status: core
     description: Ability to use localhost networking while remote IPs remain blocked.
     operations:
-      - network*
-      - network-inbound
-      - network-outbound
+      allow:
+        - network*
+        - network-inbound
+        - network-outbound
+      deny: []
+    meta_ops: []
+    agent_controls: []
     level: medium
     notes: >
       Seatbelt can distinguish localhost vs remote using network filters, but even then it only supports
       localhost or * for IP and cannot restrict by hostname. Some sandbox patterns allow local debugging
       servers while blocking external network access. Probes can run a small HTTP server bound to
       localhost and attempt both local and remote connections.
-    references:
-      - doc: apple-sandbox-guide-v1.0
+    sources:
+      - doc: apple_sandbox_guide
         section: "5.3.2 – network filter: only localhost or * as IP, port-filtering only"
-      - doc: run-code-macos-sandbox
+      - doc: run_code_sandbox
         section: "Example using (allow network* (local ip \"localhost:*\")) and (remote ip \"localhost:*\")"
 
   - id: cap_net_disabled_with_tag
     category: network
+    platform: [macos]
+    layer: os_sandbox
+    status: core
     description: Network is disabled at the OS level and marked via an environment variable for child processes.
     operations:
-      - network*
+      allow: []
+      deny:
+        - network*
+    meta_ops: []
+    agent_controls: []
     level: medium
     notes: >
       When Codex disables network access, the Seatbelt profile omits network permissions and the
       spawn_child_async helper sets CODEX_SANDBOX_NETWORK_DISABLED=1 so tools can detect the
       restriction. A probe can inspect the environment and attempt a simple external connection to
       confirm both deny behavior and the env tag.
-    references:
-      - doc: deep-dive-agent-sandboxes
+    sources:
+      - doc: deep_dive_agent_sandboxes
         section: "CODEX_SANDBOX_NETWORK_DISABLED_ENV_VAR usage and network-disabled runs"
 
   # -------------------------
@@ -255,49 +354,70 @@ capabilities:
 
   - id: cap_sysctl_read_basic
     category: sysctl
+    platform: [macos]
+    layer: os_sandbox
+    status: core
     description: Ability to read non-sensitive sysctl values (e.g., OS version, CPU info).
     operations:
-      - sysctl-read
+      allow:
+        - sysctl-read
+      deny: []
+    meta_ops: []
+    agent_controls: []
     level: low
     notes: >
       Seatbelt can gate sysctl calls; many profiles allow sysctl-read so processes can discover basic
       system configuration. Probes can attempt reading known-safe keys (hw.ncpu, kern.osrelease) and
       observe success/failure.
-    references:
-      - doc: apple-sandbox-guide-v1.0
+    sources:
+      - doc: apple_sandbox_guide
         section: "2 – Sysctl operations; 5.2 sysctl-read"
-      - doc: chromium-v2-design-doc
+      - doc: chromium_sandbox_v2
         section: "Common directives – (allow sysctl-read) in V2 profiles"
 
   - id: cap_sysctl_read_sensitive
     category: sysctl
+    platform: [macos]
+    layer: os_sandbox
+    status: core
     description: Ability to read more sensitive sysctl values (e.g., kern.boottime) that may be blocked in tighter policies.
     operations:
-      - sysctl-read
+      allow:
+        - sysctl-read
+      deny: []
+    meta_ops: []
+    agent_controls: []
     level: medium
     notes: >
       Some agent sandboxes intentionally block specific sysctl keys for fingerprinting or privacy
       reasons. A probe can attempt to read kern.boottime and related “interesting” keys and classify
       whether they are accessible, denied, or produce partial/filtered results.
-    references:
-      - doc: apple-sandbox-guide-v1.0
+    sources:
+      - doc: apple_sandbox_guide
         section: "Sysctl operation overview and examples"
-      - doc: deep-dive-agent-sandboxes
+      - doc: deep_dive_agent_sandboxes
         section: "OS-level sandboxes as syscall-level controls for sysctl and similar APIs"
 
   - id: cap_mach_lookup_system_logger
     category: ipc
+    platform: [macos]
+    layer: os_sandbox
+    status: core
     description: Ability to communicate with selected system services via mach-lookup.
     operations:
-      - mach-lookup
+      allow:
+        - mach-lookup
+      deny: []
+    meta_ops: []
+    agent_controls: []
     level: low
     notes: >
       Many profiles allow mach-lookup to specific global names such as com.apple.system.logger so
       processes can write logs. This is useful for observing sandbox behavior from within the sandbox.
-    references:
-      - doc: chromium-v2-design-doc
+    sources:
+      - doc: chromium_sandbox_v2
         section: "Example (allow mach-lookup (global-name \"com.apple.system.logger\"))"
-      - doc: apple-sandbox-guide-v1.0
+      - doc: apple_sandbox_guide
         section: "IPC and Mach operations overview"
 
   # -------------------------
@@ -306,56 +426,80 @@ capabilities:
 
   - id: cap_sandbox_default_deny
     category: sandbox_meta
+    platform: [macos]
+    layer: os_sandbox
+    status: core
     description: Sandbox profile denies all operations by default and selectively allows specific rules.
     operations:
-      - default
+      allow: []
+      deny: []
+    meta_ops:
+      - sandbox-meta:default-deny
+    agent_controls: []
     level: medium
     notes: >
       Both Apple and Chromium profiles generally follow a (version 1)(deny default) pattern, then
       enumerate allow rules. Probes can infer this by attempting “unexpected” operations and checking
       that they are systematically denied unless explicitly allowed.
-    references:
-      - doc: apple-sandbox-guide-v1.0
+    sources:
+      - doc: apple_sandbox_guide
         section: "4 – Anatomy of a custom profile; (deny default) vs (allow default)"
-      - doc: chromium-v2-design-doc
+      - doc: chromium_sandbox_v2
         section: "Sandbox Profile Language example with (deny default)"
-      - doc: run-code-macos-sandbox
+      - doc: run_code_sandbox
         section: "Deny-by-default profile used for testing random code"
 
   - id: cap_sandbox_debug_and_trace_logging
     category: sandbox_meta
+    platform: [macos]
+    layer: os_sandbox
+    status: core
     description: Ability to capture sandbox allow/deny events via system log or trace files.
     operations:
-      - system
+      allow: []
+      deny: []
+    meta_ops:
+      - sandbox-meta:debug-logging
+      - sandbox-meta:trace-logging
+    agent_controls: []
     level: low
     notes: >
-      SBPL supports (debug deny|all) and (trace \"file.sb\") to emit logs and rule suggestions for denied
+      SBPL supports (debug deny|all) and (trace "file.sb") to emit logs and rule suggestions for denied
       operations; sandbox-exec writes to /var/log/system.log by default. A probe can run under a custom
       profile and verify that denied operations generate visible sandbox log entries.
-    references:
-      - doc: apple-sandbox-guide-v1.0
+    sources:
+      - doc: apple_sandbox_guide
         section: "4, 5.5.2 – debug and trace keywords; logging to /var/log/system.log"
-      - doc: run-code-macos-sandbox
+      - doc: run_code_sandbox
         section: "Using log stream / Console.app to watch Sandbox events"
 
   - id: cap_sandbox_profile_parameterization
     category: sandbox_meta
-    description: Profile uses runtime parameters (e.g., USER_HOME_DIR, WRITABLE_ROOT_i) to scope rules.
+    platform: [macos]
+    layer: os_sandbox          # about how the profile is written, not agent policy
+    status: core
+    description: Use of runtime parameters (e.g., USER_HOME_DIR, WRITABLE_ROOT_i) to specialize sandbox profiles per process.
     operations:
-      - file-read*
-      - file-write*
-      - network*
-      - process-exec*
+      allow: []                # this capability is about profile structure, not specific ops
+      deny: []
+    meta_ops:
+      - sandbox-meta:parametric-profile
+    agent_controls: []
     level: medium
     notes: >
-      SBPL parameters allow the same compiled profile to be specialized per process; Chromium relies on
-      parameters for user home, permitted directory, logging flag, OS version, app bundle path, and PID.
-      Codex uses WRITABLE_ROOT_i parameters to describe each writable root before launching sandbox-exec.
-    references:
-      - doc: chromium-v2-design-doc
-        section: "SBPL parameters example and required parameter list"
-      - doc: deep-dive-agent-sandboxes
-        section: "Seatbelt.create_seatbelt_command_args and WRITABLE_ROOT_i parameters"
+      SBPL parameters allow a single profile template to be specialized for each process.
+      Chromium uses parameters for user home, application bundle, permitted directories,
+      logging flags, OS version, and PID. Codex uses WRITABLE_ROOT_i-style parameters to
+      describe each writable root when constructing the sandbox command. Probes may need
+      to infer parameterization indirectly, e.g., by observing how changing workspace
+      roots affects effective path permissions without changing the compiled template.
+    sources:
+      - doc: chromium_sandbox_v2
+        section: "SBPL parameters and profile template example"
+        url_hint: "seatbelt_sandbox_design.md#parameters"
+      - doc: deep_dive_agent_sandboxes
+        section: "Seatbelt.create_seatbelt_command_args and WRITABLE_ROOT_i"
+        url_hint: "deep-dive-agent-sandboxes#seatbelt-command-args"
 
   # -------------------------
   # Agent-specific policy surface
@@ -363,55 +507,88 @@ capabilities:
 
   - id: cap_agent_sandbox_env_marker
     category: agent_policy
+    platform: [macos]
+    layer: agent_policy
+    status: core
     description: Child processes can detect Seatbelt usage via a dedicated environment variable.
-    operations: []
+    operations:
+      allow: []
+      deny: []
+    meta_ops: []
+    agent_controls:
+      - agent-policy:sandbox-env-marker
     level: low
     notes: >
       Codex injects CODEX_SANDBOX_ENV_VAR=seatbelt into the environment of sandboxed commands. A probe
       can simply check the environment of the running process to determine whether it was launched
       under the Seatbelt sandbox vs unsandboxed.
-    references:
-      - doc: deep-dive-agent-sandboxes
+    sources:
+      - doc: deep_dive_agent_sandboxes
         section: "spawn_command_under_seatbelt inserting CODEX_SANDBOX_ENV_VAR=\"seatbelt\""
 
   - id: cap_agent_approvals_mode
     category: agent_policy
-    description: High-level approval modes (Read Only, Auto, Full Access) govern when sandboxed commands and network are allowed.
-    operations: []
-    level: high
+    platform: [macos]
+    layer: agent_policy        # Codex orchestration, not OS sandbox
+    status: core
+    description: Human-facing approval modes (Read Only / Auto / Full Access) that gate sandboxing and escalation.
+    operations:
+      allow: []                # no direct SBPL primitives; this is policy around them
+      deny: []
+    meta_ops: []
+    agent_controls:
+      - agent-policy:approvals-mode
+    level: medium
     notes: >
-      Codex exposes three approval modes via /approvals: Read Only, Auto, and Full Access. These modes
-      control whether edits, commands, and network access are allowed automatically, require approval,
-      or are fully unrestricted. While not a Seatbelt primitive, this mode selection dramatically changes
-      the effective sandbox behavior and is part of the policy surface codex-fence should probe.
-    references:
-      - doc: deep-dive-agent-sandboxes
-        section: "Codex Permissions – Read Only, Auto, Full Access modes"
+      Codex exposes multiple approvals modes that control when commands may run, whether
+      they are sandboxed, and when user confirmation is required. These modes influence
+      whether failing sandboxed commands are retried unsandboxed or blocked entirely.
+      Probes should focus on observable differences between modes, not on internal UI.
+    sources:
+      - doc: deep_dive_agent_sandboxes
+        section: "Approvals modes and SandboxType selection"
+        url_hint: "deep-dive-agent-sandboxes#approvals-modes"
 
   - id: cap_agent_command_trust_list
     category: agent_policy
+    platform: [macos]
+    layer: agent_policy
+    status: core
     description: Session-scoped trust lists and approval policies gate which commands may run (and whether they may run unsandboxed).
-    operations: []
+    operations:
+      allow: []
+      deny: []
+    meta_ops: []
+    agent_controls:
+      - agent-policy:command-trust-list
     level: high
     notes: >
       Codex maintains session-scoped approval lists; assess_command_safety classifies commands as
       known-safe, user-approved, or requiring approval, and can choose to run them sandboxed or
       unsandboxed. Probes here are more behavioral/interactive, but codex-fence can at least model
       which classes of commands are likely to be auto-approved vs blocked.
-    references:
-      - doc: deep-dive-agent-sandboxes
+    sources:
+      - doc: deep_dive_agent_sandboxes
         section: "assess_command_safety and session trust lists"
 
   - id: cap_agent_default_sandboxing
     category: agent_policy
+    platform: [macos]
+    layer: agent_policy
+    status: core
     description: All commands go through a centralized execution path that applies sandboxing by default.
-    operations: []
+    operations:
+      allow: []
+      deny: []
+    meta_ops: []
+    agent_controls:
+      - agent-policy:default-sandboxing
     level: medium
     notes: >
       Codex routes every tool call through process_exec_tool_call with a SandboxType determined by
       policy; SandboxType::MacosSeatbelt is the default on macOS, with selective escalation to None
       when required. For codex-fence, this means the “normal” case is sandboxed execution, and escape
       paths must be explicit.
-    references:
-      - doc: deep-dive-agent-sandboxes
+    sources:
+      - doc: deep_dive_agent_sandboxes
         section: "Execution pipeline – arg0_dispatch_or_else, SandboxType, and default-sandbox behavior"

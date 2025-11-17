@@ -14,13 +14,19 @@ status=0
 
 echo "capability_map_sync: validating capability metadata"
 
+capabilities_adapter="${REPO_ROOT}/tools/capabilities_adapter.sh"
+if [[ ! -x "${capabilities_adapter}" ]]; then
+  echo "capability_map_sync: missing adapter at ${capabilities_adapter}" >&2
+  exit 1
+fi
+
 capability_ids=()
 while IFS= read -r capability_id; do
   capability_ids+=("${capability_id}")
-done < <(awk '$1=="-" && $2=="id:" {print $3}' spec/capabilities.yaml)
+done < <("${capabilities_adapter}" | jq -r 'keys[]')
 
 if [[ ${#capability_ids[@]} -eq 0 ]]; then
-  echo "capability_map_sync: no capability IDs found in spec/capabilities.yaml" >&2
+  echo "capability_map_sync: adapter returned no capability IDs" >&2
   exit 1
 fi
 

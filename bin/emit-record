@@ -4,7 +4,7 @@ set -euo pipefail
 script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)
 detect_stack_bin="${script_dir}/detect-stack"
 repo_root=$(cd "${script_dir}/.." >/dev/null 2>&1 && pwd)
-capabilities_file="${repo_root}/spec/capabilities.yaml"
+capabilities_adapter="${repo_root}/tools/capabilities_adapter.sh"
 
 usage() {
   cat >&2 <<'USAGE'
@@ -108,8 +108,8 @@ if [[ ! -x "${detect_stack_bin}" ]]; then
   exit 1
 fi
 
-if [[ ! -f "${capabilities_file}" ]]; then
-  echo "Capability map not found at ${capabilities_file}" >&2
+if [[ ! -x "${capabilities_adapter}" ]]; then
+  echo "Capability adapter not found or not executable at ${capabilities_adapter}" >&2
   exit 1
 fi
 
@@ -118,10 +118,10 @@ while IFS= read -r cap_line; do
   if [[ -n "${cap_line}" ]]; then
     known_capability_ids+=("${cap_line}")
   fi
-done < <(awk '$1=="-" && $2=="id:" {print $3}' "${capabilities_file}")
+done < <("${capabilities_adapter}" | jq -r 'keys[]')
 
 if [[ ${#known_capability_ids[@]} -eq 0 ]]; then
-  echo "No capability IDs defined in ${capabilities_file}" >&2
+  echo "No capability IDs returned by ${capabilities_adapter}" >&2
   exit 1
 fi
 

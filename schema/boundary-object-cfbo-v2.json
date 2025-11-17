@@ -1,0 +1,209 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/Protonk/codex-fence/schema/boundary-object-cfbo-v2.json",
+  "title": "Codex Fence Boundary Object (cfbo-v2)",
+  "description": "Record of a single probe execution aligned with the v2 capability map (capabilities.yaml schema_version=2).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "stack",
+    "probe",
+    "run",
+    "operation",
+    "result",
+    "payload",
+    "capability_context"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "const": "cfbo-v2"
+    },
+    "capabilities_schema_version": {
+      "description": "The schema_version value from capabilities.yaml used when interpreting capability ids (e.g., 2).",
+      "type": ["integer", "null"]
+    },
+    "stack": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "codex_cli_version",
+        "codex_profile",
+        "codex_model",
+        "sandbox_mode",
+        "os",
+        "container_tag"
+      ],
+      "properties": {
+        "codex_cli_version": { "type": ["string", "null"] },
+        "codex_profile": { "type": ["string", "null"] },
+        "codex_model": { "type": ["string", "null"] },
+        "sandbox_mode": {
+          "type": ["string", "null"],
+          "enum": ["read-only", "workspace-write", "danger-full-access", null]
+        },
+        "os": { "type": "string" },
+        "container_tag": { "type": "string" }
+      }
+    },
+    "probe": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "version",
+        "primary_capability_id",
+        "secondary_capability_ids"
+      ],
+      "properties": {
+        "id": { "type": "string" },
+        "version": { "type": "string" },
+        "primary_capability_id": { "type": "string" },
+        "secondary_capability_ids": {
+          "type": "array",
+          "items": { "type": "string" },
+          "uniqueItems": true
+        }
+      }
+    },
+    "run": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "mode",
+        "workspace_root",
+        "command",
+        "observed_at"
+      ],
+      "properties": {
+        "mode": {
+          "type": "string",
+          "enum": ["baseline", "codex-sandbox", "codex-full"]
+        },
+        "workspace_root": { "type": ["string", "null"] },
+        "command": { "type": "string" },
+        "observed_at": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    },
+    "operation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "category",
+        "verb",
+        "target",
+        "args"
+      ],
+      "properties": {
+        "category": {
+          "type": "string",
+          "description": "High-level operation category (e.g., filesystem, process, network)."
+        },
+        "verb": {
+          "type": "string",
+          "description": "Concrete verb for the attempted operation (e.g., open, execve, connect)."
+        },
+        "target": {
+          "type": "string",
+          "description": "Primary target of the operation (e.g., path, host:port, command)."
+        },
+        "args": {
+          "type": "object",
+          "description": "Probe-specific arguments or parameters associated with the operation."
+        }
+      }
+    },
+    "result": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "observed_result",
+        "raw_exit_code",
+        "errno",
+        "message",
+        "duration_ms",
+        "error_detail"
+      ],
+      "properties": {
+        "observed_result": {
+          "type": "string",
+          "enum": ["success", "denied", "partial", "error"]
+        },
+        "raw_exit_code": { "type": ["integer", "null"] },
+        "errno": { "type": ["string", "null"] },
+        "message": { "type": ["string", "null"] },
+        "duration_ms": { "type": ["integer", "null"] },
+        "error_detail": { "type": ["string", "null"] }
+      }
+    },
+    "payload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["stdout_snippet", "stderr_snippet", "raw"],
+      "properties": {
+        "stdout_snippet": { "type": ["string", "null"] },
+        "stderr_snippet": { "type": ["string", "null"] },
+        "raw": {
+          "type": "object",
+          "description": "Probe-specific raw output or structured data for deeper analysis."
+        }
+      }
+    },
+    "capability_context": {
+      "type": "object",
+      "description": "Snapshot of the primary and secondary capabilities as interpreted from capabilities.yaml v2 at the time of the run.",
+      "additionalProperties": false,
+      "required": ["primary"],
+      "properties": {
+        "primary": {
+          "$ref": "#/definitions/capability_snapshot"
+        },
+        "secondary": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/capability_snapshot"
+          },
+          "uniqueItems": true
+        }
+      }
+    }
+  },
+  "definitions": {
+    "capability_snapshot": {
+      "type": "object",
+      "description": "Minimal snapshot of a capability from capabilities.yaml v2 used by this probe.",
+      "additionalProperties": false,
+      "required": ["id", "category", "platform", "layer", "status"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Capability ID (e.g., cap_fs_read_git_metadata)."
+        },
+        "category": {
+          "type": "string",
+          "description": "Capability category (e.g., filesystem, process, network, sandbox_meta, agent_policy)."
+        },
+        "platform": {
+          "type": "array",
+          "description": "List of platforms on which this capability definition applies (e.g., [\"macos\"]).",
+          "items": { "type": "string" },
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "layer": {
+          "type": "string",
+          "description": "Layer at which the capability exists (e.g., os_sandbox, agent_policy)."
+        },
+        "status": {
+          "type": "string",
+          "description": "Maturity of the capability definition.",
+          "enum": ["core", "experimental", "planned"]
+        }
+      }
+    }
+  }
+}

@@ -6,7 +6,7 @@ OUTDIR := out
 
 MATRIX_TARGETS := $(foreach mode,$(MODES),$(addprefix $(OUTDIR)/,$(addsuffix .$(mode).json,$(PROBES))))
 
-.PHONY: all matrix clean test
+.PHONY: all matrix clean test validate-capabilities
 
 all: matrix
 
@@ -30,3 +30,6 @@ clean:
 
 test:
 	tests/run.sh
+
+validate-capabilities:
+	tools/validate_capabilities.sh
