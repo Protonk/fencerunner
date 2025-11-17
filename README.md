@@ -21,131 +21,72 @@ Three reasons:
 
 ## Requirements
 
-* POSIX shell utilities + `bash 3.2`
-* `jq`
-* `make`
-* The `codex` CLI (only if you plan to exercise Codex modes)
+- POSIX shell utilities + `bash 3.2`
+- `jq`
+- `make`
+- The `codex` CLI (only if you plan to exercise Codex modes)
 
-The goal is to limit probe noise by keeping things lightweight and compatible with the toolchain shipped in macOS. We use `jq`, which must be installed, but that's merely a concession to sanity and could be relaxed in the future. 
+The goal is to limit probe noise by keeping things lightweight and compatible
+with the toolchain shipped in macOS. `jq` is the only dependency that is not
+part of the default macOS install.
+
+## Probes at a glance
+
+Probes are tiny Bash scripts that perform one observable action and emit a
+single JSON boundary object describing what happened. Probe authors work from
+the capability catalog in `spec/capabilities.yaml`, reuse helpers from
+`tools/lib/helpers.sh`, and rely on `bin/emit-record` to enforce the cfbo-v2
+schema. These scripts intentionally avoid non-portable Bash features so they can run
+unchanged on macOS’ `/bin/bash 3.2` and Linux `/usr/bin/env bash`. 
+
+A detailed, human-readable walk-through—including the execution contract,
+shared helpers, and how `bin/fence-run` orchestrates modes—lives in
+[docs/probes.md](docs/probes.md). The boundary-object schema itself exists in [schema/boundary-object-cfbo-v2.json](schema/boundary-object-cfbo-v2.json) and is described in more detail with examples in [docs/boundary-object.md](docs/boundary-object.md).
 
 ## Usage
 
-Each probe is designed to produce a “[boundary object](https://en.wikipedia.org/wiki/Boundary_object)”, in this case a structured JSON output designed to be easy to aggregate and sift through should you generate a few thousand different kinds. Expectations and options are detailed in [docs/boundary-object.md](docs/boundary-object.md).
+Each probe run produces a "codex fence boundary object" (`cfbo-v2`) following the above schema that the harness stores under `out/`. 
 
-Run a single probe in a chosen mode:
+### Run a single probe
 
 ```sh
 bin/fence-run baseline fs_outside_workspace
 ```
 
-Matrix all probes across all modes and store the JSON output in `out/`:
+Use `codex-sandbox` or `codex-full` in place of `baseline` to explore other
+fence modes. Codex modes require the `codex` CLI to be installed and available
+in `PATH`.
+
+### Run every probe across selected modes
 
 ```sh
 make matrix
 ```
 
+The Makefile auto-detects whether the `codex` CLI is available and chooses an
+appropriate default for `MODES`. Override it to restrict or expand coverage:
+
+```sh
+make matrix MODES="baseline codex-sandbox"
+```
+
+Each run lands in `out/<probe>.<mode>.json`, making it easy to diff policy
+changes by mode, Codex version, or host OS.
+
 ## Tests
 
-Run the fast authoring checks with:
+Probe development now centers on a fast single-probe loop plus a second tier of
+portable validations. The entry point for both is `tests/run.sh`.
 
-```sh
-make test
-```
-
-The test runner (`tests/run.sh`) executes four lightweight suites:
-
-* `static_probe_contract` – lints every probe for the documented Bash contract (shebang, `set -euo pipefail`, syntax, ID wiring).
-* `capability_map_sync` – keeps `spec/capabilities.yaml`, `spec/capabilities-coverage.json`, and the probes in sync via the v2 adapter.
-* `boundary_object_schema` – validates the `bin/emit-record` output against the cfbo-v2 structure using `jq` only.
-* `harness_smoke` – runs a fixture probe through `bin/fence-run` baseline mode to prove the orchestration pipeline still works.
-* `baseline_no_codex_smoke` – shadows `codex` out of `PATH` and proves baseline runs still work without the Codex CLI, so macOS-only users stay unblocked.
-
-Need to double-check new capability IDs against the catalog? Run:
-
-```sh
-make validate-capabilities
-```
-
-It uses `tools/capabilities_adapter.sh` to ensure every probe, fixture, and boundary-object sample references real capability IDs.
-
-## How probes work
-
-At a high level, a probe is a tiny, single-purpose program plus a contract for how it reports what happened.
-
-### What a probe does
-
-Each probe:
-
-* Exercises **one concrete behavior**: e.g. “read outside the workspace”, “write into `~/.ssh`”, “open a network socket”, “run `sysctl kern.boottime`”, etc.
-* Treats the environment as a black box. It doesn’t try to introspect Codex or the host; it just performs its action and looks at:
-
-  * Was it allowed or denied?
-  * What error codes, signals, or messages did it see?
-  * Did it appear to partially succeed?
-
-The same probe is run multiple times under different modes (baseline shell, Codex sandbox, Codex full-access) so you can compare how the fence shape changes without changing the probe itself.
-
-### What a probe emits
-
-Every probe run must emit exactly one JSON “boundary object” to stdout and then exit. The details are in `docs/boundary-object.md`, but conceptually a boundary object contains:
-
-* **Identity**
-
-  * The probe name (e.g. `"fs_outside_workspace"`).
-  * The run mode (e.g. `"baseline"`, `"codex_auto"`, `"codex_full"`).
-
-* **Classification**
-
-  * A small, stable label for the outcome (e.g. `"allowed"`, `"denied"`, `"partial"`, `"error"`).
-  * Optionally a more descriptive reason (e.g. `"EACCES"`, `"sandbox_sysctl_read_denied"`, `"host_tool_missing"`).
-
-* **Evidence**
-
-  * Exit status or signal of the attempted operation.
-  * Selected stderr/stdout snippets or flags (not full logs) to help distinguish policy changes from normal failures.
-
-The harness treats malformed JSON or missing output as a **probe failure**, not as a sandbox signal. In other words, “my script crashed” is separate from “the fence blocked my operation.”
-
-### What a probe is bound by
-
-When you run:
-
-```sh
-bin/fence-run baseline fs_outside_workspace
-```
-
-or
-
-```sh
-bin/fence-run codex_auto fs_outside_workspace
-```
-
-the harness:
-
-1. **Sets up the environment**
-
-   * Chooses a working directory that represents the “workspace” Codex should see.
-   * Sets mode-specific environment variables (e.g. which mode you’re in, where to write transient files).
-   * Ensures the probe only sees what that mode is supposed to see (e.g. on macOS, Codex modes inherit Seatbelt policies; on Linux, Landlock/seccomp).
-
-2. **Runs the probe under the selected fence**
-
-   * `baseline` runs the probe as a normal shell command.
-   * Codex modes invoke the same probe via the `codex` CLI with the appropriate sandbox policy (workspace-only, full-access, etc.).
-   * The probe itself doesn’t need to know how sandboxing is implemented; it just runs and measures what happens.
-
-3. **Collects the boundary object**
-
-   * The probe prints a single JSON object to stdout and exits (ideally with status 0).
-   * The harness captures that JSON into `out/<mode>/<probe>.json` (or similar) so you can diff across modes, CI runs, or Codex versions.
-
-### Design constraints on probes
-
-To keep the results meaningful and comparable:
-
-* Probes are **non-interactive** (no prompts, no TTY assumptions).
-* Probes are **small and focused**: one behavior per probe, no global test orchestration. If you need helper utilities (portable path resolution, relative paths, etc.), source `tools/lib/helpers.sh` instead of reimplementing interpreter detection in each probe.
-* Probes avoid mutating the host outside the workspace unless that mutation is exactly what they’re testing—and if so, they record the target path in the boundary object.
-* When a sandbox denies an operation, the probe should still exit cleanly and classify the outcome rather than crashing.
-
-Everything else—the number of modes, how often you run them, and how you analyze the JSON—is left to the harness and whatever tooling you build on top of `codex-fence`.
+- `tests/run.sh --probe <id>` (or `make probe PROBE=<id>`) lints just that
+  script and enforces the static probe contract. This is the recommended loop
+  while authoring or editing a probe.
+- `make test` runs `tests/run.sh` with no arguments, which:
+  1. Runs the fast tier (light lint + static probe contract) across every
+     probe script under `probes/`.
+  2. Executes the second tier suites: `capability_map_sync`,
+     `boundary_object_schema`, `harness_smoke`, and `baseline_no_codex_smoke`
+     (which hides `codex` from `PATH` to prove baseline stays portable).
+- `make validate-capabilities` is available any time you need to confirm that
+  probes, fixtures, and stored boundary objects only reference capability ids
+  defined in the catalog.

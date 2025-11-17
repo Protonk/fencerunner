@@ -1,44 +1,64 @@
-# Contributing to codex-fence
+# General Contributions
 
-Thanks for improving codex-fence! This project tries to stay lightweight and friendly to both human and AI contributors. The basics: keep probes single-purpose, lean on the helper library when you need shared utilities, and run the fast test suite before you send patches.
+Thanks for improving codex-fence! This document covers repository-level work:
+tests, helper libraries, tooling, docs, and automation. For probe-specific
+expectations see the Probe Author contract in `AGENTS.md`--human and AI agents writing new probes should mainly concern themselves with that. 
 
-## Workflow overview
+## Scope
 
-1. **Read the Probe Author contract (AGENTS.md)** – everything here assumes you already follow that contract.
-2. **Use the helper library** – portable path helpers live in `tools/lib/helpers.sh`. Source it in a probe or tool if you need `portable_realpath` / `portable_relpath` instead of rolling your own interpreter detection.
-3. **When touching Ruby tooling** – only parse YAML via `CodexFence::RubyYamlLoader` (`tools/lib/ruby_yaml_loader.rb`). It keeps the adapter compatible with both macOS system Ruby 2.6 and the container’s Ruby 3.x.
-4. **Run the quick tests** – `make test` runs all Bash suites, including `baseline_no_codex_smoke`, which shadows `codex` in `PATH` to ensure the harness works on macOS without Codex installed. You should see: `static_probe_contract`, `capability_map_sync`, `boundary_object_schema`, `harness_smoke`, and `baseline_no_codex_smoke`.
+Use this guide when you plan to:
+- Edit or add shell/Ruby helpers under `tools/` or `bin/`.
+- Modify the Makefile, capability catalog, schema, or adapters.
+- Extend `tests/` or its fixtures.
+- Update documentation outside a single probe (README, `docs/*.md`, etc.).
+Following this guide keeps the repo coherent for both human and AI probe
+authors while preserving the portability guarantees that make `codex-fence`
+valuable.
 
-## Tests and tooling
+## Principles
 
-- `make test` – authoring sanity checks (must pass before submitting patches).
-- `make validate-capabilities` – verifies every probe/fixture references real capability IDs.
-- `make matrix MODES=baseline` – optional local run to emit all baseline boundary objects. Be careful running Codex modes unless you have the CLI installed.
+- **Portability first.** Probes must not introduce spurious signals due to inconsistencies between platforms. Organize and write helper functions to support consistent harness behavior on e.g. macOS or the `codex-universal` container.
+- **Single responsibility.** Helpers stay pure and composable; probes remain
+  small; tooling avoids reaching into unrelated directories unless required.
+- **Document contracts.** When adding configuration fields, schema changes, or
+  helper functions, update the relevant Markdown (`docs/probes.md`,
+  `docs/boundary-object.md`, `docs/capabilities.md`, or README) in the same
+  change.
 
-### Portable helper usage
+## Repository areas
 
-Example pattern for a probe:
+### Helpers and tooling
 
-```bash
-repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." >/dev/null 2>&1 && pwd)
-helpers_lib="${repo_root}/tools/lib/helpers.sh"
-# shellcheck source=tools/lib/helpers.sh
-source "${helpers_lib}"
+- Shell helpers live in `tools/lib/helpers.sh`. Keep functions pure (no global
+  state or side effects) so probes and tests can source them safely.
+- Lightweight lint lives in `tools/lib/light_lint.sh`. Prefer extending it for
+  new checks instead of duplicating logic elsewhere.
+- Ruby-based utilities (capability adapter, schema helpers) must load YAML
+  through `CodexFence::RubyYamlLoader` (`tools/lib/ruby_yaml_loader.rb`). This
+  wrapper keeps scripts compatible with macOS system Ruby 2.6 and the newer
+  Ruby bundled in CI containers.
+- `bin/emit-record`, `bin/fence-run`, and any new binaries must stay
+  dependency-free beyond POSIX + `jq`.
 
-canonical_path=$(portable_realpath "${attempt_path}")
-```
+### Tests
 
-Keep helpers pure—no global state, no side effects—so probes remain single-purpose. If you need a new helper, add it to `tools/lib/helpers.sh` instead of duplicating logic.
+- `tests/run.sh` orchestrates two tiers: a fast lint/static-contract pass and
+  the second-tier suites (`capability_map_sync`, `boundary_object_schema`,
+  `harness_smoke`, `baseline_no_codex_smoke`). When expanding coverage, keep
+  the fast tier lightweight so `tests/run.sh --probe <id>` remains instant.
+- Place reusable fixtures under `tests/library/fixtures/` and keep them synced
+  with the capability catalog (the validation scripts scan these files too).
+- Add new suites under `tests/second_tier/` when the checks are global or slow.
+  Ensure they short-circuit quickly on missing prerequisites so macOS authors
+  can still run `make test`.
 
-### Ruby adapter helper
+### Documentation and catalogs
 
-Tools that need to parse `spec/capabilities.yaml` should load `CodexFence::RubyYamlLoader` instead of calling `YAML.safe_load` directly. Example:
-
-```bash
-ruby -I"${repo_root}/tools/lib" -rruby_yaml_loader … <<'RUBY'
-require 'ruby_yaml_loader'
-data = CodexFence::RubyYamlLoader.safe_load_file(path)
-RUBY
-```
-
-This keeps the CLI-friendly Bash wrapper simple while ensuring cross-version compatibility.
+- Changing `spec/capabilities.yaml` or `spec/capabilities-coverage.json`
+  requires matching updates to `docs/capabilities.md` plus any references in
+  README/AGENTS.
+- Updates to the boundary-object schema (`schema/boundary-object-cfbo-v2.json`)
+  must be mirrored in `docs/boundary-object.md` and, if the authoring workflow
+  changes, in `docs/probes.md`.
+- If you add run modes, helper commands, or workflow changes, reflect them in
+  README (usage/tests sections) and `AGENTS.md`.

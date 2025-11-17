@@ -1,30 +1,56 @@
 ## Probe Author contract
 
 As the Probe Author, you:
-- Read `spec/capabilities.yaml` (or the normalized view from `tools/capabilities_adapter.sh`) to understand the supported capability IDs, their categories, and descriptions.
-- Read `schema/boundary-object-cfbo-v2.json` and `docs/boundary_object.md` to understand the probe result contract.
-- Inspect `probes/` to see existing probes and which capabilities they target.
-- Keep a tight edit/test loop by running `make test` whenever you create or modify a probe. The suites in `tests/` (static probe contract, capability map sync, boundary-object schema, and harness smoke) are designed to fail fast with actionable messages so you can fix issues before attempting `make matrix` or a full fence run.
+- Use the capability catalog in `spec/capabilities.yaml` to select accurate
+  `primary_capability_id` values. `bin/emit-record` validates IDs, so use the
+  exact slugs defined in that file.
+- Read `schema/boundary-object-cfbo-v2.json` alongside
+  `docs/boundary-object.md` to understand every field the probe must provide.
+- Review existing scripts under `probes/` to see which behaviors already have
+  coverage and how outcomes are classified. The mapping is mirrored in
+  `spec/capabilities-coverage.json`.
+- Keep a tight edit/test loop. Run `tests/run.sh --probe <id>` (or
+  `make probe PROBE=<id>`) while iterating, then run `make test` before sending
+  patches so the tiered suites catch portability and schema issues early.
 
 Prefer to add probes that:
 - Target capability IDs with no existing probes, or
-- Add edge-case variants for already-covered capabilities (e.g., symlink escapes, .git writes, network corner cases).
+- Add edge-case variants for already-covered capabilities (e.g., symlink
+  escapes, `.git` writes, network corner cases).
 
 Keep each probe:
-- Small and single-purpose. When you need reusable helpers (portable realpath/relpath, YAML parsing, etc.), source `tools/lib/helpers.sh` in your probe or tool instead of duplicating interpreter detection. Helpers should stay pure so probes remain focused.
-- Clearly labeled with `primary_capability_id`. Open `spec/capabilities.yaml` (or pipe it through `tools/capabilities_adapter.sh`) and choose the `capabilities[*].id` that best represents what you are exercising. That id becomes `primary_capability_id`. Optionally list related capabilities in `secondary_capability_ids`. `bin/emit-record` validates all ids through the adapter, so use the exact slugs.
+- Small and single-purpose. When you need reusable helpers (portable
+  realpath/relpath, metadata extraction, YAML parsing), source
+  `tools/lib/helpers.sh` or other shared helpers instead of duplicating
+  interpreter detection. Helpers stay pure so probes remain focused.
+- Clearly labeled with `primary_capability_id`. Choose the best match from the
+  catalog and optionally list related capabilities in
+  `secondary_capability_ids`. `bin/emit-record` enforces these IDs.
 
 Never:
-- Print anything besides the JSON boundary object to stdout. Use stderr for debugging only when necessary.
+- Print anything besides the JSON boundary object to stdout. Use stderr for
+  debugging only when necessary.
 
 ## Probe description and agent guidance (cfbo-v2)
 
-A probe: 
-1. Is an executable script under `probes/`. Use `#!/usr/bin/env bash` and enable `set -euo pipefail`. Name the script `probes/<probe_id>.sh` so the filename matches the `probe.id`.
-2. Performs exactly *one* focused operation inside the probe (a single file write, DNS lookup, process spawn, etc.). Gather whatever context you need to describe the attempt. Capture a string that describes the command you actually ran (for example via `printf -v command_executed "... %q"`). Pass this via `--command` so the boundary object contains reproducible execution context.
-3. Collects stdout/stderr snippets (keep them short) and important structured data in the payload. Normalize probe outcomes into the allowed values: `success`, `denied`, `partial`, or `error`. Treat sandbox denials (`EACCES`, `EPERM`, network blocked, etc.) as `denied`.
-4. Calls `bin/emit-record` once with the correct flags and payload file. Pass `--run-mode "$FENCE_RUN_MODE"` (exported by `bin/fence-run`) so the emitted record matches the mode selected by `bin/fence-run`.
-5. Exits with status `0` after emitting JSON. `bin/fence-run` depends on this behavior to stream records to disk via `make matrix`.
+A probe:
+1. Is an executable script under `probes/`. Use `#!/usr/bin/env bash` and
+   enable `set -euo pipefail`. Name the script `probes/<probe_id>.sh` so the
+   filename matches the `probe.id`.
+2. Performs exactly *one* focused operation (file IO, DNS, network socket,
+   process spawn, etc.). Gather whatever context you need to describe the
+   attempt. Capture the command you actually ran (e.g.,
+   `printf -v command_executed "... %q" ...`) and pass it through `--command`
+   so the boundary object contains reproducible execution context.
+3. Collects stdout/stderr snippets (keep them short) and structured data in the
+   payload. Normalize probe outcomes into: `success`, `denied`, `partial`, or
+   `error`. Treat sandbox denials (`EACCES`, `EPERM`, network blocked, etc.) as
+   `denied`.
+4. Calls `bin/emit-record` once with the correct flags and payload file. Pass
+   `--run-mode "$FENCE_RUN_MODE"` (exported by `bin/fence-run`) so the emitted
+   record matches the current mode.
+5. Exits with status `0` after emitting JSON. `bin/fence-run` relies on this
+   behavior to stream records to disk via `make matrix`.
 
 ### How a probe should emit JSON
 
@@ -32,13 +58,17 @@ Call `bin/emit-record` exactly once with:
 
 - `--run-mode "$FENCE_RUN_MODE"` (already exported by `bin/fence-run`).
 - `--probe-name "$probe_id"` and `--probe-version "<semver>"`.
-- `--primary-capability-id`, zero or more `--secondary-capability-id`, and `--command`.
+- `--primary-capability-id`, zero or more `--secondary-capability-id`, and
+  `--command`.
 - `--category`, `--verb`, `--target`, and `--operation-args '{}'`.
-- Outcome metadata (`--status` → `result.observed_result`, `--errno`, `--message`, `--raw-exit-code`, etc.) plus `--payload-file`.
+- Outcome metadata (`--status` → `result.observed_result`, `--errno`,
+  `--message`, `--raw-exit-code`, etc.) plus `--payload-file`.
 
-See `docs/boundary-object.md` for a complete field description (cfbo-v2 adds `capabilities_schema_version` and `capability_context` snapshots to every record).
+See `docs/boundary-object.md` for a complete field description (cfbo-v2 adds
+`capabilities_schema_version` and `capability_context` snapshots to every
+record).
 
-## Minimal example
+### Minimal example
 
 Excerpt from `probes/fs_outside_workspace.sh`:
 
@@ -111,8 +141,17 @@ Matching JSON output (trimmed for brevity):
     },
     "secondary": []
   },
-  "stack": { "codex_cli_version": "codex 1.2.3", "codex_profile": "Auto", "codex_model": "gpt-4", "sandbox_mode": "workspace-write", "os": "Darwin 23.3.0 arm64", "container_tag": "local-macos" }
+  "stack": {
+    "codex_cli_version": "codex 1.2.3",
+    "codex_profile": "Auto",
+    "codex_model": "gpt-4",
+    "sandbox_mode": "workspace-write",
+    "os": "Darwin 23.3.0 arm64",
+    "container_tag": "local-macos"
+  }
 }
 ```
 
-This JSON links the probe to capability `cap_fs_write_workspace_tree`, records the executed command, and classifies the outcome using the new `observed_result` vocabulary. Use this pattern whenever you add a new probe.
+This JSON links the probe to capability `cap_fs_write_workspace_tree`, records
+the executed command, and classifies the outcome using the `observed_result`
+vocabulary. Use this pattern whenever you add a new probe.
