@@ -5,6 +5,7 @@ script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)
 detect_stack_bin="${script_dir}/detect-stack"
 repo_root=$(cd "${script_dir}/.." >/dev/null 2>&1 && pwd)
 capabilities_adapter="${repo_root}/tools/capabilities_adapter.sh"
+capabilities_schema_version=""
 
 usage() {
   cat >&2 <<'USAGE'
@@ -113,12 +114,14 @@ if [[ ! -x "${capabilities_adapter}" ]]; then
   exit 1
 fi
 
+capabilities_json=$("${capabilities_adapter}")
+
 known_capability_ids=()
 while IFS= read -r cap_line; do
   if [[ -n "${cap_line}" ]]; then
     known_capability_ids+=("${cap_line}")
   fi
-done < <("${capabilities_adapter}" | jq -r 'keys[]')
+done < <(jq -r 'keys[]' <<<"${capabilities_json}")
 
 if [[ ${#known_capability_ids[@]} -eq 0 ]]; then
   echo "No capability IDs returned by ${capabilities_adapter}" >&2
@@ -147,6 +150,23 @@ if [[ ${#secondary_capability_ids[@]} -gt 0 ]]; then
     require_capability_id "${sec_cap}" "secondary capability id"
   done
 fi
+
+capabilities_schema_version=$(ruby -I"${repo_root}/tools/lib" -rruby_yaml_loader -e 'data = CodexFence::RubyYamlLoader.safe_load_file(ARGV[0]); puts(data["schema_version"] || "")' "${repo_root}/spec/capabilities.yaml")
+if [[ -z "${capabilities_schema_version}" ]]; then
+  echo "Unable to determine capabilities schema_version from spec/capabilities.yaml" >&2
+  exit 1
+fi
+
+capability_snapshot() {
+  local cap_id="$1"
+  local snapshot
+  snapshot=$(jq -c --arg id "${cap_id}" '.[ $id ] // empty | {id, category, platform, layer, status}' <<<"${capabilities_json}")
+  if [[ -z "${snapshot}" || "${snapshot}" == "null" ]]; then
+    echo "Unable to resolve capability metadata for ${cap_id}" >&2
+    exit 1
+  fi
+  echo "${snapshot}"
+}
 
 workspace_root="${FENCE_WORKSPACE_ROOT:-}"
 if [[ -z "${workspace_root}" ]]; then
@@ -230,6 +250,20 @@ result_json=$(jq -n \
     error_detail: (($error_detail | select(length > 0)) // null)
   }')
 
+primary_capability_snapshot=$(capability_snapshot "${primary_capability_id}")
+
+secondary_capability_snapshots='[]'
+if [[ ${#secondary_capability_ids[@]} -gt 0 ]]; then
+  for sec_cap in "${secondary_capability_ids[@]}"; do
+    secondary_capability_snapshots=$(jq -c --argjson current "${secondary_capability_snapshots}" --argjson snapshot "$(capability_snapshot "${sec_cap}")" '($current + [$snapshot]) | unique' <<<"{}")
+  done
+fi
+
+capability_context=$(jq -n \
+  --argjson primary "${primary_capability_snapshot}" \
+  --argjson secondary "${secondary_capability_snapshots}" \
+  '{ primary: $primary, secondary: $secondary }')
+
 jq -n \
   --arg schema_version "cfbo-v1" \
   --argjson stack "${stack_json}" \
@@ -238,12 +272,16 @@ jq -n \
   --argjson operation "${operation_json}" \
   --argjson result "${result_json}" \
   --argjson payload "${payload_json}" \
+  --argjson capability_context "${capability_context}" \
+  --arg capabilities_schema_version "${capabilities_schema_version}" \
   '{
     schema_version: $schema_version,
+    capabilities_schema_version: (($capabilities_schema_version | tonumber) // null),
     stack: $stack,
     probe: $probe,
     run: $run,
     operation: $operation,
     result: $result,
-    payload: $payload
+    payload: $payload,
+    capability_context: $capability_context
   }'
