@@ -1,15 +1,17 @@
 # Probes
 
 Probes are the smallest unit of observation in `codex-fence`. Each one is a
-single Bash script in `probes/` that performs a single, well-defined action
+single Bash script in `probes/<category>/` that performs a single, well-defined action
 and reports what the Codex fence did with that action. This document explains
 how probes are built, how the harness runs them, and how their results are
 captured.
 
 ## What makes a probe
 
-- **Location:** Scripts live under `probes/` and are named
-  `probes/<probe_id>.sh`. The filename is the probe id.
+- **Location:** Scripts live under `probes/<category>/`, where `<category>`
+  matches the probe's primary capability category (filesystem, network,
+  process, etc.). Name the file `probes/<category>/<probe_id>.sh` so the
+  filename is the probe id.
 - **Contract:** Start with `#!/usr/bin/env bash`, immediately enable
   `set -euo pipefail`, and exit `0` after emitting JSON via `bin/emit-record`.
 - **Behavior:** Probe code performs one observable operation (write a file,

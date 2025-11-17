@@ -90,7 +90,7 @@ PY
 resolve_probe_script_path() {
   local repo_root="$1"
   local identifier="$2"
-  local trimmed attempts=() candidate resolved
+  local trimmed attempts=() candidate resolved search_root search_name search_pattern matches=() match
   if [[ -z "${identifier}" || -z "${repo_root}" ]]; then
     return 1
   fi
@@ -114,5 +114,29 @@ resolve_probe_script_path() {
       return 0
     fi
   done
+  if [[ -n "${trimmed}" && "${trimmed}" != */* ]]; then
+    search_root="${repo_root}/probes"
+    if [[ -d "${search_root}" ]]; then
+      search_name="${trimmed}"
+      if [[ "${search_name}" == *.sh ]]; then
+        search_name=${search_name%.sh}
+      fi
+      search_pattern="${search_name}.sh"
+      while IFS= read -r match; do
+        matches+=("${match}")
+      done < <(find "${search_root}" -type f -name "${search_pattern}" -print | LC_ALL=C sort)
+      if [[ ${#matches[@]} -eq 1 ]]; then
+        resolved=$(portable_realpath "${matches[0]}")
+        if [[ -z "${resolved}" ]]; then
+          resolved=$(cd "$(dirname "${matches[0]}")" >/dev/null 2>&1 && pwd)/$(basename "${matches[0]}")
+        fi
+        printf '%s\n' "${resolved}"
+        return 0
+      elif [[ ${#matches[@]} -gt 1 ]]; then
+        echo "resolve_probe_script_path: multiple matches for '${identifier}'" >&2
+        return 1
+      fi
+    fi
+  fi
   return 1
 }

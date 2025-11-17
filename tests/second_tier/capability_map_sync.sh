@@ -73,8 +73,10 @@ for cap in "${capability_ids[@]}"; do
 
 done
 
-shopt -s nullglob
-probe_scripts=(probes/*.sh)
+probe_scripts=()
+while IFS= read -r script; do
+  probe_scripts+=("${script}")
+done < <(find "${REPO_ROOT}/probes" -type f -name '*.sh' -print | LC_ALL=C sort)
 if [[ ${#probe_scripts[@]} -eq 0 ]]; then
   echo "capability_map_sync: no probes found" >&2
   exit 1

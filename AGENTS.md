@@ -6,7 +6,7 @@ As the Probe Author, you:
   exact slugs defined in that file.
 - Read `schema/boundary-object-cfbo-v2.json` alongside
   `docs/boundary-object.md` to understand every field the probe must provide.
-- Review existing scripts under `probes/` to see which behaviors already have
+- Review existing scripts under `probes/<category>/` to see which behaviors already have
   coverage and how outcomes are classified. The mapping is mirrored in
   `spec/capabilities-coverage.json`.
 - Keep a tight edit/test loop. Run `tests/run.sh --probe <id>` (or
@@ -34,9 +34,10 @@ Never:
 ## Probe description and agent guidance (cfbo-v2)
 
 A probe:
-1. Is an executable script under `probes/`. Use `#!/usr/bin/env bash` and
-   enable `set -euo pipefail`. Name the script `probes/<probe_id>.sh` so the
-   filename matches the `probe.id`.
+1. Is an executable script under `probes/<category>/`, where `<category>`
+   matches the primary capability's `category` in `spec/capabilities.yaml`.
+   Use `#!/usr/bin/env bash`, enable `set -euo pipefail`, and name the script
+   `probes/<category>/<probe_id>.sh` so the filename matches the `probe.id`.
 2. Performs exactly *one* focused operation (file IO, DNS, network socket,
    process spawn, etc.). Gather whatever context you need to describe the
    attempt. Capture the command you actually ran (e.g.,
@@ -70,7 +71,7 @@ record).
 
 ### Minimal example
 
-Excerpt from `probes/fs_outside_workspace.sh`:
+Excerpt from `probes/filesystem/fs_outside_workspace.sh`:
 
 ```bash
 primary_capability_id="cap_fs_write_workspace_tree"

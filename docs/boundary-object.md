@@ -2,7 +2,7 @@
 
 `codex-fence` records every probe run as a versioned JSON “boundary object”. Version **cfbo-v2** is the current contract. It incorporates the v2 capability schema (via `tools/capabilities_adapter.sh`) so every record carries a snapshot of the capability metadata it referenced.
 
-Each boundary object captures *one* probe execution in one run mode. Probes are tiny scripts stored in `probes/` that:
+Each boundary object captures *one* probe execution in one run mode. Probes are tiny scripts stored under `probes/<category>/` (organized by capability category) that:
 
 1. Use `#!/usr/bin/env bash` with `set -euo pipefail`.
 2. Perform exactly one observable action (write a file, open a socket, read `sysctl`, etc.).
@@ -117,7 +117,7 @@ New in cfbo-v2. Every record includes the capability snapshot(s) that were resol
 
 ## Example
 
-A trimmed record from `probes/fs_outside_workspace.sh` (writes outside the workspace and expects a denial):
+A trimmed record from `probes/filesystem/fs_outside_workspace.sh` (writes outside the workspace and expects a denial):
 
 ```json
 {

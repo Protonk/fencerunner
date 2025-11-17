@@ -1,6 +1,6 @@
 SHELL := /bin/bash
-PROBE_SCRIPTS := $(wildcard probes/*.sh)
-PROBES := $(patsubst probes/%.sh,%,$(PROBE_SCRIPTS))
+PROBE_SCRIPTS := $(shell find probes -type f -name '*.sh' -print | LC_ALL=C sort)
+PROBES := $(notdir $(basename $(PROBE_SCRIPTS)))
 OUTDIR := out
 PROBE ?=
 
@@ -25,14 +25,20 @@ matrix: $(OUTDIR) $(MATRIX_TARGETS)
 $(OUTDIR):
 	mkdir -p $@
 
-$(OUTDIR)/%.baseline.json: probes/%.sh | $(OUTDIR)
-	bin/fence-run baseline $* > $@
+define PROBE_template
+$(OUTDIR)/$(1).baseline.json: $(2) | $(OUTDIR)
+	bin/fence-run baseline $(1) > $$@
 
-$(OUTDIR)/%.codex-sandbox.json: probes/%.sh | $(OUTDIR)
-	bin/fence-run codex-sandbox $* > $@
+$(OUTDIR)/$(1).codex-sandbox.json: $(2) | $(OUTDIR)
+	bin/fence-run codex-sandbox $(1) > $$@
 
-$(OUTDIR)/%.codex-full.json: probes/%.sh | $(OUTDIR)
-	bin/fence-run codex-full $* > $@
+$(OUTDIR)/$(1).codex-full.json: $(2) | $(OUTDIR)
+	bin/fence-run codex-full $(1) > $$@
+endef
+
+$(foreach script,$(PROBE_SCRIPTS), \
+  $(eval $(call PROBE_template,$(notdir $(basename $(script))),$(script))) \
+)
 
 clean:
 	rm -rf $(OUTDIR)

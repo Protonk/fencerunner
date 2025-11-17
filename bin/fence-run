@@ -6,9 +6,24 @@ if [[ $# -ne 2 ]]; then
   exit 1
 fi
 
+script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)
+repo_root=$(cd "${script_dir}/.." >/dev/null 2>&1 && pwd)
+helpers_lib="${repo_root}/tools/lib/helpers.sh"
+if [[ ! -f "${helpers_lib}" ]]; then
+  echo "fence-run: missing helpers library at ${helpers_lib}" >&2
+  exit 1
+fi
+# shellcheck source=tools/lib/helpers.sh
+source "${helpers_lib}"
+
 mode="$1"
 probe_name="$2"
-probe_path="probes/${probe_name}.sh"
+probe_path=$(resolve_probe_script_path "${repo_root}" "${probe_name}" || true)
+
+if [[ -z "${probe_path}" ]]; then
+  echo "Probe not found: ${probe_name}" >&2
+  exit 1
+fi
 
 if [[ ! -x "${probe_path}" ]]; then
   if [[ -f "${probe_path}" ]]; then

@@ -83,7 +83,7 @@ portable validations. The entry point for both is `tests/run.sh`.
   while authoring or editing a probe.
 - `make test` runs `tests/run.sh` with no arguments, which:
   1. Runs the fast tier (light lint + static probe contract) across every
-     probe script under `probes/`.
+     probe script under the `probes/<category>/` tree.
   2. Executes the second tier suites: `capability_map_sync`,
      `boundary_object_schema`, `harness_smoke`, and `baseline_no_codex_smoke`
      (which hides `codex` from `PATH` to prove baseline stays portable).

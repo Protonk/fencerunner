@@ -64,9 +64,17 @@ extract_var() {
   printf '%s\n' "${value}"
 }
 
-shopt -s nullglob
-probe_files=("${repo_root}/probes/"*.sh "${repo_root}/tests/library/fixtures/"*.sh)
-shopt -u nullglob
+probe_files=()
+if [[ -d "${repo_root}/probes" ]]; then
+  while IFS= read -r script; do
+    probe_files+=("${script}")
+  done < <(find "${repo_root}/probes" -type f -name '*.sh' -print | LC_ALL=C sort)
+fi
+if [[ -d "${repo_root}/tests/library/fixtures" ]]; then
+  while IFS= read -r script; do
+    probe_files+=("${script}")
+  done < <(find "${repo_root}/tests/library/fixtures" -type f -name '*.sh' -print | LC_ALL=C sort)
+fi
 
 for script in "${probe_files[@]}"; do
   if [[ ! -f "${script}" ]]; then
