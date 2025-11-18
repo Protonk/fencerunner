@@ -10,7 +10,7 @@ cd "${REPO_ROOT}"
 echo "baseline_no_codex_smoke: checking harness without codex CLI"
 
 fixture_name="tests_fixture_probe"
-probe_path="probes/${fixture_name}.sh"
+probe_path="probes/regression/filesystem/${fixture_name}.sh"
 fixture_source="tests/library/fixtures/probe_fixture.sh"
 
 if [[ -e "${probe_path}" ]]; then

@@ -8,7 +8,7 @@ source "${script_dir}/../library/utils.sh"
 cd "${REPO_ROOT}"
 
 fixture_name="tests_fixture_probe"
-probe_path="probes/${fixture_name}.sh"
+probe_path="probes/regression/filesystem/${fixture_name}.sh"
 fixture_source="tests/library/fixtures/probe_fixture.sh"
 
 if [[ -e "${probe_path}" ]]; then

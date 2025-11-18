@@ -2,9 +2,18 @@
 set -euo pipefail
 
 script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)
-repo_root=$(cd "${script_dir}/.." >/dev/null 2>&1 && pwd)
-if [[ ! -x "${repo_root}/bin/emit-record" ]]; then
-  repo_root=$(cd "${script_dir}/../.." >/dev/null 2>&1 && pwd)
+repo_root_candidate="${script_dir}"
+repo_root=""
+while [[ -z "${repo_root}" && "${repo_root_candidate}" != "/" ]]; do
+  if [[ -x "${repo_root_candidate}/bin/emit-record" ]]; then
+    repo_root="${repo_root_candidate}"
+    break
+  fi
+  repo_root_candidate=$(cd "${repo_root_candidate}/.." >/dev/null 2>&1 && pwd)
+done
+if [[ -z "${repo_root}" ]]; then
+  echo "probe_fixture: unable to locate repo root" >&2
+  exit 1
 fi
 emit_record_bin="${repo_root}/bin/emit-record"
 

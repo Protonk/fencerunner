@@ -1,5 +1,6 @@
 SHELL := /bin/bash
-PROBE_SCRIPTS := $(shell find probes -type f -name '*.sh' -print | LC_ALL=C sort)
+PROBE_ROOTS := $(wildcard probes/regression probes/exploratory)
+PROBE_SCRIPTS := $(shell if [ -n "$(PROBE_ROOTS)" ]; then find $(PROBE_ROOTS) -type f -name '*.sh' -print; fi | LC_ALL=C sort)
 PROBES := $(notdir $(basename $(PROBE_SCRIPTS)))
 OUTDIR := out
 PROBE ?=
@@ -27,13 +28,13 @@ $(OUTDIR):
 
 define PROBE_template
 $(OUTDIR)/$(1).baseline.json: $(2) | $(OUTDIR)
-	bin/fence-run baseline $(1) > $$@
+	bin/fence-run baseline $(2) > $$@
 
 $(OUTDIR)/$(1).codex-sandbox.json: $(2) | $(OUTDIR)
-	bin/fence-run codex-sandbox $(1) > $$@
+	bin/fence-run codex-sandbox $(2) > $$@
 
 $(OUTDIR)/$(1).codex-full.json: $(2) | $(OUTDIR)
-	bin/fence-run codex-full $(1) > $$@
+	bin/fence-run codex-full $(2) > $$@
 endef
 
 $(foreach script,$(PROBE_SCRIPTS), \

@@ -43,6 +43,15 @@ secondary_capability_ids=()
 command_executed=""
 raw_exit_code=""
 error_detail=""
+probe_role="${FENCE_PROBE_ROLE:-regression}"
+
+case "${probe_role}" in
+  regression|exploratory)
+    ;;
+  *)
+    probe_role="regression"
+    ;;
+esac
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -201,11 +210,13 @@ probe_json=$(jq -n \
   --arg probe_version "${probe_version}" \
   --arg primary_capability_id "${primary_capability_id}" \
   --argjson secondary_capability_ids "${secondary_caps_json}" \
+  --arg probe_role "${probe_role}" \
   '{
     id: $probe_id,
     version: $probe_version,
     primary_capability_id: $primary_capability_id,
-    secondary_capability_ids: $secondary_capability_ids
+    secondary_capability_ids: $secondary_capability_ids,
+    role: $probe_role
   }')
 
 observed_at=$(date -u +"%Y-%m-%dT%H:%M:%SZ")

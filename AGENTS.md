@@ -6,7 +6,7 @@ As the Probe Author, you:
   exact slugs defined in that file.
 - Read `schema/boundary_object_cfbo_v1.json` alongside
   `docs/boundary_object.md` to understand every field the probe must provide.
-- Review existing scripts under `probes/<category>/` to see which behaviors already have
+- Review existing regression scripts under `probes/regression/<category>/` to see which behaviors already have
   coverage and how outcomes are classified. The mapping is mirrored in
   `docs/capabilities_coverage.json`.
 - Keep a tight edit/test loop. Run `tests/run.sh --probe <id>` (or
@@ -31,13 +31,35 @@ Never:
 - Print anything besides the JSON boundary object to stdout. Use stderr for
   debugging only when necessary.
 
+## Probe roles
+
+`codex-fence` distinguishes between **regression** and **exploratory**
+probes so downstream tooling can tell when a result is part of the contracted
+surface versus a quick sandbox poke.
+
+- **Regression probes** live under `probes/regression/<category>/`, cover the
+  committed capability map, and emit `probe.role = "regression"`. Every
+  existing probe currently sits in this tree.
+- **Exploratory probes** live under `probes/exploratory/<category>/`, target the
+  same capability catalog but are free to chase odd cases or policy seams. They
+  emit `probe.role = "exploratory"`.
+
+The harness infers the role from the script path and exports
+`FENCE_PROBE_ROLE` so `bin/emit-record` includes the correct `probe.role`
+metadata automatically. When a prompt or issue calls for a specific role, place
+the script under the matching tree; otherwise default to regression. Promoting
+an exploratory probe to regression is just a matter of moving it into the
+regression tree and rerunning the normal probe/test workflow.
+
 ## Probe description and agent guidance (cfbo-v1)
 
 A probe:
-1. Is an executable script under `probes/<category>/`, where `<category>`
+1. Is an executable script under either `probes/regression/<category>/` or
+   `probes/exploratory/<category>/`, where `<category>`
    matches the primary capability's `category` in `spec/capabilities.yaml`.
    Use `#!/usr/bin/env bash`, enable `set -euo pipefail`, and name the script
-   `probes/<category>/<probe_id>.sh` so the filename matches the `probe.id`.
+   `probes/<role>/<category>/<probe_id>.sh` so the filename matches the
+   `probe.id`.
 2. Performs exactly *one* focused operation (file IO, DNS, network socket,
    process spawn, etc.). Gather whatever context you need to describe the
    attempt. Capture the command you actually ran (e.g.,
@@ -71,7 +93,7 @@ provide full context for every record).
 
 ### Minimal example
 
-Excerpt from `probes/filesystem/fs_outside_workspace.sh`:
+Excerpt from `probes/regression/filesystem/fs_outside_workspace.sh`:
 
 ```bash
 primary_capability_id="cap_fs_write_workspace_tree"

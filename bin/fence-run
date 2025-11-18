@@ -36,6 +36,19 @@ if [[ ! -x "${probe_path}" ]]; then
   exit 1
 fi
 
+probe_role="regression"
+case "${probe_path}" in
+  "${repo_root}/probes/exploratory/"*)
+    probe_role="exploratory"
+    ;;
+  "${repo_root}/probes/regression/"*)
+    probe_role="regression"
+    ;;
+  *)
+    probe_role="regression"
+    ;;
+esac
+
 sandbox_requires_codex() {
   if ! command -v codex >/dev/null 2>&1; then
     echo "codex CLI not found; mode '${mode}' requires codex. Install codex or run baseline instead." >&2
@@ -78,4 +91,4 @@ case "${mode}" in
     ;;
 esac
 
-FENCE_RUN_MODE="${mode}" FENCE_SANDBOX_MODE="${sandbox_mode}" "${run_cmd[@]}"
+FENCE_RUN_MODE="${mode}" FENCE_SANDBOX_MODE="${sandbox_mode}" FENCE_PROBE_ROLE="${probe_role}" "${run_cmd[@]}"
