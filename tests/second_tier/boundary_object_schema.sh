@@ -42,8 +42,7 @@ jq -e '
   (.probe.id == "schema_test_fixture" and
    .probe.version == "1" and
    .probe.primary_capability_id == "cap_fs_read_workspace_tree" and
-   (.probe.secondary_capability_ids | type == "array") and
-   (.probe.role == "regression" or .probe.role == "exploratory")) and
+   (.probe.secondary_capability_ids | type == "array")) and
   (.run.mode as $mode | ($mode == "baseline" or $mode == "codex-sandbox" or $mode == "codex-full")) and
   (.run | has("workspace_root") and has("command") and has("observed_at")) and
   (.operation.category == "fs" and .operation.verb == "read" and .operation.target == "/dev/null" and (.operation.args | type == "object")) and

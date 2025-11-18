@@ -1,0 +1,145 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Variant for cap_net_localhost_only: exercises UDP round-trip traffic over loopback.
+repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." >/dev/null 2>&1 && pwd)
+emit_record_bin="${repo_root}/bin/emit-record"
+
+run_mode="${FENCE_RUN_MODE:-baseline}"
+probe_name="net_localhost_udp_echo"
+primary_capability_id="cap_net_localhost_only"
+
+python_code=$(cat <<'PY'
+import json
+import socket
+import threading
+import time
+import sys
+
+result = {
+    "port": None,
+    "received": False,
+    "error": None,
+}
+
+server_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+server_sock.bind(("127.0.0.1", 0))
+result["port"] = server_sock.getsockname()[1]
+
+stop = threading.Event()
+
+def server():
+    try:
+        server_sock.settimeout(2)
+        data, addr = server_sock.recvfrom(256)
+        if data:
+            server_sock.sendto(b"pong", addr)
+            result["received"] = True
+    except Exception as exc:
+        result["error"] = f"server: {exc}"
+    finally:
+        stop.set()
+        server_sock.close()
+
+thread = threading.Thread(target=server, daemon=True)
+thread.start()
+
+time.sleep(0.05)
+
+client_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+client_sock.settimeout(2)
+try:
+    client_sock.sendto(b"ping", ("127.0.0.1", result["port"]))
+    data, _ = client_sock.recvfrom(256)
+    if data == b"pong":
+        result["round_trip"] = True
+    else:
+        result["round_trip"] = False
+except Exception as exc:
+    result["error"] = f"client: {exc}"
+    print(json.dumps(result))
+    sys.exit(1)
+finally:
+    client_sock.close()
+
+thread.join(timeout=2)
+print(json.dumps(result))
+sys.exit(0 if result["received"] else 1)
+PY
+)
+
+printf -v command_executed "python3 -c %q" "${python_code}"
+
+stdout_tmp=$(mktemp)
+stderr_tmp=$(mktemp)
+payload_tmp=$(mktemp)
+trap 'rm -f "${stdout_tmp}" "${stderr_tmp}" "${payload_tmp}"' EXIT
+
+status="error"
+errno_value=""
+message=""
+raw_exit_code=""
+
+set +e
+python3 -c "${python_code}" >"${stdout_tmp}" 2>"${stderr_tmp}"
+exit_code=$?
+set -e
+
+raw_exit_code="${exit_code}"
+stdout_text=$(tr -d '\0' <"${stdout_tmp}")
+stderr_text=$(tr -d '\0' <"${stderr_tmp}")
+
+if [[ ${exit_code} -eq 0 ]]; then
+  status="success"
+  message="Loopback UDP echo succeeded"
+else
+  lower_err=$(printf '%s' "${stderr_text}" | tr 'A-Z' 'a-z')
+  if [[ "${lower_err}" == *"operation not permitted"* ]]; then
+    status="denied"
+    errno_value="EPERM"
+    message="UDP loopback blocked: operation not permitted"
+  elif [[ "${lower_err}" == *"permission denied"* ]]; then
+    status="denied"
+    errno_value="EACCES"
+    message="UDP loopback blocked: permission denied"
+  else
+    status="error"
+    errno_value=""
+    message="UDP loopback failed"
+  fi
+fi
+
+raw_json='{}'
+if [[ -s "${stdout_tmp}" ]]; then
+  if jq -e . "${stdout_tmp}" >/dev/null 2>&1; then
+    raw_json=$(jq -c '.' "${stdout_tmp}")
+  else
+    raw_json=$(jq -n --arg output "${stdout_text}" '{python_stdout: $output}')
+  fi
+fi
+
+jq -n \
+  --arg stdout_snippet "${stdout_text}" \
+  --arg stderr_snippet "${stderr_text}" \
+  --argjson raw "${raw_json}" \
+  '{stdout_snippet: ($stdout_snippet | if length > 400 then (.[:400] + "…") else . end),
+    stderr_snippet: ($stderr_snippet | if length > 400 then (.[:400] + "…") else . end),
+    raw: $raw}' >"${payload_tmp}"
+
+operation_args=$(jq -n '{protocol: "udp", host: "127.0.0.1", round_trip: true}')
+
+"${emit_record_bin}" \
+  --run-mode "${run_mode}" \
+  --probe-name "${probe_name}" \
+  --probe-version "1" \
+  --primary-capability-id "${primary_capability_id}" \
+  --command "${command_executed}" \
+  --category "net" \
+  --verb "connect" \
+  --target "127.0.0.1" \
+  --status "${status}" \
+  --errno "${errno_value}" \
+  --message "${message}" \
+  --raw-exit-code "${raw_exit_code}" \
+  --payload-file "${payload_tmp}" \
+  --operation-args "${operation_args}"

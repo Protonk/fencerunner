@@ -16,8 +16,6 @@ module ProbeRunner
   Probe = Struct.new(
     :id,
     :path,
-    :role,
-    :category,
     :probe_version,
     :primary_capability_id,
     :runner_api,
@@ -37,8 +35,6 @@ module ProbeRunner
         Probe.new(
           id: probe['id'],
           path: probe['path'],
-          role: probe['role'],
-          category: probe['category'],
           probe_version: probe['probe_version'],
           primary_capability_id: probe['primary_capability_id'],
           runner_api: probe['runner_api'] || 'legacy'
@@ -67,8 +63,6 @@ module ProbeRunner
       metadata = {
         'id' => File.basename(path, '.sh'),
         'path' => rel_path,
-        'role' => rel_path.split(File::SEPARATOR)[1],
-        'category' => rel_path.split(File::SEPARATOR)[2],
         'runner_api' => 'legacy'
       }
 
@@ -85,8 +79,6 @@ module ProbeRunner
         ProbeRunner::Probe.new(
           id: metadata['probe_name'] || metadata['id'],
           path: rel_path,
-          role: metadata['role'],
-          category: metadata['category'],
           probe_version: metadata['probe_version'],
           primary_capability_id: metadata['primary_capability_id'],
           runner_api: metadata['runner_api'] || 'legacy'
@@ -116,7 +108,6 @@ module ProbeRunner
     def env
       {
         'FENCE_RUN_MODE' => mode,
-        'FENCE_PROBE_ROLE' => probe.role || 'regression',
         'FENCE_WORKSPACE_ROOT' => repo_root
       }
     end

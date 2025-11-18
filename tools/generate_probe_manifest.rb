@@ -34,22 +34,17 @@ class ProbeManifestGenerator
   private
 
   def probe_files
-    Dir.glob(File.join(repo_root, 'probes', '{regression,exploratory}', '**', '*.sh'))
+    Dir.glob(File.join(repo_root, 'probes', '*.sh'))
   end
 
   def build_entry(path)
     rel_path = Pathname.new(path).relative_path_from(Pathname.new(repo_root)).to_s
-    parts = rel_path.split(File::SEPARATOR)
-    role = parts[1]
-    category = parts[2]
-    content = File.read(path)
+    content = File.read(path, encoding: Encoding::UTF_8)
     metadata = parse_metadata(content)
     probe_id = metadata['probe_name'] || File.basename(path, '.sh')
     {
       'id' => probe_id,
       'path' => rel_path,
-      'role' => role,
-      'category' => category,
       'probe_version' => metadata['probe_version'],
       'primary_capability_id' => metadata['primary_capability_id'],
       'runner_api' => metadata['runner_api'] || detect_runner_api(content),

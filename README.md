@@ -33,8 +33,9 @@ part of the default macOS install.
 ## Probes at a glance
 
 Probes are tiny Bash scripts that perform one observable action and emit a
-single JSON boundary object describing what happened. Probe authors work from
-the capability catalog in `spec/capabilities.yaml`, reuse helpers from
+single JSON boundary object describing what happened. Every probe lives directly
+under `probes/<probe_id>.sh` so the filename doubles as the probe id. Probe
+authors work from the capability catalog in `spec/capabilities.yaml`, reuse helpers from
 `tools/lib/helpers.sh`, and rely on `bin/emit-record` to enforce the cfbo-v1
 schema. These scripts intentionally avoid non-portable Bash features so they can run
 unchanged on macOS’ `/bin/bash 3.2` and Linux `/usr/bin/env bash`. 
@@ -83,7 +84,7 @@ portable validations. The entry point for both is `tests/run.sh`.
   while authoring or editing a probe.
 - `make test` runs `tests/run.sh` with no arguments, which:
   1. Runs the fast tier (light lint + static probe contract) across every
-     probe script under the `probes/<role>/<category>/` trees (regression and exploratory).
+     probe script under `probes/`.
   2. Executes the second tier suites: `capability_map_sync`,
      `boundary_object_schema`, `harness_smoke`, and `baseline_no_codex_smoke`
      (which hides `codex` from `PATH` to prove baseline stays portable).

@@ -1,22 +1,16 @@
 # Probes
 
 Probes are the smallest unit of observation in `codex-fence`. Each one is a
-single Bash script living under either `probes/regression/<category>/` or
-`probes/exploratory/<category>/` (depending on its role) that performs a single,
-well-defined action and reports what the Codex fence did with that action. This
-document explains how probes are built, how the harness runs them, and how their
-results are captured.
+single Bash script stored directly under `probes/<probe_id>.sh` (the filename
+matches the probe id), performs a single well-defined action, and reports what
+the Codex fence did with that action. This document explains how probes are
+built, how the harness runs them, and how their results are captured.
 
 ## What makes a probe
 
-- **Location:** Scripts live under `probes/<role>/<category>/`, where `<role>`
-  is `regression` or `exploratory` and `<category>` matches the probe's primary
-  capability category (filesystem, network, process, etc.). Name the file
-  `probes/<role>/<category>/<probe_id>.sh` so the filename is the probe id.
-- **Role metadata:** The harness infers the role from the path and exports
-  `FENCE_PROBE_ROLE` so `bin/emit-record` writes `probe.role =
-  "regression"` or `"exploratory"` into the boundary object automatically. This
-  keeps the filesystem layout and the JSON metadata in sync.
+- **Location:** Scripts live under `probes/<probe_id>.sh`, and the filename is
+  the probe id recorded in boundary objects. The tree is flat—categorization is
+  handled by the capability metadata rather than subdirectories.
 - **Contract:** Start with `#!/usr/bin/env bash`, immediately enable
   `set -euo pipefail`, and exit `0` after emitting JSON via `bin/emit-record`.
 - **Behavior:** Probe code performs one observable operation (write a file,
@@ -31,22 +25,6 @@ results are captured.
   (portable path helpers, probe metadata extraction, etc.). Source this file
   when needed instead of re-implementing interpreter detection. Helpers are
   pure and portable so probes stay single-purpose.
-
-## Regression vs exploratory probes
-
-- **Regression probes** (`probes/regression/...`) enforce contract coverage for
-  the capability catalog and should remain stable once merged.
-- **Exploratory probes** (`probes/exploratory/...`) chase new ideas or ad-hoc
-  sandbox behaviors. They carry the same capability metadata but are allowed to
-  churn quickly.
-
-Promoting an exploratory probe usually means:
-
-1. Moving the script from `probes/exploratory/<category>/` to the matching
-   `probes/regression/<category>/` directory (or creating the path if needed).
-2. Rerunning `tests/run.sh --probe <id>` and `make test` to confirm the harness
-   still emits clean records. The role metadata updates automatically once the
-   file sits under the regression tree.
 
 ## How the harness runs a probe
 
@@ -119,8 +97,8 @@ expectations, and `README.md` for how probes fit into the broader harness.
 `tools/generate_probe_manifest.rb` scans the `probes/` tree and writes two
 artifacts under `tmp/`:
 
-- `probes_manifest.json` – machine-readable metadata (id, path, role, category,
-  capability ids, runner API).
+- `probes_manifest.json` – machine-readable metadata (id, path, capability ids,
+  runner API selection, checksum).
 - `probes_manifest.mk` – Makefile fragment that seeds `PROBE_SCRIPTS` /
   `PROBES`. `make` regenerates both whenever a probe script changes.
 

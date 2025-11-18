@@ -90,8 +90,8 @@ PY
 resolve_probe_script_path() {
   local repo_root="$1"
   local identifier="$2"
-  local trimmed attempts=() candidate resolved search_root search_name search_pattern matches=() match
-  local search_prefixes=() subpath role remainder
+  local trimmed="" attempts=() candidate resolved search_root search_name search_pattern matches=() match
+  local search_prefixes=() subpath probes_root
   if [[ -z "${identifier}" || -z "${repo_root}" ]]; then
     return 1
   fi
@@ -99,10 +99,9 @@ resolve_probe_script_path() {
     attempts+=("${identifier}")
   else
     trimmed=${identifier#./}
+    probes_root="${repo_root}/probes"
     search_prefixes+=("${repo_root}")
-    search_prefixes+=("${repo_root}/probes")
-    search_prefixes+=("${repo_root}/probes/regression")
-    search_prefixes+=("${repo_root}/probes/exploratory")
+    search_prefixes+=("${probes_root}")
     for candidate in "${search_prefixes[@]}"; do
       attempts+=("${candidate}/${trimmed}")
       if [[ "${trimmed}" != *.sh ]]; then
@@ -111,35 +110,16 @@ resolve_probe_script_path() {
     done
     if [[ "${trimmed}" == probes/* ]]; then
       subpath=${trimmed#probes/}
-      for role in regression exploratory; do
-        attempts+=("${repo_root}/probes/${role}/${subpath}")
-        if [[ "${subpath}" != *.sh ]]; then
-          attempts+=("${repo_root}/probes/${role}/${subpath}.sh")
-        fi
-      done
-    fi
-    if [[ "${trimmed}" == regression/* || "${trimmed}" == exploratory/* ]]; then
-      role=${trimmed%%/*}
-      remainder=${trimmed#*/}
-      attempts+=("${repo_root}/probes/${role}/${remainder}")
-      if [[ "${remainder}" != *.sh ]]; then
-        attempts+=("${repo_root}/probes/${role}/${remainder}.sh")
+      attempts+=("${probes_root}/${subpath}")
+      if [[ "${subpath}" != *.sh ]]; then
+        attempts+=("${probes_root}/${subpath}.sh")
       fi
     fi
     if [[ "${trimmed}" != */* ]]; then
-      for role in regression exploratory; do
-        role_root="${repo_root}/probes/${role}"
-        if [[ -d "${role_root}" ]]; then
-          while IFS= read -r match; do
-            attempts+=("${match}")
-          done < <(compgen -G "${role_root}"'/*/'"${trimmed}" 2>/dev/null || true)
-          if [[ "${trimmed}" != *.sh ]]; then
-            while IFS= read -r match; do
-              attempts+=("${match}")
-            done < <(compgen -G "${role_root}"'/*/'"${trimmed}.sh" 2>/dev/null || true)
-          fi
-        fi
-      done
+      attempts+=("${probes_root}/${trimmed}")
+      if [[ "${trimmed}" != *.sh ]]; then
+        attempts+=("${probes_root}/${trimmed}.sh")
+      fi
     fi
   fi
   for candidate in "${attempts[@]}"; do
@@ -152,10 +132,10 @@ resolve_probe_script_path() {
       return 0
     fi
   done
-  if [[ -n "${trimmed}" && "${trimmed}" != */* ]]; then
+  if [[ -n "${trimmed}" ]]; then
     search_root="${repo_root}/probes"
     if [[ -d "${search_root}" ]]; then
-      search_name="${trimmed}"
+      search_name="${trimmed##*/}"
       if [[ "${search_name}" == *.sh ]]; then
         search_name=${search_name%.sh}
       fi

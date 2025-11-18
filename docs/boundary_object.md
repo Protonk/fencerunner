@@ -2,7 +2,7 @@
 
 `codex-fence` records every probe run as a versioned JSON “boundary object”. Version **cfbo-v1** is the current contract. It incorporates the current capability schema (via `tools/capabilities_adapter.sh`) so every record carries a snapshot of the capability metadata it referenced.
 
-Each boundary object captures *one* probe execution in one run mode. Probes are tiny scripts stored under `probes/<role>/<category>/` (where `<role>` is `regression` or `exploratory` and `<category>` matches the capability catalog) that:
+Each boundary object captures *one* probe execution in one run mode. Probes are tiny scripts stored under `probes/<probe_id>.sh` (filenames match the capability catalog’s probe ids) that:
 
 1. Use `#!/usr/bin/env bash` with `set -euo pipefail`.
 2. Perform exactly one observable action (write a file, open a socket, read `sysctl`, etc.).
@@ -10,11 +10,7 @@ Each boundary object captures *one* probe execution in one run mode. Probes are 
 4. Call `bin/emit-record` once with `--run-mode "$FENCE_RUN_MODE"` plus the metadata described below.
 5. Exit with status `0` after emitting JSON. They must not print anything else to stdout; use stderr only for debugging.
 
-See `AGENTS.md` for the workflow details expected from probe authors. The role
-(regression vs exploratory) is encoded both in the filesystem path
-(`probes/<role>/<category>/`) and as `probe.role` in each boundary object so
-downstream tooling can distinguish long-term regression coverage from
-experimental probes.
+See `AGENTS.md` for the workflow details expected from probe authors.
 
 ## Formal commitments
 
@@ -64,12 +60,8 @@ Probe identity stays explicit and tied to the capability catalog.
 | `version` | yes | Probe-local semantic/string version; bump when behavior changes. |
 | `primary_capability_id` | yes | Capability tested by this probe. Must match the adapter output. |
 | `secondary_capability_ids` | yes | Zero or more supporting capability ids (unique, may be empty). |
-| `role` | no (defaults to `"regression"`) | `"regression"` for contract probes under `probes/regression/...` or `"exploratory"` for probes under `probes/exploratory/...`. |
 
 `bin/emit-record` validates capability IDs by piping `spec/capabilities.yaml` through `tools/capabilities_adapter.sh`. Add or update IDs there first.
-
-Records created before the role split may omit `probe.role`; treat those as
-regression probes.
 
 ### `run`
 
@@ -134,7 +126,7 @@ Every record includes the capability snapshot(s) that were resolved when the pro
 
 ## Example
 
-A trimmed record from `probes/regression/filesystem/fs_outside_workspace.sh` (writes outside the workspace and expects a denial):
+A trimmed record from `probes/fs_outside_workspace.sh` (writes outside the workspace and expects a denial):
 
 ```json
 {
@@ -144,8 +136,7 @@ A trimmed record from `probes/regression/filesystem/fs_outside_workspace.sh` (wr
     "id": "fs_outside_workspace",
     "version": "1",
     "primary_capability_id": "cap_fs_write_workspace_tree",
-    "secondary_capability_ids": [],
-    "role": "regression"
+    "secondary_capability_ids": []
   },
   "run": {
     "mode": "codex-sandbox",

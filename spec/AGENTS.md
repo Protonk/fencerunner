@@ -1,35 +1,40 @@
-# Capabilities schema guide
+# Capabilities Catalog guide
 
-`spec/capabilities.yaml` defines the subset of sandbox and agent behaviors that codex-fence models. This document stays next to the spec so authors can see how each field is intended to be used, how it maps to probes, and what supporting material belongs with every capability. It is not a Seatbelt encyclopedia—just the schema explainer for the catalog codex-fence currently ships with.
+This document is a brief guide to `spec/capabilities.yaml`, a structured listing of sandbox restrictions that codex-fence mdoels. It exists to help agents understand the structure of the catalog, NOT to provide additional technical or policy information--It is not a Seatbelt encyclopedia—just the schema explainer for the catalog codex-fence currently ships with.
 
-The current schema version is **2**, centered on macOS Seatbelt plus Codex agent policy. The structure anticipates future platforms and capability classes, so every field description below should be interpreted with that growth path in mind.
+Read this document to see how each field is intended to be used, how it maps to probes, and what supporting material belongs with every capability.  
 
 ## Catalog scope and shared references
+
+The current schema version is **2**, centered on macOS Seatbelt plus Codex agent policy. The structure anticipates future platforms and capability classes, so every field description below should be interpreted with that growth path in mind.
 
 - The `scope` block sets the boundary for the catalog:
   - `description` summarizes what this slice of Seatbelt/agent behavior covers.
   - `platforms` lists the platforms currently modeled (today `[macos]`, tomorrow more).
   - `notes` explains how we expect the catalog to grow (new profiles, gradual expansion).
-- The `docs` map is the canonical bibliography. Each key (e.g., `apple_sandbox_guide`, `deep_dive_agent_sandboxes`) acts as a stable handle. Capabilities reference these keys in `sources[*].doc`, keeping URLs centralized and updates surgical.
+- The `docs` map is the canonical bibliography. Each key (e.g., `apple_sandbox_guide`, `deep_dive_agent_sandboxes`) acts as a stable handle. Capabilities reference these keys in `sources[*].doc`.
 
 ## Capability entry schema
 
-Each object in `capabilities` carries four clusters of fields:
+Capability entries are a record of what we know about how the stack can mediate an action. Each entry is structured data about known features of the security policy surface with the following fields described below:
+- `id` — a short, snake cased slug such as `cap_fs_write_workspace_tree` which serves as a unique, stable identifier for the capability. Never rename without migrating every consumer. 
 
-### Identity and grouping
+### High-level categorization
 
-- `id` — stable identifier the probes, prompts, and boundary objects emit. Never rename without migrating every consumer.
-- `category` — high-level bucket (`filesystem`, `process`, `network`, `sysctl`, `ipc`, `sandbox_meta`, `agent_policy`). Choose the primary behavior being exercised, not every side effect.
-- `platform` — list of operating systems the capability statement applies to. Default to `[macos]` today, expand as soon as probes exist for another platform.
-
-### Enforcement context and lifecycle
-
-- `layer` — clarifies **where** the rule lives:
+- `platform` — list of operating systems the capability statement applies to. 
+- `layer` — tag noting **where** the rule lives:
   - `os_sandbox` for Seatbelt/kernel policy.
   - `sandbox_meta` for profile-construction mechanics (default deny, parameterization, logging).
   - `agent_policy` for Codex orchestration (approval prompts, sandbox toggles).
-- `status` — `planned`, `experimental`, or `core`. Start every new entry at `experimental` until we have a reliable probe.
-- `level` — fast severity/impact signal (`low`, `medium`, `high`).
+- `category` — bucket (`filesystem`, `process`, `network`, `sysctl`, `ipc`, `sandbox_meta`, `agent_policy`) for what the rule does. Capabilities listed in the catalog mediate mostly non-overlapping interactions; a call to the file system is distinct from reading `kern.boottime`. `category` should be the primary domain of the mediation.
+  - `filesystem` — workspace roots, `.git` isolation, user/system directories, symlink handling, other file I/O rules.
+  - `process` — exec/fork semantics, helper tools, and child-process policy.
+  - `network` — outbound connectivity, loopback allowances, or explicit denials.
+  - `sysctl` — kernel parameter reads such as `sysctl -n hw.ncpu`.
+  - `ipc` — Mach services and other inter-process messaging.
+  - `sandbox_meta` — mechanics of the sandbox profile itself.
+  - `agent_policy` — Codex-level coordination outside the kernel.
+
 
 ### Behavioral detail
 
@@ -38,26 +43,19 @@ Each object in `capabilities` carries four clusters of fields:
 - `meta_ops` — `sandbox-meta:*` tags that describe the profile techniques in play (default deny, argument templating, debug injectors, etc.).
 - `agent_controls` — `agent-policy:*` tags describing agent-level knobs such as trust lists or approval requirements.
 
+
+### Enforcement context and lifecycle
+
+
+- `status` — `planned`, `experimental`, or `core`. Start every new entry at `experimental` until we have a reliable probe.
+- `level` — fast severity/impact signal (`low`, `medium`, `high`).
+
+
 ### Guidance and provenance
 
+Catalog entries are not exhausted by the above information. Useful information is held in free text in `notes`--and sources contain pointers to where we learned about the behavior. 
 - `notes` — probe-author hints: how to trigger the behavior, known tricky paths, or anything we learned by testing it.
-- `sources` — list of `{doc, section, url_hint?}` objects pointing back to entries in the `docs` map. Include at least one reference for every capability so downstream consumers know where the behavior came from.
-
-## Categories and layers cheat sheet
-
-- `filesystem` — workspace roots, `.git` isolation, user/system directories, symlink handling, other file I/O rules.
-- `process` — exec/fork semantics, helper tools, and child-process policy.
-- `network` — outbound connectivity, loopback allowances, or explicit denials.
-- `sysctl` — kernel parameter reads such as `sysctl -n hw.ncpu`.
-- `ipc` — Mach services and other inter-process messaging.
-- `sandbox_meta` — mechanics of the sandbox profile itself.
-- `agent_policy` — Codex-level coordination outside the kernel.
-
-`layer` mirrors the above lenses:
-
-- `os_sandbox` — enforced by the macOS Seatbelt runtime.
-- `sandbox_meta` — “profile about profiles” behaviors (default deny posture, logging toggles).
-- `agent_policy` — approvals flow, sandbox orchestration, and similar agent decisions.
+- `sources` — list of `{doc, section, url_hint?}` objects pointing back to entries in the `docs` map. Include at least one reference for every capability so downstream consumers know where our understanding of the feature came from.
 
 ## Working with spec/capabilities.yaml
 

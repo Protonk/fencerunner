@@ -6,7 +6,7 @@ As the Probe Author, you:
   exact slugs defined in that file.
 - Read `schema/boundary_object_cfbo_v1.json` alongside
   `docs/boundary_object.md` to understand every field the probe must provide.
-- Review existing regression scripts under `probes/regression/<category>/` to see which behaviors already have
+- Review existing probes under `probes/` to see which behaviors already have
   coverage and how outcomes are classified. The mapping is mirrored in
   `docs/capabilities_coverage.json`.
 - Keep a tight edit/test loop. Run `tests/run.sh --probe <id>` (or
@@ -31,33 +31,21 @@ Never:
 - Print anything besides the JSON boundary object to stdout. Use stderr for
   debugging only when necessary.
 
-## Probe roles
+## Probe layout
 
-`codex-fence` distinguishes between **regression** and **exploratory**
-probes so downstream tooling can tell when a result is part of the contracted
-surface versus a quick sandbox poke.
-
-- **Regression probes** live under `probes/regression/<category>/`, cover the
-  committed capability map, and emit `probe.role = "regression"`. Every
-  existing probe currently sits in this tree.
-- **Exploratory probes** live under `probes/exploratory/<category>/`, target the
-  same capability catalog but are free to chase odd cases or policy seams. They
-  emit `probe.role = "exploratory"`.
-
-The harness infers the role from the script path and exports
-`FENCE_PROBE_ROLE` so `bin/emit-record` includes the correct `probe.role`
-metadata automatically. When a prompt or issue calls for a specific role, place
-the script under the matching tree; otherwise default to regression. Promoting
-an exploratory probe to regression is just a matter of moving it into the
-regression tree and rerunning the normal probe/test workflow.
+All probes live directly under the `probes/` directory with filenames that match
+their `probe.id` (for example, `probes/fs_outside_workspace.sh`). This flat
+layout eliminates role- and category-specific subdirectories—every script is
+just a probe. Keep capability metadata accurate so downstream tooling can reason
+about coverage without depending on directory names.
 
 ## Probe manifest and runner API
 
 `tools/generate_probe_manifest.rb` materializes probe metadata into
 `tmp/probes_manifest.json` (plus a Makefile fragment). This keeps `make matrix`
 from re-discovering the tree every time and provides a single source of truth
-for downstream tooling. The manifest records each probe’s id, path, category,
-role, capability ids, checksum, and whether it opts into the module runner API.
+for downstream tooling. The manifest records each probe’s id, path, capability
+ids, checksum, and whether it opts into the module runner API.
 
 `bin/probe-runner` is the new execution harness for module probes. You opt in by
 adding `# probe_runner_api: module` near the top of the script and defining a
@@ -72,12 +60,9 @@ running as standalone scripts until they migrate.
 ## Probe description and agent guidance (cfbo-v1)
 
 A probe:
-1. Is an executable script under either `probes/regression/<category>/` or
-   `probes/exploratory/<category>/`, where `<category>`
-   matches the primary capability's `category` in `spec/capabilities.yaml`.
-   Use `#!/usr/bin/env bash`, enable `set -euo pipefail`, and name the script
-   `probes/<role>/<category>/<probe_id>.sh` so the filename matches the
-   `probe.id`.
+1. Is an executable script under `probes/<probe_id>.sh`, where the filename
+   matches the `probe.id`. Use `#!/usr/bin/env bash`, immediately enable
+   `set -euo pipefail`, and keep the script focused on a single observation.
 2. Performs exactly *one* focused operation (file IO, DNS, network socket,
    process spawn, etc.). Gather whatever context you need to describe the
    attempt. Capture the command you actually ran (e.g.,
@@ -111,7 +96,7 @@ provide full context for every record).
 
 ### Minimal example
 
-Excerpt from `probes/regression/filesystem/fs_outside_workspace.sh`:
+Excerpt from `probes/fs_outside_workspace.sh`:
 
 ```bash
 primary_capability_id="cap_fs_write_workspace_tree"

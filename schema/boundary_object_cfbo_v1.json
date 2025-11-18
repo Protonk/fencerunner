@@ -64,10 +64,6 @@
           "type": "array",
           "items": { "type": "string" },
           "uniqueItems": true
-        },
-        "role": {
-          "type": "string",
-          "enum": ["regression", "exploratory"]
         }
       }
     },
