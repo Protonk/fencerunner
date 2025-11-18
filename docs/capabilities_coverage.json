@@ -3,7 +3,9 @@
     "has_probe": true,
     "probe_ids": [
       "fs_read_workspace_readme",
-      "fs_read_workspace_spec_tail"
+      "fs_read_workspace_spec_tail",
+      "fs_workspace_relative_escape_read_guard",
+      "fs_workspace_relative_segments_read_ok"
     ]
   },
   "cap_fs_write_workspace_tree": {
