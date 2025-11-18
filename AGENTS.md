@@ -65,6 +65,7 @@ adding `# probe_runner_api: module` near the top of the script and defining a
 `tools/lib/probe_runner_module.sh`) exactly once. `emit_result` accepts the same
 flags you would normally pass to `bin/emit-record` (`--status`, `--command`,
 `--category`, `--verb`, `--target`, `--payload-file`, etc.). The runner merges
+those arguments with the manifest metadata and invokes `bin/emit-record` for
 you, so the script stays focused on the observable behavior. Legacy probes keep
 running as standalone scripts until they migrate.
 
