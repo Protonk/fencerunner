@@ -82,6 +82,8 @@ coerce bad output into a result.
 
 The fast authoring loop favors single-probe runs:
 
+- `tests/probe_contract/light_lint.sh probes/<id>.sh` runs the quick bash lint
+  pass against one script while you iterate on it.
 - `tests/run.sh --probe <id>` (or `make probe PROBE=<id>`) lints the target
   script and enforces the static probe contract without touching the rest of
   the suite.
