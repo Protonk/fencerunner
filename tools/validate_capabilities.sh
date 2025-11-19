@@ -1,4 +1,12 @@
 #!/usr/bin/env bash
+# -----------------------------------------------------------------------------
+# Guard-rail summary:
+#   * Loads the canonical capabilities map via capabilities_adapter.sh and uses
+#     it as the single source of truth for validating every probe script and
+#     generated JSON artifact in the repo.
+#   * Hard-fails on unknown capability identifiers so regressions are caught
+#     before running probes or shipping bundles.
+# -----------------------------------------------------------------------------
 set -euo pipefail
 
 script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)
@@ -10,6 +18,7 @@ if [[ ! -x "${capabilities_adapter}" ]]; then
   exit 1
 fi
 
+# Cache the authoritative list of capability IDs for fast local checks.
 known_capability_ids=()
 while IFS= read -r capability_id; do
   if [[ -n "${capability_id}" ]]; then
@@ -24,6 +33,7 @@ fi
 
 status=0
 
+# Reject references to capability IDs that the adapter does not expose.
 check_capability() {
   local candidate="$1"
   local context="$2"
@@ -40,6 +50,7 @@ check_capability() {
   fi
 }
 
+# Lightweight parser that extracts the first assignment of a shell variable.
 extract_var() {
   local file="$1"
   local var="$2"
@@ -92,6 +103,7 @@ for script in "${probe_files[@]}"; do
   fi
 done
 
+# Probe outputs are stored in out/*.json; validate any embedded capability IDs.
 json_dirs=("${repo_root}/out")
 for dir in "${json_dirs[@]}"; do
   if [[ ! -d "${dir}" ]]; then

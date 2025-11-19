@@ -1,9 +1,18 @@
 #!/usr/bin/env bash
+# -----------------------------------------------------------------------------
+# Guard-rail summary:
+#   * Normalizes `schema/capabilities.json` into a predictable, jq-validated map
+#     keyed by capability ID so other tooling can rely on a single canonical
+#     structure.
+#   * Enforces the schema version and fails fast on missing files or IDs to keep
+#     downstream validation scripts from operating on stale or partial data.
+# -----------------------------------------------------------------------------
 set -euo pipefail
 
 script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)
 repo_root=$(cd "${script_dir}/.." >/dev/null 2>&1 && pwd)
 
+# Allow callers to override the default schema path (useful for tests).
 capabilities_file="${1:-${repo_root}/schema/capabilities.json}"
 
 if [[ ! -f "${capabilities_file}" ]]; then
@@ -11,6 +20,7 @@ if [[ ! -f "${capabilities_file}" ]]; then
   exit 1
 fi
 
+# Keep the jq program inline so the adapter remains hermetic and easy to audit.
 read -r -d '' jq_program <<'JQ' || true
 def to_object:
   if type == "object" then

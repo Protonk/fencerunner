@@ -19,6 +19,19 @@ Three reasons:
 2. On macOS, the rough set of rules around sandboxing are a perfect combination of [convenience](https://github.com/openai/codex/issues/215), stability, and opacity. People will get complacent about details.
 3. `codex` and "Codex" are very attractive attack vectors. Someone will come for them, or through them. That someone could be anywhere on your stack. Is that paranoid? Yes. [Yes it is](https://en.wikipedia.org/wiki/XZ_Utils_backdoor).
 
+## How it works
+
+Rather than doing things the clever or efficient way, we're trying something else.
+
+We compile a machine readable catalog of security policy capabilities that we know exist: file system operations, network calls, and the like. Using this catalog we build dozens of tiny probes that hammer at each of these capabilities in different ways. Because we rigidly structure the output of the probes, many different kinds can come together to form a picture of what `codex` can and can't do. What's inside and outside the fence.
+
+This approach has obvious disadvantages. It is clearly inefficient--the repository structure is built around rapid AI generation of probes, some of which are silly or vacuous. In all likelyhood most will never contribute to useful signals about security. It is also **deeply** paranoid, perhaps needlessly so. Certainly past the point of diminishing returns.
+
+However, if we view these disadvantages as choices, the benefits of codex-fence appear:
+- What codex can and can't do in your environment is always empirically determined. We don't need to trust codex or the os.
+- Running many probes is a defense against the security policy surface becoming unexpectedly more complex. Running so many and so many silly ones can (potentially) allow us to capture added complexity that's hard to anticipate.
+- With a rigid output structure, disparate probes can be integrated cleanly into signals about capabilities. Weird probes, paranoid probes, even pointless probes that don't add signal cannot contribute to noise. 
+
 ## Requirements
 
 - POSIX shell utilities + `bash 3.2`
@@ -94,3 +107,6 @@ portable validations. The entry point for both is `tests/run.sh`.
 - `make validate-capabilities` is available any time you need to confirm that
   probes, fixtures, and stored boundary objects only reference capability ids
   defined in the catalog.
+
+Maintainers working on the guard-rail scripts that back these checks should read
+`tools/AGENTS.md` for guidance on extending the adapters and validators safely.
