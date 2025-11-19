@@ -1,6 +1,6 @@
 # probes/AGENTS.md
 
-This directory contains many probes, small programs built to test validated capabilities and emit contracted output, allowing us to test the security policy surface around `codex` without knowing it exactly. Read this file to understand the Probe and Probe Author contract. 
+This directory contains many probes, small programs built to test validated capabilities and emit contracted output, allowing us to test the security policy surface around `codex` without knowing it exactly. Read this file to understand the Probe and Probe Author contract. For agents auditing existing probes rather than authoring new ones, see the Probe Audit prompt in `tests/audits/AGENTS.md`.
 
 ## Probe Author contract
 

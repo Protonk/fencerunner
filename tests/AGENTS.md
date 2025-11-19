@@ -3,10 +3,6 @@
 This guide orients agents who need to understand, extend, or debug the harness
 tests. 
 
-## For audits
-
-Agents interested in auditing the repository should stop reading and instead read [tests/audits/AGENTS.md](tests/audits/AGENTS.md). That file contains whole project audit instructions.
-
 ## Mental model
 
 `tests/` enforces that probes and helpers stay portable and in sync with the
@@ -21,6 +17,10 @@ public boundary-object schema. The directory is split into three layers:
 The default make target `make test` simply runs `tests/run.sh` with no
 arguments, so anything added here must be portable (`/bin/bash 3.2` on macOS),
 silent on success, and deterministic.
+
+For full-repository or probe-focused audits, stop here and instead read
+`tests/audits/AGENTS.md`, which contains prompts for holistic and probe-only
+audits.
 
 ## Quick start for agents
 
