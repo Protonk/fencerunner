@@ -5,6 +5,11 @@ known-good state. When in doubt, study `capabilities_adapter.sh` (source of trut
 `validate_capabilities.sh` (consumer/validator) to understand how the tooling is
 wired together.
 
+`generate_probe_coverage_map.sh` inspects the live probes and emits a
+capability→probe coverage map (matching `docs/data/probe_cap_coverage_map.json`).
+Run it manually when you add probes or capabilities to refresh the coverage map
+before updating docs.
+
 Before changing or adding tooling:
 - Mirror the existing safety posture: every script sets `set -euo pipefail`,
   resolves `repo_root`, and fails fast if prerequisites are absent.

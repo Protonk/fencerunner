@@ -12,7 +12,7 @@ As the Probe Author, you:
   `docs/boundary_object.md` to understand every field the probe must provide.
 - Review existing probes under `probes/` to see which behaviors already have
   coverage and how outcomes are classified. The mapping is mirrored in
-  `schema/capabilities_coverage.json`.
+  `docs/data/probe_cap_coverage_map.json`.
 - Keep a tight edit/test loop. While iterating on a script, run
   `tests/probe_contract/light_lint.sh probes/<id>.sh` to lint the probe in
   isolation, then `tests/run.sh --probe <id>` (or `make probe PROBE=<id>`)
@@ -23,6 +23,126 @@ Prefer to add probes that:
 - Target capability IDs with no existing probes, or
 - Add edge-case variants for already-covered capabilities (e.g., symlink
   escapes, `.git` writes, network corner cases).
+
+## Capability coverage map (derived)
+
+Refer to `docs/data/probe_cap_coverage_map.json` for the canonical mapping of
+capabilities to the probes that exercise them. The snapshot below uses
+indented bullet lists with explicit keys to stay machine-parseable while being
+easy to scan; empty probe lists would mark `has_probe=false`, though every
+capability currently has at least one probe.
+
+- capability: `cap_fs_read_workspace_tree`
+  has_probe: true
+  probes:
+    - `fs_read_workspace_readme`
+    - `fs_read_workspace_spec_tail`
+    - `fs_workspace_relative_escape_read_guard`
+    - `fs_workspace_relative_segments_read_ok`
+- capability: `cap_fs_write_workspace_tree`
+  has_probe: true
+  probes:
+    - `fs_outside_workspace`
+    - `fs_symlink_workspace_self_ref_write_ok`
+    - `fs_workspace_relative_segments_write_ok`
+    - `fs_workspace_unicode_filename_write_ok`
+    - `fs_workspace_write_create`
+    - `fs_user_library_write_guard`
+- capability: `cap_fs_read_git_metadata`
+  has_probe: true
+  probes:
+    - `fs_git_metadata_write_guard`
+    - `fs_git_metadata_read_config`
+    - `fs_git_like_name_write`
+- capability: `cap_fs_read_system_roots`
+  has_probe: true
+  probes:
+    - `fs_read_system_version_plist`
+    - `fs_read_system_library_ls`
+- capability: `cap_fs_read_user_content`
+  has_probe: true
+  probes:
+    - `fs_user_documents_read`
+    - `fs_user_desktop_symlink_read`
+- capability: `cap_fs_follow_symlinks_out_of_workspace`
+  has_probe: true
+  probes:
+    - `fs_symlink_escape_read`
+    - `fs_symlink_escape_relative_read`
+    - `fs_symlink_bounce_write`
+- capability: `cap_proc_exec_toolchain_outside_workspace`
+  has_probe: true
+  probes:
+    - `proc_exec_env_python3`
+    - `proc_exec_toolchain_clang_version`
+    - `proc_exec_toolchain_python3`
+- capability: `cap_proc_fork_and_child_spawn`
+  has_probe: true
+  probes:
+    - `proc_fork_child_spawn`
+- capability: `cap_proc_unsandboxed_escalation`
+  has_probe: true
+  probes:
+    - `proc_unsandboxed_escalation_retry`
+- capability: `cap_net_outbound_any`
+  has_probe: true
+  probes:
+    - `net_outbound_example_https`
+    - `net_outbound_example_http_head`
+    - `net_outbound_ipv4_literal_denied`
+- capability: `cap_net_localhost_only`
+  has_probe: true
+  probes:
+    - `net_localhost_ipv6_loopback_ok`
+    - `net_localhost_loopback`
+    - `net_localhost_udp_echo`
+- capability: `cap_net_disabled_with_tag`
+  has_probe: true
+  probes:
+    - `net_disabled_env_tag`
+- capability: `cap_sysctl_read_basic`
+  has_probe: true
+  probes:
+    - `sysctl_hw_ncpu_read`
+    - `sysctl_hw_multi_key_read`
+- capability: `cap_sysctl_read_sensitive`
+  has_probe: true
+  probes:
+    - `sysctl_kern_boottime_read`
+    - `sysctl_security_mac_proc_enforce`
+    - `sysctl_kern_kdebug_read`
+- capability: `cap_mach_lookup_system_logger`
+  has_probe: true
+  probes:
+    - `mach_system_logger_write`
+- capability: `cap_sandbox_default_deny`
+  has_probe: true
+  probes:
+    - `sandbox_default_deny_ps`
+- capability: `cap_sandbox_debug_and_trace_logging`
+  has_probe: true
+  probes:
+    - `sandbox_debug_log_capture`
+- capability: `cap_sandbox_profile_parameterization`
+  has_probe: true
+  probes:
+    - `sandbox_profile_param_nested_workspace`
+- capability: `cap_agent_sandbox_env_marker`
+  has_probe: true
+  probes:
+    - `agent_sandbox_env_marker`
+- capability: `cap_agent_approvals_mode`
+  has_probe: true
+  probes:
+    - `agent_approvals_mode_env`
+- capability: `cap_agent_command_trust_list`
+  has_probe: true
+  probes:
+    - `agent_command_trust_file_read`
+- capability: `cap_agent_default_sandboxing`
+  has_probe: true
+  probes:
+    - `agent_default_sandbox_env`
 
 Keep each probe:
 - Small and single-purpose. When you need reusable helpers (portable

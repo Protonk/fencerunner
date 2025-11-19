@@ -117,4 +117,20 @@ If you add a new document here:
    - and extend tests to cover it.
 
 As a rule: documentation in `docs/` should help agents *interpret* the contracts that live elsewhere. It should not introduce contracts that only exist in prose.
-```
+
+### `data/probe_cap_coverage_map.json`
+
+**Role**
+
+Stores the canonical capability→probe coverage map consumed by probe authors and
+the `capability_map_sync` test. Update it with
+`tools/generate_probe_coverage_map.sh` whenever you add or re-home probes so the
+snapshot stays in lockstep with `schema/capabilities.json` and the live probe
+metadata.
+
+**Read this if**
+
+- You need to see which probes cover a given capability without scanning each
+  script.
+- You are validating coverage expectations in `probes/AGENTS.md` or extending
+  capability documentation.

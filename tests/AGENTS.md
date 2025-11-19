@@ -54,7 +54,7 @@ audits.
 
 | Script | Purpose | Notes |
 | --- | --- | --- |
-| `second_tier/capability_map_sync.sh` | Confirms schema/capabilities_coverage.json, tools/capabilities_adapter.sh, and probe metadata all reference the same capability ids. | Update docs + adapter when adding capabilities before rerunning this script. |
+| `second_tier/capability_map_sync.sh` | Confirms docs/data/probe_cap_coverage_map.json, tools/capabilities_adapter.sh, and probe metadata all reference the same capability ids. | Update docs + adapter when adding capabilities before rerunning this script. |
 | `second_tier/boundary_object_schema.sh` | Runs `bin/emit-record` with a fixture payload and validates the resulting JSON with `jq`. | Extend the jq expression whenever schema/boundary_object.json grows. |
 | `second_tier/harness_smoke.sh` | Runs the fixture probe via `bin/fence-run baseline` and checks the returned boundary object. | Keeps the baseline path honest; extend if fixtures gain new fields. |
 | `second_tier/baseline_no_codex_smoke.sh` | Temporarily hides the Codex CLI from `PATH` and asserts baseline runs still succeed while codex modes fail. | Make sure new smoke fixtures do not depend on `codex`. |
@@ -88,7 +88,7 @@ Add any heavier “whole repo” validation here. Follow the same structure: sou
   mismatched `probe_name`, etc.). Open the failing script directly and fix the
   reported condition.
 - **Capability coverage failures** mean either a document drift or a probe now
-  references an unknown capability. Update `schema/capabilities_coverage.json` and
+  references an unknown capability. Update `docs/data/probe_cap_coverage_map.json` and
   `tools/capabilities_adapter.sh` in the same commit.
 - **Harness/baseline smoke failures** often indicate regressions in
   `bin/fence-run` or `bin/emit-record`. Run the failing script with `bash -x` to
