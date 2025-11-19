@@ -11,6 +11,14 @@ if [[ -z "${REPO_ROOT:-}" ]]; then
   REPO_ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." >/dev/null 2>&1 && pwd)
 fi
 
+portable_realpath_lib="${REPO_ROOT}/lib/portable_realpath.sh"
+if [[ ! -f "${portable_realpath_lib}" ]]; then
+  echo "tests/library/utils: missing portable_realpath helper at ${portable_realpath_lib}" >&2
+  exit 1
+fi
+# shellcheck source=../../lib/portable_realpath.sh
+source "${portable_realpath_lib}"
+
 extract_probe_var() {
   local file="$1"
   local var="$2"
@@ -41,7 +49,7 @@ extract_probe_var() {
 resolve_probe_script_path() {
   local repo_root="$1"
   local identifier="$2"
-  local attempts=() trimmed candidate
+  local attempts=() trimmed candidate canonical_path
   if [[ -z "${identifier}" ]]; then
     return 1
   fi
@@ -61,10 +69,12 @@ resolve_probe_script_path() {
     fi
   fi
   for candidate in "${attempts[@]}"; do
-    # Only return files that actually live under probes/ to enforce the layout.
-    if [[ -f "${candidate}" && "${candidate}" == "${repo_root}/probes/"* ]]; then
-      printf '%s\n' "${candidate}"
-      return 0
+    if [[ -f "${candidate}" ]]; then
+      canonical_path=$(portable_realpath "${candidate}")
+      if [[ -n "${canonical_path}" && "${canonical_path}" == "${repo_root}/probes/"* ]]; then
+        printf '%s\n' "${canonical_path}"
+        return 0
+      fi
     fi
   done
   return 1

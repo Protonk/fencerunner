@@ -26,7 +26,9 @@ This file serves as documentation. For authoritative, test-enforced Probe and Pr
 - **Helpers:** Shared utilities live under `lib/` (for example
   `lib/portable_realpath.sh`). Source only the helpers you need instead of
   when needed instead of re-implementing interpreter detection. Helpers are
-  pure and portable so probes stay single-purpose.
+  pure and portable so probes stay single-purpose. In particular, prefer
+  `portable_realpath`/`portable_relpath` whenever you need canonical or
+  relative paths.
 
 ## How the harness runs a probe
 

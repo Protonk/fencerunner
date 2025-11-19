@@ -2,17 +2,36 @@
 set -euo pipefail
 
 # cap_fs_read_workspace_tree denial case: attempt to read ~/Documents using ../ segments that escape the workspace.
+probe_name="fs_workspace_relative_escape_read_guard"
 repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." >/dev/null 2>&1 && pwd)
 emit_record_bin="${repo_root}/bin/emit-record"
+portable_relpath_lib="${repo_root}/lib/portable_relpath.sh"
+portable_realpath_lib="${repo_root}/lib/portable_realpath.sh"
+for helper in "${portable_relpath_lib}" "${portable_realpath_lib}"; do
+  if [[ ! -f "${helper}" ]]; then
+    echo "probe ${probe_name:-fs_workspace_relative_escape_read_guard}: missing helper ${helper}" >&2
+    exit 1
+  fi
+done
+# shellcheck source=../lib/portable_relpath.sh
+source "${portable_relpath_lib}"
+# shellcheck source=../lib/portable_realpath.sh
+source "${portable_realpath_lib}"
 
 run_mode="${FENCE_RUN_MODE:-baseline}"
-probe_name="fs_workspace_relative_escape_read_guard"
 probe_version="1"
 primary_capability_id="cap_fs_read_workspace_tree"
 
-relative_home=$(python3 -c 'import os,sys; print(os.path.relpath(os.path.expanduser("~"), sys.argv[1]))' "${repo_root}")
+relative_home=$(portable_relpath "${HOME}" "${repo_root}")
+if [[ -z "${relative_home}" || "${relative_home}" == /* ]]; then
+  echo "probe ${probe_name}: unable to compute relative path from workspace to home" >&2
+  exit 1
+fi
 escape_target="${repo_root}/${relative_home}/Documents"
-canonical_target=$(python3 -c 'import os,sys; print(os.path.realpath(sys.argv[1]))' "${escape_target}")
+canonical_target=$(portable_realpath "${escape_target}")
+if [[ -z "${canonical_target}" ]]; then
+  canonical_target="${escape_target}"
+fi
 printf -v command_executed "ls -ld %q" "${escape_target}"
 
 stdout_tmp=$(mktemp)

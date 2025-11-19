@@ -4,6 +4,13 @@ set -euo pipefail
 # cap_fs_read_workspace_tree success case: read a workspace file using ./ and ../ segments.
 repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." >/dev/null 2>&1 && pwd)
 emit_record_bin="${repo_root}/bin/emit-record"
+portable_realpath_lib="${repo_root}/lib/portable_realpath.sh"
+if [[ ! -f "${portable_realpath_lib}" ]]; then
+  echo "portable_realpath helper missing at ${portable_realpath_lib}" >&2
+  exit 1
+fi
+# shellcheck source=../lib/portable_realpath.sh
+source "${portable_realpath_lib}"
 
 run_mode="${FENCE_RUN_MODE:-baseline}"
 probe_name="fs_workspace_relative_segments_read_ok"
@@ -14,7 +21,10 @@ if ! [[ "${lines_to_read}" =~ ^[0-9]+$ ]]; then
   lines_to_read=8
 fi
 relative_target="${repo_root}/./docs/../README.md"
-canonical_target=$(python3 -c 'import os,sys; print(os.path.realpath(sys.argv[1]))' "${relative_target}")
+canonical_target=$(portable_realpath "${relative_target}")
+if [[ -z "${canonical_target}" ]]; then
+  canonical_target="${relative_target}"
+fi
 printf -v command_executed "head -n %q %q" "${lines_to_read}" "${relative_target}"
 
 stdout_tmp=$(mktemp)
