@@ -5,7 +5,7 @@ set -euo pipefail
 repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." >/dev/null 2>&1 && pwd)
 emit_record_bin="${repo_root}/bin/emit-record"
 portable_relpath_lib="${repo_root}/lib/portable_relpath.sh"
-# shellcheck source=lib/portable_relpath.sh
+
 source "${portable_relpath_lib}"
 
 run_mode="${FENCE_RUN_MODE:-baseline}"

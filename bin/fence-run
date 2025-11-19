@@ -1,6 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Entry point for running probes under different sandbox modes. Preserve the CLI
+# contract (MODE PROBE_NAME) because other tooling shells out directly. Keep the
+# detection logic hermetic—no extra deps or repos—and prefer readability over
+# cleverness so agents can audit how probes are launched.
+
 if [[ $# -ne 2 ]]; then
   echo "Usage: fence-run MODE PROBE_NAME" >&2
   exit 1
@@ -9,6 +14,7 @@ fi
 script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)
 repo_root=$(cd "${script_dir}/.." >/dev/null 2>&1 && pwd)
 
+# Resolve a user-supplied probe identifier to a script under repo_root/probes.
 resolve_probe_script_path() {
   local repo="$1"
   local identifier="$2"
@@ -42,11 +48,13 @@ mode="$1"
 probe_name="$2"
 probe_path=$(resolve_probe_script_path "${repo_root}" "${probe_name}" || true)
 
+# Protect against typos early so callers see a friendly error.
 if [[ -z "${probe_path}" ]]; then
   echo "Probe not found: ${probe_name}" >&2
   exit 1
 fi
 
+# Normalise permissions when the file exists but is not executable.
 if [[ ! -x "${probe_path}" ]]; then
   if [[ -f "${probe_path}" ]]; then
     chmod +x "${probe_path}" 2>/dev/null || true
@@ -58,6 +66,7 @@ if [[ ! -x "${probe_path}" ]]; then
   exit 1
 fi
 
+# Ensure we refuse sandbox modes that require the codex CLI unless it exists.
 sandbox_requires_codex() {
   if ! command -v codex >/dev/null 2>&1; then
     echo "codex CLI not found; mode '${mode}' requires codex. Install codex or run baseline instead." >&2
@@ -65,6 +74,7 @@ sandbox_requires_codex() {
   fi
 }
 
+# Determine how the probe should run based on the requested mode.
 sandbox_mode=""
 run_cmd=()
 case "${mode}" in
@@ -100,4 +110,5 @@ case "${mode}" in
     ;;
 esac
 
+# Export the mode details in env vars so downstream scripts understand context.
 FENCE_RUN_MODE="${mode}" FENCE_SANDBOX_MODE="${sandbox_mode}" "${run_cmd[@]}"

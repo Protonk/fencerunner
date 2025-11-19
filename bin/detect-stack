@@ -1,16 +1,23 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Emits the runtime stack metadata that other tools (emit-record, probes, etc.)
+# serialize into CFBO records. Keep the CLI stable and backwards compatible; add
+# new fields instead of removing or renaming existing keys. Avoid heavy deps or
+# network calls so this stays fast enough to run before every probe invocation.
+
 usage() {
   echo "Usage: detect-stack [RUN_MODE]" >&2
   exit 1
 }
 
+# Resolve the run mode from CLI, falling back to what fence-run exported.
 run_mode="${1:-${FENCE_RUN_MODE:-}}"
 if [[ -z "${run_mode}" ]]; then
   usage
 fi
 
+# Detect codex CLI details when the binary is available to aid debugging.
 codex_cli_version=""
 if command -v codex >/dev/null 2>&1; then
   if codex_output=$(codex --version 2>/dev/null | head -n1); then
@@ -22,6 +29,7 @@ codex_profile="${FENCE_CODEX_PROFILE:-}"
 codex_model="${FENCE_CODEX_MODEL:-}"
 
 sandbox_mode=""
+# Mode-specific sandbox metadata describes how the probe was run.
 case "${run_mode}" in
   baseline)
     sandbox_mode=""
@@ -41,6 +49,7 @@ esac
 os_info=$(uname -srm)
 
 container_tag="${FENCE_CONTAINER_TAG:-}"
+# Identify the container tag for downstream attribution if nothing is provided.
 if [[ -z "${container_tag}" ]]; then
   case "$(uname -s)" in
     Darwin)
@@ -55,6 +64,7 @@ if [[ -z "${container_tag}" ]]; then
   esac
 fi
 
+# Emit a normalized JSON blob that callers embed in the record payload.
 jq -n \
   --arg codex_cli_version "${codex_cli_version}" \
   --arg codex_profile "${codex_profile}" \

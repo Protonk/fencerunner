@@ -1,6 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Canonical encoder for CFBO run records. Keep the CLI arguments backwards
+# compatible so probes and integration tests can script against it reliably.
+# Avoid introducing side effects or extra dependencies—this script should only
+# read inputs, validate capability metadata, and print a single JSON document.
+
 script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)
 detect_stack_bin="${script_dir}/detect-stack"
 repo_root=$(cd "${script_dir}/.." >/dev/null 2>&1 && pwd)
@@ -43,6 +48,7 @@ secondary_capability_ids=()
 command_executed=""
 raw_exit_code=""
 error_detail=""
+# Parse the long-form arguments; the probes provide every field explicitly.
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --run-mode)
@@ -87,6 +93,7 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+# Fail fast when required flags are missing so probe authors get useful errors.
 for var in run_mode probe_id probe_version category verb target status primary_capability_id command_executed; do
   if [[ -z "${!var}" ]]; then
     echo "Missing required flag: --${var//_/-}" >&2
@@ -94,6 +101,7 @@ for var in run_mode probe_id probe_version category verb target status primary_c
   fi
 done
 
+# Only allow the statuses we expect in downstream analytics.
 case "${status}" in
   success|denied|partial|error)
     ;;
@@ -103,6 +111,7 @@ case "${status}" in
     ;;
 esac
 
+# detect-stack supplies the runtime context that ends up in the record payload.
 if [[ ! -x "${detect_stack_bin}" ]]; then
   echo "detect-stack helper not found at ${detect_stack_bin}" >&2
   exit 1
@@ -115,6 +124,7 @@ fi
 
 capabilities_json=$("${capabilities_adapter}")
 
+# Precompute the capability ids so we can validate primary/secondary inputs.
 known_capability_ids=()
 while IFS= read -r cap_line; do
   if [[ -n "${cap_line}" ]]; then
@@ -127,6 +137,7 @@ if [[ ${#known_capability_ids[@]} -eq 0 ]]; then
   exit 1
 fi
 
+# Helper to hard-fail when callers pass a capability id that the schema does not know about.
 require_capability_id() {
   local value="$1"
   local label="$2"
@@ -150,12 +161,14 @@ if [[ ${#secondary_capability_ids[@]} -gt 0 ]]; then
   done
 fi
 
+# Embed the schema version so downstream consumers can map ids safely.
 capabilities_schema_version=$(jq -r '.schema_version // empty' "${repo_root}/schema/capabilities.json")
 if [[ -z "${capabilities_schema_version}" ]]; then
   echo "Unable to determine capabilities schema_version from schema/capabilities.json" >&2
   exit 1
 fi
 
+# Capture the full metadata for each capability attached to this record.
 capability_snapshot() {
   local cap_id="$1"
   local snapshot
@@ -167,6 +180,7 @@ capability_snapshot() {
   echo "${snapshot}"
 }
 
+# Prefer the workspace root exported by fence-run; fall back to repo/git roots.
 workspace_root="${FENCE_WORKSPACE_ROOT:-}"
 if [[ -z "${workspace_root}" ]]; then
   if repo_root=$(git rev-parse --show-toplevel 2>/dev/null); then
@@ -176,6 +190,7 @@ if [[ -z "${workspace_root}" ]]; then
   fi
 fi
 
+# Default payload mirrors the schema contract even when probes omit payload data.
 payload_json='{"stdout_snippet": null, "stderr_snippet": null, "raw": {}}'
 if [[ -n "${payload_file}" ]]; then
   if [[ ! -f "${payload_file}" ]]; then
@@ -185,6 +200,7 @@ if [[ -n "${payload_file}" ]]; then
   payload_json=$(jq -c '.' "${payload_file}")
 fi
 
+# Normalise operation args to valid JSON regardless of whitespace.
 operation_args=$(jq -c '.' <<<"${operation_args}")
 
 stack_json=$("${detect_stack_bin}" "${run_mode}")
@@ -195,6 +211,7 @@ else
   secondary_caps_json='[]'
 fi
 
+# Structured representations help downstream systems avoid positional parsing.
 probe_json=$(jq -n \
   --arg probe_id "${probe_id}" \
   --arg probe_version "${probe_version}" \
@@ -263,6 +280,7 @@ capability_context=$(jq -n \
   --argjson secondary "${secondary_capability_snapshots}" \
   '{ primary: $primary, secondary: $secondary }')
 
+# Finally emit the canonical record. Downstream tooling expects a single JSON line.
 jq -n \
   --arg schema_version "cfbo-v1" \
   --argjson stack "${stack_json}" \
