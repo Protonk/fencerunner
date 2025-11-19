@@ -19,7 +19,7 @@ Three reasons:
 2. On macOS, the rough set of rules around sandboxing are a perfect combination of [convenience](https://github.com/openai/codex/issues/215), stability, and opacity. People will get complacent about details.
 3. `codex` and "Codex" are very attractive attack vectors. Someone will come for them, or through them. That someone could be anywhere on your stack. Is that paranoid? Yes. [Yes it is](https://en.wikipedia.org/wiki/XZ_Utils_backdoor).
 
-## How it works
+## Operating philosophy
 
 Rather than doing things the clever or efficient way, we're trying something else.
 
@@ -32,24 +32,7 @@ However, if we view these disadvantages as choices, the benefits of codex-fence 
 - Running many probes is a defense against the security policy surface becoming unexpectedly more complex. Running so many and so many silly ones can (potentially) allow us to capture added complexity that's hard to anticipate.
 - With a rigid output structure, disparate probes can be integrated cleanly into signals about capabilities. Weird probes, paranoid probes, even pointless probes that don't add signal cannot contribute to noise. 
 
-## DOES it work?!
-
-Yes! Provisonally! The capability catalog is for macOS only, but everything works identically on the `codex-universal` container and hopefully lots of other places.
-
-Once I decide on an API and freeze it I'll retract the "provisionally".
-
-## Requirements
-
-- POSIX shell utilities + `bash 3.2`
-- `jq`
-- `make`
-- The `codex` CLI (only if you plan to exercise Codex modes)
-
-The goal is to limit probe noise by keeping things lightweight and compatible
-with the toolchain shipped in macOS. `jq` is the only dependency that is not
-part of the default macOS install.
-
-## Capability-to-signal pipeline
+## How it works
 
 Everything in the repo exists to turn a capability into an auditable signal:
 
@@ -92,6 +75,12 @@ explain how to work with them.
 See [docs/probes.md](docs/probes.md) for a complete walkthrough, including how
 `bin/fence-run` manages modes and how cfbo fields map to probe inputs.
 
+### DOES it work?!
+
+Yes! Provisonally! The capability catalog is for macOS only, but everything works identically on the `codex-universal` container and hopefully lots of other places.
+
+Once I decide on an API and freeze it I'll retract the "provisionally".
+
 ## Repository map
 
 | Path | Role |
@@ -108,6 +97,17 @@ See [docs/probes.md](docs/probes.md) for a complete walkthrough, including how
 
 Pair this map with [`AGENTS.md`](AGENTS.md) when you need deeper orientation for
 any subdirectory.
+
+## Requirements
+
+- POSIX shell utilities + `bash 3.2`
+- `jq`
+- `make`
+- The `codex` CLI (only if you plan to exercise Codex modes)
+
+The goal is to limit probe noise by keeping things lightweight and compatible
+with the toolchain shipped in macOS. `jq` is the only dependency that is not
+part of the default macOS install.
 
 ## Usage
 
