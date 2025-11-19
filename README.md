@@ -32,6 +32,12 @@ However, if we view these disadvantages as choices, the benefits of codex-fence 
 - Running many probes is a defense against the security policy surface becoming unexpectedly more complex. Running so many and so many silly ones can (potentially) allow us to capture added complexity that's hard to anticipate.
 - With a rigid output structure, disparate probes can be integrated cleanly into signals about capabilities. Weird probes, paranoid probes, even pointless probes that don't add signal cannot contribute to noise. 
 
+## DOES it work?!
+
+Yes! Provisonally! The capability catalog is for macOS only, but everything works identically on the `codex-universal` container and hopefully lots of other places.
+
+Once I decide on an API and freeze it I'll retract the "provisionally".
+
 ## Requirements
 
 - POSIX shell utilities + `bash 3.2`
