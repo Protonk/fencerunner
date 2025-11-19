@@ -16,6 +16,7 @@
 ## Layered contracts (read before editing those areas)
 - `probes/AGENTS.md` — Probe author contract: one observable action per script, cfbo-v1 emission rules, capability metadata selection.
 - `tests/AGENTS.md` — Structure of the test harness, fixture locations, and guidance for fast vs. second-tier suites.
+  - `tests/audits/AGENTS.md` - Instructions for agents engaged in audits of the whole project or a subset of probes. 
 - `bin/AGENTS.md` — Guarantees for `fence-run`, `emit-record`, and `detect-stack`; keep their CLIs and stack metadata stable.
 - `lib/AGENTS.md` — Helper purity + one-function-per-file rule so probes/tests can source helpers safely.
 - `tools/AGENTS.md` — Capabilities adapter/validator contracts; reuse them instead of parsing `schema/capabilities.json` manually.
