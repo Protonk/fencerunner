@@ -7,7 +7,7 @@ expectations see the Probe Author contract in [probes/AGENTS.md](probes/AGENTS.m
 ## Scope
 
 Use this guide when you plan to:
-- Edit or add shell helpers under `tools/`, `lib/', or `bin/`.
+- Edit or add shell helpers under `tools/`, `lib/`, or `bin/`.
 - Modify the Makefile, capability catalog, schema, or adapters.
 - Extend `tests/` or its fixtures.
 - Update documentation outside a single probe (README, `docs/*.md`, etc.).
