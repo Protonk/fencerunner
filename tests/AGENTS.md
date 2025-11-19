@@ -10,6 +10,7 @@ public boundary-object schema. The directory is split into three layers:
 
 | Layer | Entry point | Purpose |
 | --- | --- | --- |
+| Audits | `tests/audits/` | Agent instructions for conducting holistics and probe audits. |
 | Library | `tests/library/` | Shared Bash helpers + fixtures depended on by every suite. |
 | Fast tier | `tests/run.sh --probe <id>` | Syntax lint + static probe contract for one probe—the tight authoring loop. |
 | Second tier | `tests/run.sh` | Global checks that validate documentation, schema, and harness plumbing. |
@@ -17,10 +18,6 @@ public boundary-object schema. The directory is split into three layers:
 The default make target `make test` simply runs `tests/run.sh` with no
 arguments, so anything added here must be portable (`/bin/bash 3.2` on macOS),
 silent on success, and deterministic.
-
-For full-repository or probe-focused audits, stop here and instead read
-`tests/audits/AGENTS.md`, which contains prompts for holistic and probe-only
-audits.
 
 ## Quick start for agents
 

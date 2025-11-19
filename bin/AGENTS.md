@@ -50,6 +50,19 @@ optimize for stability and clarity.
     `FENCE_SANDBOX_MODE` continue to reflect the caller's intent so downstream
     scripts stay informed.
 
+## `codex-fence` + Rust helpers
+- **Purpose:** Top-level CLI for `--bang`/`--listen`/`--test` that hands off to
+  Rust binaries under `target/`. Hooks into the existing harness instead of
+  duplicating probe logic.
+- **Operational notes:** The Bash shims locate the compiled binaries next to
+  the repo or on `PATH` and export `CODEX_FENCE_ROOT` so the helpers can find
+  probes/tests.
+- **Expectations for edits:**
+  - Keep these wrappers thin and defensive; prefer fixing the Rust helpers
+    rather than piling logic into Bash.
+  - Preserve the data flow: `--bang` produces cfbo-v1 JSON, `--listen` consumes
+    it, and `--test` delegates to `tests/run.sh`.
+
 ## General expectations for agents
 - Prefer explicit, defensive checks that fail fast over implicit Bash behavior.
 - Document intent with comments when control flow might surprise a future

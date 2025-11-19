@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Thin wrapper that delegates to the Rust binary built by Cargo. Keep the path
+# resolution minimal so the helper remains portable across macOS and Linux.
+script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)
+repo_root=$(cd "${script_dir}/.." >/dev/null 2>&1 && pwd)
+
+binary="${repo_root}/target/release/fence-bang"
+if [[ ! -x "${binary}" ]]; then
+  binary="${repo_root}/target/debug/fence-bang"
+fi
+
+if [[ ! -x "${binary}" ]]; then
+  echo "fence-bang binary not found. Build it with 'cargo build --release'." >&2
+  exit 1
+fi
+
+export CODEX_FENCE_ROOT="${CODEX_FENCE_ROOT:-${repo_root}}"
+exec "${binary}" "$@"

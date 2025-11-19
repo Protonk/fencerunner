@@ -1,0 +1,88 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+usage() {
+  cat <<'USAGE' >&2
+Usage: codex-fence (--bang | --listen | --test) [args]
+
+Commands:
+  --bang, -b   Run the probe matrix and emit cfbo-v1 records to stdout (NDJSON).
+  --listen, -l Read cfbo-v1 JSON from stdin and print a human summary.
+  --test, -t   Run the repository tests.
+
+Example:
+  codex-fence --bang | codex-fence --listen
+USAGE
+}
+
+is_repo_root() {
+  local dir="$1"
+  [[ -f "${dir}/bin/fence-run" && -f "${dir}/Makefile" ]]
+}
+
+script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)
+repo_root=""
+
+if [[ -n "${CODEX_FENCE_ROOT:-}" ]] && is_repo_root "${CODEX_FENCE_ROOT}"; then
+  repo_root=$(cd "${CODEX_FENCE_ROOT}" >/dev/null 2>&1 && pwd)
+elif is_repo_root "${script_dir}/.."; then
+  repo_root=$(cd "${script_dir}/.." >/dev/null 2>&1 && pwd)
+fi
+
+if [[ $# -lt 1 ]]; then
+  usage
+  exit 1
+fi
+
+target=""
+case "$1" in
+  --bang|-b)
+    target="fence-bang"
+    ;;
+  --listen|-l)
+    target="fence-listen"
+    ;;
+  --test|-t)
+    target="fence-test"
+    ;;
+  --help|-h)
+    usage
+    exit 0
+    ;;
+  *)
+    usage
+    exit 1
+    ;;
+esac
+shift
+
+resolve_helper() {
+  local name="$1" candidate=""
+  local candidates=()
+  if [[ -n "${repo_root}" ]]; then
+    candidates+=("${repo_root}/bin/${name}")
+    candidates+=("${repo_root}/target/release/${name}")
+    candidates+=("${repo_root}/target/debug/${name}")
+  fi
+  candidates+=("${script_dir}/${name}")
+  for candidate in "${candidates[@]}"; do
+    if [[ -x "${candidate}" ]]; then
+      printf '%s\n' "${candidate}"
+      return 0
+    fi
+  done
+  if candidate=$(command -v "${name}" 2>/dev/null); then
+    printf '%s\n' "${candidate}"
+    return 0
+  fi
+  echo "Unable to locate helper '${name}'. Build the Rust binaries with 'cargo build --release' or set CODEX_FENCE_ROOT." >&2
+  exit 1
+}
+
+helper_path=$(resolve_helper "${target}")
+
+if [[ -n "${repo_root}" ]]; then
+  export CODEX_FENCE_ROOT="${CODEX_FENCE_ROOT:-${repo_root}}"
+fi
+
+exec "${helper_path}" "$@"

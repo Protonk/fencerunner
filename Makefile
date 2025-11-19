@@ -3,6 +3,9 @@
 
 # Force GNU Make to run every recipe with the baseline shell we test against.
 SHELL := /bin/bash
+CARGO ?= cargo
+PREFIX ?= /usr/local
+BINDIR ?= $(PREFIX)/bin
 
 # Resolve the set of probe scripts once and expose handy projections:
 # - ALL_PROBE_SCRIPTS: every `probes/*.sh` file on disk
@@ -42,7 +45,7 @@ MODES ?= $(DEFAULT_MODES)
 MATRIX_TARGETS := $(foreach mode,$(MODES),$(addprefix $(OUTDIR)/,$(addsuffix .$(mode).json,$(PROBES))))
 
 # These targets do not correspond to files on disk.
-.PHONY: all matrix clean test validate-capabilities probe
+.PHONY: all matrix clean test validate-capabilities probe install
 
 # Default invocation runs the full probe matrix.
 all: matrix
@@ -92,3 +95,12 @@ probe:
 # Confirm capability metadata (schema, adapters, fixtures) remain in sync.
 validate-capabilities:
 	tools/validate_capabilities.sh
+
+# Install the CLI + Rust helpers to $(BINDIR), building a release binary first.
+install:
+	CODEX_FENCE_ROOT_HINT="$(CURDIR)" $(CARGO) build --release
+	install -d "$(BINDIR)"
+	install -m 755 bin/codex-fence "$(BINDIR)/codex-fence"
+	install -m 755 target/release/fence-bang "$(BINDIR)/fence-bang"
+	install -m 755 target/release/fence-listen "$(BINDIR)/fence-listen"
+	install -m 755 target/release/fence-test "$(BINDIR)/fence-test"

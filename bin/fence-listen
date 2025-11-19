@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Delegates to the Rust fence-listen binary built under target/.
+script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)
+repo_root=$(cd "${script_dir}/.." >/dev/null 2>&1 && pwd)
+
+binary="${repo_root}/target/release/fence-listen"
+if [[ ! -x "${binary}" ]]; then
+  binary="${repo_root}/target/debug/fence-listen"
+fi
+
+if [[ ! -x "${binary}" ]]; then
+  echo "fence-listen binary not found. Build it with 'cargo build --release'." >&2
+  exit 1
+fi
+
+export CODEX_FENCE_ROOT="${CODEX_FENCE_ROOT:-${repo_root}}"
+exec "${binary}" "$@"

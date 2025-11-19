@@ -105,16 +105,48 @@ any subdirectory.
 - `python3` (falls back to `python`, then `perl`, for the portable path helpers)
 - `make`
 - The `codex` CLI (only if you plan to exercise Codex modes)
+- Rust toolchain (`cargo`/`rustc`) to build the CLI entrypoints
 
 The goal is to limit probe noise by keeping things lightweight and compatible
 with the toolchain shipped in macOS. Stock macOS + the `codex-universal`
 container already ship Python (and Perl), so the only additional dependency to
 install manually is `jq`.
 
+## Installation
+
+The CLI is a Bash wrapper around Rust helpers that reuse the existing harness.
+Install it onto your `PATH` from the repo root:
+
+```sh
+make install PREFIX="$HOME/.local"
+```
+
+This builds the release binaries and installs `codex-fence`, `fence-bang`,
+`fence-listen`, and `fence-test` under `$(PREFIX)/bin`. Keep the cloned repo
+around (or set `CODEX_FENCE_ROOT`) so the helpers can find probes, tools, and
+tests.
+
+## CLI
+
+Use `codex-fence` for the common workflows:
+
+- `codex-fence --bang` runs the probe matrix and emits cfbo-v1 boundary objects
+  as newline-delimited JSON to stdout, following the same mode defaults and
+  `PROBES`/`MODES` overrides as `make matrix`.
+- `codex-fence --listen` consumes cfbo-v1 JSON from stdin and prints a
+  human-readable summary of what succeeded or failed.
+- `codex-fence --test` executes the existing `tests/run.sh` harness.
+
+Pipeline example:
+
+```sh
+codex-fence --bang | codex-fence --listen
+```
+
 ## Usage
 
 Each probe run produces a cfbo-v1 boundary object captured under `out/`. Use
-these workflows to exercise the harness:
+these workflows to exercise the harness directly if you need to bypass the CLI:
 
 ### Run a single probe
 
