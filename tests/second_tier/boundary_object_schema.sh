@@ -53,7 +53,7 @@ jq -e '
    .probe.primary_capability_id == "cap_fs_read_workspace_tree" and
    (.probe.secondary_capability_ids | type == "array")) and
   (.run.mode as $mode | ($mode == "baseline" or $mode == "codex-sandbox" or $mode == "codex-full")) and
-  (.run | has("workspace_root") and has("command") and has("observed_at")) and
+  (.run | has("workspace_root") and has("command")) and
   (.operation.category == "fs" and .operation.verb == "read" and .operation.target == "/dev/null" and (.operation.args | type == "object")) and
   (.result.observed_result == "success" or .result.observed_result == "denied" or .result.observed_result == "partial" or .result.observed_result == "error") and
   (.result | has("raw_exit_code") and has("errno") and has("message") and has("duration_ms") and has("error_detail")) and
@@ -66,7 +66,7 @@ jq -e '
 ' "${record_tmp}" >/dev/null
 # jq -e exits non-zero if any invariant fails, propagating failure to the suite.
 
-python3 "${REPO_ROOT}/tests/library/json_schema_validator.py" \
+"${REPO_ROOT}/tests/library/json_schema_validator.sh" \
   "${REPO_ROOT}/schema/boundary_object.json" \
   "${record_tmp}"
 

@@ -9,6 +9,7 @@
 - Treat this file as a router: decide which subsystem you are editing, then obey the `*/AGENTS.md` in that directory so guidance stays layered instead of duplicated here.
 - Use the supported workflows: `tests/run.sh --probe <id>` (or `make probe PROBE=<id>`) for tight probe loops, `tests/run.sh`/`make test` for repo-wide checks, and `make matrix` when you need to exercise probes across modes.
 - Preserve the portability stance described in README/CONTRIBUTING—scripts must run on macOS `/bin/bash 3.2` and the `codex-universal` container with no extra dependencies beyond `jq`.
+- **Never add runtime dependencies beyond Bash + jq.** Introducing Python, Ruby, or other interpreters in harness scripts/tests breaks onboarding on stock macOS hosts. If you need new behavior, express it in Bash/jq or update the capability docs to explain why; do not “temporarily” lean on python3.
 - Keep new policy in machine artifacts (schemas, scripts, tests). Documentation and AGENTS files explain those artifacts; they do not replace them.
 
 ## Layered contracts (read before editing those areas)

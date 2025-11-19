@@ -231,18 +231,14 @@ probe_json=$(jq -n \
     secondary_capability_ids: $secondary_capability_ids
   }')
 
-observed_at=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-
 run_json=$(jq -n \
   --arg run_mode "${run_mode}" \
   --arg workspace_root "${workspace_root}" \
   --arg command "${command_executed}" \
-  --arg observed_at "${observed_at}" \
   '{
     mode: $run_mode,
     workspace_root: (($workspace_root | select(length > 0)) // null),
-    command: $command,
-    observed_at: $observed_at
+    command: $command
   }')
 
 operation_json=$(jq -n \

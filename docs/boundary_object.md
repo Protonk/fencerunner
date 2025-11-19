@@ -31,7 +31,7 @@ The machine-readable definition lives in `schema/boundary_object.json` and is en
 | `capabilities_schema_version` | yes (nullable) | The version from `schema/capabilities.json` that was loaded via the adapter (emitted as a string or integer such as `3`, `"3.1"`, or `"2024-05-01"`). |
 | `stack` | yes | Fingerprint of the Codex CLI + OS stack that hosted the probe. |
 | `probe` | yes | Identity and capability linkage for the probe implementation. |
-| `run` | yes | Execution metadata for this invocation (mode, workspace, command, timestamp). |
+| `run` | yes | Execution metadata for this invocation (mode, workspace, command). This harness intentionally omits timestamps so records stay stateless. |
 | `operation` | yes | Description of the sandbox-facing operation being attempted. |
 | `result` | yes | Normalized observed outcome plus error metadata. |
 | `payload` | yes | Small probe-specific diagnostics and structured raw data. |
@@ -72,7 +72,8 @@ Execution context specific to the current invocation.
 | `mode` | yes | `baseline`, `codex-sandbox`, or `codex-full`; matches `bin/fence-run`. |
 | `workspace_root` | yes (nullable) | Root detected from `FENCE_WORKSPACE_ROOT` or `git rev-parse`. |
 | `command` | yes | Human/machine-usable string describing the actual command. |
-| `observed_at` | yes | UTC timestamp when the record was emitted (ISO 8601). |
+
+cfbo-v1 deliberately does **not** capture timestamps or run durations. The harness stays stateless; downstream consumers that need clocks or diffing data must add it outside the boundary object.
 
 ### `operation`
 
@@ -141,8 +142,7 @@ A trimmed record from `probes/fs_outside_workspace.sh` (writes outside the works
   "run": {
     "mode": "codex-sandbox",
     "workspace_root": "/Users/example/project",
-    "command": "printf 'codex-fence write ...' >> '/tmp/codex-fence-outside-root-test'",
-    "observed_at": "2024-03-04T17:18:19Z"
+    "command": "printf 'codex-fence write ...' >> '/tmp/codex-fence-outside-root-test'"
   },
   "operation": {
     "category": "fs",

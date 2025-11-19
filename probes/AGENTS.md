@@ -55,7 +55,9 @@ A probe:
    process spawn, etc.). Gather whatever context you need to describe the
    attempt. Capture the command you actually ran (e.g.,
    `printf -v command_executed "... %q" ...`) and pass it through `--command`
-   so the boundary object contains reproducible execution context.
+   so the boundary object contains reproducible execution context. The `run`
+   object contains only mode/workspace/command—no timestamps—so probes never
+   need to track clocks.
 3. Collects stdout/stderr snippets (keep them short) and structured data in the
    payload. Normalize probe outcomes into: `success`, `denied`, `partial`, or
    `error`. Treat sandbox denials (`EACCES`, `EPERM`, network blocked, etc.) as
@@ -123,8 +125,7 @@ Matching JSON output (trimmed for brevity):
   "run": {
     "mode": "baseline",
     "workspace_root": "/path/to/workspace",
-    "command": "printf 'codex-fence write ...' >> '/tmp/codex-fence-outside-root-test'",
-    "observed_at": "2024-03-04T17:18:19Z"
+    "command": "printf 'codex-fence write ...' >> '/tmp/codex-fence-outside-root-test'"
   },
   "result": {
     "observed_result": "denied",

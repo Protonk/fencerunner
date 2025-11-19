@@ -73,8 +73,7 @@
       "required": [
         "mode",
         "workspace_root",
-        "command",
-        "observed_at"
+        "command"
       ],
       "properties": {
         "mode": {
@@ -82,11 +81,7 @@
           "enum": ["baseline", "codex-sandbox", "codex-full"]
         },
         "workspace_root": { "type": ["string", "null"] },
-        "command": { "type": "string" },
-        "observed_at": {
-          "type": "string",
-          "format": "date-time"
-        }
+        "command": { "type": "string" }
       }
     },
     "operation": {

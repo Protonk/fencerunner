@@ -35,10 +35,10 @@ silent on success, and deterministic.
 - `tests/library/utils.sh` exposes `REPO_ROOT`, `extract_probe_var`, and
   `resolve_probe_script_path`. Source it from any new suite instead of duplicating
   path logic.
-- `tests/library/json_schema_validator.py` is a hermetic JSON Schema validator
-  covering the subset of Draft-07 the harness needs. Use it when validating
-  emitted records against `schema/boundary_object.json` (see the boundary object
-  suite for usage).
+- `tests/library/json_schema_validator.sh` is a hermetic JSON Schema validator
+  implemented entirely with `jq`. It covers the subset of Draft-07 the harness
+  needs. Use it when validating emitted records against
+  `schema/boundary_object.json` (see the boundary object suite for usage).
 - `tests/library/fixtures/probe_fixture.sh` is a self-contained probe used by the
   smoke suites. It writes to a temporary workspace and pipes a deterministic
   record into `bin/emit-record`. Prefer copying this file when you need a dummy
