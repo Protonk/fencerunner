@@ -2,15 +2,18 @@
 set -euo pipefail
 
 # cap_fs_read_workspace_tree success case: read a workspace file using ./ and ../ segments.
+emit_record_bin="${repo_root}/bin/emit-record"
 repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." >/dev/null 2>&1 && pwd)
 emit_record_bin="${repo_root}/bin/emit-record"
-portable_realpath_lib="${repo_root}/lib/portable_realpath.sh"
-if [[ ! -f "${portable_realpath_lib}" ]]; then
-  echo "portable_realpath helper missing at ${portable_realpath_lib}" >&2
+portable_path_helper="${repo_root}/bin/portable-path"
+if [[ ! -x "${portable_path_helper}" ]]; then
+  echo "portable-path helper missing at ${portable_path_helper}. Build it with 'cargo build --release'." >&2
   exit 1
 fi
-# shellcheck source=../lib/portable_realpath.sh
-source "${portable_realpath_lib}"
+
+portable_realpath() {
+  "${portable_path_helper}" realpath "$1"
+}
 
 run_mode="${FENCE_RUN_MODE:-baseline}"
 probe_name="fs_workspace_relative_segments_read_ok"

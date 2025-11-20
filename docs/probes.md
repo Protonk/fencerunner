@@ -23,12 +23,11 @@ This file serves as documentation. For authoritative, test-enforced Probe and Pr
   `primary_capability_id` (with optional `secondary_capability_ids`). The ids
   come from `schema/capabilities.json` and are validated at emit time via the
   adapter in `tools/capabilities_adapter.sh`.
-- **Helpers:** Shared utilities live under `lib/` (for example
-  `lib/portable_realpath.sh`). Source only the helpers you need instead of
-  when needed instead of re-implementing interpreter detection. Helpers are
-  pure and portable so probes stay single-purpose. In particular, prefer
-  `portable_realpath`/`portable_relpath` whenever you need canonical or
-  relative paths.
+- **Helpers:** Shared utilities live under `lib/` and the compiled helpers in
+  `bin/`. Source only what you need instead of re-implementing interpreter
+  detection. Canonical and relative path lookups now route through the Rust
+  helper `bin/portable-path`, so prefer `portable-path realpath|relpath`
+  whenever you need normalized paths.
 
 ## How the harness runs a probe
 

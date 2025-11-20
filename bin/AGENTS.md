@@ -63,6 +63,21 @@ optimize for stability and clarity.
   - Preserve the data flow: `--bang` produces cfbo-v1 JSON, `--listen` consumes
     it, and `--test` delegates to `tests/run.sh`.
 
+## `portable-path`
+- **Purpose:** Provide canonical absolute (`realpath`) and relative (`relpath`)
+  path calculations without depending on system Python/Perl availability.
+- **Operational notes:** The Bash wrapper in `bin/portable-path` locates the
+  compiled Rust binary under `target/{release,debug}`. It must stay
+  dependency-free aside from Rust's `std::path` so probes/tests can rely on it
+  in any environment.
+- **Expectations for edits:**
+  - Preserve the `portable-path <realpath|relpath> …` CLI so existing scripts
+    remain compatible.
+  - Keep behavior deterministic: emit an empty line for unresolved paths and
+    `.` when the relative path collapses to the same directory.
+  - Avoid adding new subcommands unless you update probes/tests/documentation
+    in the same change.
+
 ## General expectations for agents
 - Prefer explicit, defensive checks that fail fast over implicit Bash behavior.
 - Document intent with comments when control flow might surprise a future

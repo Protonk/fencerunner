@@ -4,9 +4,15 @@ set -euo pipefail
 # Variant for cap_fs_follow_symlinks_out_of_workspace: uses a relative symlink chain to reach /etc/hosts.
 repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." >/dev/null 2>&1 && pwd)
 emit_record_bin="${repo_root}/bin/emit-record"
-portable_relpath_lib="${repo_root}/lib/portable_relpath.sh"
+portable_path_helper="${repo_root}/bin/portable-path"
+if [[ ! -x "${portable_path_helper}" ]]; then
+  echo "portable-path helper missing at ${portable_path_helper}. Build it with 'cargo build --release'." >&2
+  exit 1
+fi
 
-source "${portable_relpath_lib}"
+portable_relpath() {
+  "${portable_path_helper}" relpath "$1" "$2"
+}
 
 run_mode="${FENCE_RUN_MODE:-baseline}"
 probe_name="fs_symlink_escape_relative_read"

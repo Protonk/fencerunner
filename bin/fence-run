@@ -58,13 +58,15 @@ fi
 
 script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)
 repo_root=$(cd "${script_dir}/.." >/dev/null 2>&1 && pwd)
-portable_realpath_lib="${repo_root}/lib/portable_realpath.sh"
-if [[ ! -f "${portable_realpath_lib}" ]]; then
-  echo "portable_realpath helper not found at ${portable_realpath_lib}" >&2
+portable_path_helper="${repo_root}/bin/portable-path"
+if [[ ! -x "${portable_path_helper}" ]]; then
+  echo "portable-path helper not found at ${portable_path_helper}. Build it with 'cargo build --release'." >&2
   exit 1
 fi
-# shellcheck source=../lib/portable_realpath.sh
-source "${portable_realpath_lib}"
+
+portable_realpath() {
+  "${portable_path_helper}" realpath "$1"
+}
 
 canonicalize_workspace_root() {
   local candidate="$1"

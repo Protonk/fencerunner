@@ -9,9 +9,9 @@
 - Treat this file as a router: decide which subsystem you are editing, then obey the `*/AGENTS.md` in that directory so guidance stays layered instead of duplicated here.
 - Use the supported workflows: `tests/run.sh --probe <id>` (or `make probe PROBE=<id>`) for tight probe loops, `tests/run.sh`/`make test` for repo-wide checks, and `make matrix` when you need to exercise probes across modes.
 - `bin/codex-fence` is the top-level CLI for bang/listen/test and delegates to Rust helpers; keep it aligned with the Makefile defaults and existing harness scripts instead of reimplementing probe logic.
-- Preserve the portability stance described in README/CONTRIBUTING—scripts must run on macOS `/bin/bash 3.2` and the `codex-universal` container with only `jq` plus the stock Python → Perl fallback used by `lib/portable_{real,rel}path.sh`.
-- **Do not introduce new runtime dependencies beyond Bash + jq + the existing Python→Perl fallback used by the helpers.** If you need new behavior, express it in Bash/jq or justify the change in capability/docs updates rather than pulling in extra interpreters.
-- Canonicalize paths before enforcing workspace/probe boundaries. Source `lib/portable_realpath.sh` / `lib/portable_relpath.sh` instead of rolling ad‑hoc `readlink`/`python` calls—mixed strategies are how regressions like probe path escapes reappear.
+- Preserve the portability stance described in README/CONTRIBUTING—scripts must run on macOS `/bin/bash 3.2` and the `codex-universal` container with only `jq` plus the Rust helpers that ship in `bin/` (build them with `cargo build --release`).
+- **Do not introduce new runtime dependencies beyond Bash, jq, and the existing Rust binaries.** If you need new behavior, express it in Bash/jq or extend the Rust helpers instead of pulling additional interpreters into the runtime path.
+- Canonicalize paths before enforcing workspace/probe boundaries. Use `bin/portable-path realpath|relpath` instead of rolling ad‑hoc `readlink`/`python` calls—mixed strategies are how regressions like probe path escapes reappear.
 - Keep new policy in machine artifacts (schemas, scripts, tests). Documentation and AGENTS files explain those artifacts; they do not replace them.
 
 ## Layered contracts (read before editing those areas)

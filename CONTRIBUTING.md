@@ -27,9 +27,10 @@ valuable.
 
 ### Helpers and tooling
 
-- Probe helpers live under `lib/` (one function per script, e.g.,
-  `lib/portable_realpath.sh`). Keep helpers pure (no global state or side
-  effects) so probes and tests can source them safely.
+- Probe helpers live under `lib/` (one function per script when you add new
+  Bash utilities). Path canonicalization now lives in the Rust helper
+  `bin/portable-path`, so prefer `portable-path realpath|relpath` instead of
+  introducing interpreter fallbacks.
 - Project-level scripts (lint, validation, adapters) live under `tools/`.
   The fast probe lint entry point, `tests/probe_contract/light_lint.sh`,
   lives next to the static probe contract suite—prefer extending it for new

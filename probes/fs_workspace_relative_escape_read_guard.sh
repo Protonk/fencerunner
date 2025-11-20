@@ -5,18 +5,19 @@ set -euo pipefail
 probe_name="fs_workspace_relative_escape_read_guard"
 repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." >/dev/null 2>&1 && pwd)
 emit_record_bin="${repo_root}/bin/emit-record"
-portable_relpath_lib="${repo_root}/lib/portable_relpath.sh"
-portable_realpath_lib="${repo_root}/lib/portable_realpath.sh"
-for helper in "${portable_relpath_lib}" "${portable_realpath_lib}"; do
-  if [[ ! -f "${helper}" ]]; then
-    echo "probe ${probe_name:-fs_workspace_relative_escape_read_guard}: missing helper ${helper}" >&2
-    exit 1
-  fi
-done
-# shellcheck source=../lib/portable_relpath.sh
-source "${portable_relpath_lib}"
-# shellcheck source=../lib/portable_realpath.sh
-source "${portable_realpath_lib}"
+portable_path_helper="${repo_root}/bin/portable-path"
+if [[ ! -x "${portable_path_helper}" ]]; then
+  echo "probe ${probe_name:-fs_workspace_relative_escape_read_guard}: missing helper ${portable_path_helper}. Build it with 'cargo build --release'." >&2
+  exit 1
+fi
+
+portable_relpath() {
+  "${portable_path_helper}" relpath "$1" "$2"
+}
+
+portable_realpath() {
+  "${portable_path_helper}" realpath "$1"
+}
 
 run_mode="${FENCE_RUN_MODE:-baseline}"
 probe_version="1"

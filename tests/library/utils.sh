@@ -11,13 +11,15 @@ if [[ -z "${REPO_ROOT:-}" ]]; then
   REPO_ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." >/dev/null 2>&1 && pwd)
 fi
 
-portable_realpath_lib="${REPO_ROOT}/lib/portable_realpath.sh"
-if [[ ! -f "${portable_realpath_lib}" ]]; then
-  echo "tests/library/utils: missing portable_realpath helper at ${portable_realpath_lib}" >&2
+portable_path_helper="${REPO_ROOT}/bin/portable-path"
+if [[ ! -x "${portable_path_helper}" ]]; then
+  echo "tests/library/utils: missing portable-path helper at ${portable_path_helper}" >&2
   exit 1
 fi
-# shellcheck source=../../lib/portable_realpath.sh
-source "${portable_realpath_lib}"
+
+portable_realpath() {
+  "${portable_path_helper}" realpath "$1"
+}
 
 extract_probe_var() {
   local file="$1"

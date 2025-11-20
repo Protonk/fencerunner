@@ -19,3 +19,7 @@ path = "src/bin/fence_listen.rs"
 [[bin]]
 name = "fence-test"
 path = "src/bin/fence_test.rs"
+
+[[bin]]
+name = "portable-path"
+path = "src/bin/portable_path.rs"

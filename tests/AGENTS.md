@@ -35,7 +35,7 @@ silent on success, and deterministic.
 
 - `tests/library/utils.sh` exposes `REPO_ROOT`, `extract_probe_var`, and
   `resolve_probe_script_path`. Source it from any new suite instead of duplicating
-  path logic. It already sources `lib/portable_realpath.sh` so probe paths are
+  path logic. It shells out to `bin/portable-path realpath` so probe paths are
   canonicalized before prefix checks—reuse that helper whenever you need to
   reason about files under `probes/` or the workspace.
 - `tests/library/json_schema_validator.sh` is a hermetic JSON Schema validator

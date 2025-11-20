@@ -145,10 +145,10 @@ capability currently has at least one probe.
     - `agent_default_sandbox_env`
 
 Keep each probe:
-- Small and single-purpose. When you need reusable helpers (portable
-  realpath/relpath, metadata extraction, JSON parsing), source
-  the helper scripts in `lib/` (for example `lib/portable_realpath.sh`) instead of duplicating
-  interpreter detection. Helpers stay pure so probes remain focused.
+- Small and single-purpose. When you need reusable helpers (path
+  canonicalization, metadata extraction, JSON parsing), source the helpers in
+  `lib/` or shell out to the compiled utilities in `bin/`. For paths, rely on
+  `bin/portable-path realpath|relpath` instead of rolling your own detection.
 - Clearly labeled with `primary_capability_id`. Choose the best match from the
   catalog and optionally list related capabilities in
   `secondary_capability_ids`. `bin/emit-record` enforces these IDs.

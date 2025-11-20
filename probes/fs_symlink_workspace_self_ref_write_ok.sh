@@ -1,11 +1,18 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+emit_record_bin="${repo_root}/bin/emit-record"
 repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." >/dev/null 2>&1 && pwd)
 emit_record_bin="${repo_root}/bin/emit-record"
-portable_realpath_lib="${repo_root}/lib/portable_realpath.sh"
+portable_path_helper="${repo_root}/bin/portable-path"
+if [[ ! -x "${portable_path_helper}" ]]; then
+  echo "portable-path helper missing at ${portable_path_helper}. Build it with 'cargo build --release'." >&2
+  exit 1
+fi
 
-source "${portable_realpath_lib}"
+portable_realpath() {
+  "${portable_path_helper}" realpath "$1"
+}
 
 run_mode="${FENCE_RUN_MODE:-baseline}"
 probe_name="fs_symlink_workspace_self_ref_write_ok"

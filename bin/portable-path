@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Wrapper around the portable-path Rust helper. Mirrors the other bin helpers so
+# shell scripts can rely on a stable location regardless of build profile.
+script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)
+repo_root=$(cd "${script_dir}/.." >/dev/null 2>&1 && pwd)
+
+binary="${repo_root}/target/release/portable-path"
+if [[ ! -x "${binary}" ]]; then
+  binary="${repo_root}/target/debug/portable-path"
+fi
+
+if [[ ! -x "${binary}" ]]; then
+  echo "portable-path binary not found. Build it with 'cargo build --release'." >&2
+  exit 1
+fi
+
+exec "${binary}" "$@"

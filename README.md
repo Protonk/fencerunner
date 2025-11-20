@@ -86,8 +86,8 @@ Once I decide on an API and freeze it I'll retract the "provisionally".
 | Path | Role |
 | --- | --- |
 | `probes/` | Executable probe scripts + author contract; each maps capabilities to observations. |
-| `bin/` | Harness entry points (`fence-run`, `emit-record`, `detect-stack`) that bind probes to modes and capture stack data. |
-| `lib/` | Pure Bash helpers available to probes/tests (`portable_realpath`, serialization helpers, etc.). |
+| `bin/` | Harness entry points (`fence-run`, `emit-record`, `detect-stack`) plus compiled helpers such as `portable-path` that bind probes to modes and capture stack data. |
+| `lib/` | Reserved for pure Bash helpers; most path logic now routes through the Rust helper in `bin/portable-path`. |
 | `tools/` | Capability adapters/validators that keep metadata consistent across scripts and tests. |
 | `schema/` | Machine-readable capability catalog and cfbo schema consumed by bin/tools/tests. |
 | `docs/` | Human-readable explanations of catalogs, probes, and boundary objects; use alongside the schema files. |
@@ -102,15 +102,15 @@ any subdirectory.
 
 - POSIX shell utilities + `bash 3.2`
 - `jq`
-- `python3` (falls back to `python`, then `perl`, for the portable path helpers)
+- `python3` (used by the network/process probes—keep the system interpreter around)
 - `make`
 - The `codex` CLI (only if you plan to exercise Codex modes)
 - Rust toolchain (`cargo`/`rustc`) to build the CLI entrypoints
 
 The goal is to limit probe noise by keeping things lightweight and compatible
 with the toolchain shipped in macOS. Stock macOS + the `codex-universal`
-container already ship Python (and Perl), so the only additional dependency to
-install manually is `jq`.
+container already ship Python, so the only additional dependency to install
+manually is `jq`.
 
 ## Installation
 
