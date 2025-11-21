@@ -1,3 +1,8 @@
+//! Portable replacements for `realpath`/`relpath` without external deps.
+//!
+//! This helper mirrors the behavior expected by probe scripts on both macOS and
+//! Linux, avoiding reliance on platform-specific coreutils implementations.
+
 use anyhow::{Result, bail};
 use std::env;
 use std::fs;

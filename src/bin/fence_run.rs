@@ -1,3 +1,11 @@
+//! Executes a probe in the requested run mode while enforcing workspace rules.
+//!
+//! Responsibilities:
+//! - resolve probes strictly within `probes/`
+//! - export `FENCE_*` environment expected by probe scripts and `emit-record`
+//! - wrap Codex sandbox/full invocations when requested
+//! - honor workspace overrides without silently falling back to host defaults
+
 use anyhow::{Context, Result, bail};
 use codex_fence::{codex_present, find_repo_root, resolve_probe};
 use std::env;
@@ -37,15 +45,18 @@ struct CliArgs {
 }
 
 #[derive(Clone)]
+/// How the workspace root should be exported to the probe.
 enum WorkspaceOverride {
     UsePath(OsString),
     SkipExport,
 }
 
+/// Finalized workspace export plan after considering CLI/env overrides.
 struct WorkspacePlan {
     export_value: Option<OsString>,
 }
 
+/// Program and arguments used to execute the probe for a given mode.
 struct CommandSpec {
     program: OsString,
     args: Vec<OsString>,
@@ -116,6 +127,8 @@ fn determine_workspace_plan(
     default_root: &Path,
     cli_override: Option<WorkspaceOverride>,
 ) -> Result<WorkspacePlan> {
+    // CLI override wins; otherwise honor FENCE_WORKSPACE_ROOT if set, and only
+    // then fall back to the repo root.
     if let Some(override_value) = cli_override {
         return Ok(workspace_plan_from_override(override_value));
     }

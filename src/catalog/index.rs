@@ -1,12 +1,22 @@
+//! Indexed view of the capability catalog.
+//!
+//! The index enforces the expected catalog schema key and provides fast lookup
+//! by capability id. It is intentionally strict about duplicates and unknown
+//! schema versions so helper binaries cannot silently consume mismatched
+//! catalogs.
+
 use crate::catalog::load_catalog_from_path;
 use crate::catalog::{Capability, CapabilityCatalog, CapabilityId, CatalogKey};
 use anyhow::{Context, Result, bail};
 use std::collections::BTreeMap;
 use std::path::Path;
 
+// The harness currently ships a single catalog; reject unexpected versions
+// rather than risk emitting records with mismatched metadata.
 const EXPECTED_SCHEMA_VERSION: &str = "macOS_codex_v1";
 
 #[derive(Debug)]
+/// Capability catalog plus a derived index keyed by capability id.
 pub struct CapabilityIndex {
     catalog_key: CatalogKey,
     catalog: CapabilityCatalog,
@@ -14,6 +24,10 @@ pub struct CapabilityIndex {
 }
 
 impl CapabilityIndex {
+    /// Load and validate the catalog from disk.
+    ///
+    /// Validates the schema key, ensures capability ids are unique, and builds
+    /// a deterministic BTreeMap for fast lookups.
     pub fn load(path: &Path) -> Result<Self> {
         let catalog =
             load_catalog_from_path(path).with_context(|| format!("loading {}", path.display()))?;
@@ -26,18 +40,25 @@ impl CapabilityIndex {
         })
     }
 
+    /// The catalog key declared in the loaded file.
     pub fn key(&self) -> &CatalogKey {
         &self.catalog_key
     }
 
+    /// Resolve a capability by id.
+    ///
+    /// Returns `None` instead of erroring; callers surface errors with the CLI
+    /// context that referenced the missing id.
     pub fn capability(&self, id: &CapabilityId) -> Option<&Capability> {
         self.by_id.get(id)
     }
 
+    /// Iterates capability ids in stable order.
     pub fn ids(&self) -> impl Iterator<Item = &CapabilityId> {
         self.by_id.keys()
     }
 
+    /// Access the underlying catalog (categories, docs, etc.).
     pub fn catalog(&self) -> &CapabilityCatalog {
         &self.catalog
     }

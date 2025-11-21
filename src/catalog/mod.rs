@@ -1,3 +1,10 @@
+//! Capability catalog wiring.
+//!
+//! This module wraps the JSON catalog under `schema/capabilities.json` so
+//! helpers can load a validated snapshot and expose consistent identifiers.
+//! Types here mirror the schema fields; callers use `CapabilityIndex` for fast
+//! lookups and `CatalogRepository` when multiple catalogs are registered.
+
 pub mod identity;
 pub mod index;
 pub mod model;

@@ -1,3 +1,10 @@
+//! Runs a probe/mode matrix and streams boundary objects as NDJSON.
+//!
+//! This binary is the scripted equivalent of `make matrix`: it discovers probes
+//! (or honors `PROBES`/`PROBES_RAW`), selects modes (`MODES` or defaults based
+//! on Codex availability), executes each probe via `fence-run`, and prints each
+//! emitted JSON object on its own line.
+
 use anyhow::{Context, Result, bail};
 use codex_fence::{
     Probe, codex_present, find_repo_root, list_probes, resolve_helper_binary, resolve_probe,

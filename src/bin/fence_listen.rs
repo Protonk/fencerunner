@@ -1,3 +1,9 @@
+//! Human-readable summary view for cfbo-v1 streams.
+//!
+//! `fence-listen` accepts NDJSON or JSON arrays of boundary objects and prints
+//! capability-level summaries plus a list of non-successful runs to aid quick
+//! inspection while iterating locally.
+
 use anyhow::{Context, Result};
 use codex_fence::{BoundaryObject, CapabilitySnapshot, parse_json_stream};
 use std::{

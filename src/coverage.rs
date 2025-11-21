@@ -1,17 +1,30 @@
+//! Coverage accounting between the capability catalog and authored probes.
+//!
+//! Helpers here build a capability→probe mapping used by listeners and tests to
+//! identify gaps. Coverage intentionally ignores fixtures and known broken
+//! probes so only actionable entries surface.
+
 use crate::catalog::CapabilityIndex;
 use crate::probe_metadata::ProbeMetadata;
 use anyhow::{Result, anyhow, bail};
 use serde::Serialize;
 use std::collections::BTreeMap;
 
+// Probes used by tests or contract fixtures should not count toward coverage.
 const IGNORED_PROBE_IDS: &[&str] = &["tests_fixture_probe", "tests_static_contract_broken"];
 
 #[derive(Debug, Clone, Serialize)]
+/// Whether a capability has one or more probes plus the list of those ids.
 pub struct CoverageEntry {
     pub has_probe: bool,
     pub probe_ids: Vec<String>,
 }
 
+/// Build a mapping of capability id to probe coverage.
+///
+/// Rejects unknown capability ids so regressions in probe metadata surface
+/// immediately. Duplicate probe ids per capability are deduplicated but kept
+/// stable for deterministic output.
 pub fn build_probe_coverage_map(
     capabilities: &CapabilityIndex,
     probes: &[ProbeMetadata],
@@ -56,6 +69,7 @@ pub fn build_probe_coverage_map(
     Ok(map)
 }
 
+/// Sanity-check that the coverage map contains every capability in the index.
 pub fn validate_coverage_against_map(
     coverage: &BTreeMap<String, CoverageEntry>,
     capabilities: &CapabilityIndex,
@@ -68,6 +82,7 @@ pub fn validate_coverage_against_map(
     Ok(())
 }
 
+/// Filter out probes that should not affect coverage reporting.
 pub fn filter_coverage_probes(probes: &[ProbeMetadata]) -> Vec<ProbeMetadata> {
     probes
         .iter()

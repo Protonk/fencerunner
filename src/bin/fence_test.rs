@@ -1,3 +1,9 @@
+//! Entrypoint for the static probe contract gate.
+//!
+//! Invokes `tools/contract_gate/static_gate.sh` from the detected repo root and
+//! proxies its exit status so CI and local workflows can rely on a single Rust
+//! binary instead of the shell shim.
+
 use anyhow::{Context, Result};
 use codex_fence::find_repo_root;
 use std::process::{Command, Stdio};

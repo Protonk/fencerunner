@@ -1,3 +1,10 @@
+//! Top-level CLI wrapper that delegates to the synced helper binaries.
+//!
+//! The binary keeps the public `codex-fence --bang/--listen` interface stable
+//! while resolving the real helper paths (preferring the synced `bin/`
+//! artifacts). It also injects `CODEX_FENCE_ROOT` when possible so helpers can
+//! locate probes and fixtures even when invoked from an installed location.
+
 use anyhow::{Context, Result, bail};
 use codex_fence::{find_repo_root, resolve_helper_binary};
 use std::env;
@@ -75,6 +82,10 @@ fn usage(code: i32) -> ! {
     std::process::exit(code);
 }
 
+/// Locate the requested helper, preferring the repo-synced binaries.
+///
+/// The search order mirrors the harness contract: repo root, sibling directory
+/// to the current executable (useful for installed binaries), then PATH.
 fn resolve_helper(name: &str, repo_root: Option<&Path>) -> Result<PathBuf> {
     if let Some(root) = repo_root {
         if let Ok(path) = resolve_helper_binary(root, name) {
@@ -100,6 +111,7 @@ fn resolve_helper(name: &str, repo_root: Option<&Path>) -> Result<PathBuf> {
     )
 }
 
+/// Execute the resolved helper, wiring CODEX_FENCE_ROOT when available.
 fn run_helper(cli: &Cli, repo_root: Option<&Path>) -> Result<()> {
     let helper_path = resolve_helper(cli.command.helper_name(), repo_root)?;
     let mut command = Command::new(&helper_path);

@@ -1,3 +1,9 @@
+//! Collects host/sandbox metadata for inclusion in boundary objects.
+//!
+//! The binary is intentionally dependency-free and lightweight because probes
+//! invoke it for every record. It reflects the current run mode (from CLI or
+//! env), infers sandbox/codex details, and emits a JSON `StackInfo` snapshot.
+
 use anyhow::{Result, bail};
 use serde::Serialize;
 use std::env;

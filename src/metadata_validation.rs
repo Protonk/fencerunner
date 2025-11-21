@@ -1,3 +1,9 @@
+//! Validation helpers for cross-checking probes and emitted records.
+//!
+//! Used by guard-rail tests to ensure probe metadata only references known
+//! capability IDs and that stored boundary objects remain in sync with the
+//! current catalog snapshot.
+
 use crate::catalog::{CapabilityId, CapabilityIndex};
 use crate::probe_metadata::ProbeMetadata;
 use anyhow::Result;
@@ -10,6 +16,8 @@ pub fn validate_probe_capabilities(
     capabilities: &CapabilityIndex,
     probes: &[ProbeMetadata],
 ) -> Vec<String> {
+    // Return a list of errors rather than short-circuiting so callers can
+    // surface multiple probe issues at once.
     let mut errors = Vec::new();
     for probe in probes {
         let display = probe.script.display();
@@ -60,6 +68,8 @@ pub fn validate_boundary_objects(
 
         let mut seen = BTreeSet::new();
         for cap_id in extract_capability_ids(&value) {
+            // Avoid spamming the same missing capability multiple times when it
+            // appears in both probe and context sections.
             if !seen.insert(cap_id.clone()) {
                 continue;
             }

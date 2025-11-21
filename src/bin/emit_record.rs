@@ -1,3 +1,10 @@
+//! Translates probe CLI inputs into a cfbo-v1 boundary object.
+//!
+//! This binary is the authoritative serializer for probe output. It validates
+//! capability IDs against the shipped catalog, shells out to `detect-stack` for
+//! host context, resolves workspace roots following the documented fallback
+//! order, and prints a single JSON record to stdout.
+
 use anyhow::{Context, Result, anyhow, bail};
 use codex_fence::{
     CapabilityId, CapabilityIndex, CapabilitySnapshot, find_repo_root, resolve_helper_binary,
@@ -123,6 +130,10 @@ fn run() -> Result<()> {
     Ok(())
 }
 
+/// Parsed command-line arguments for a single record emission.
+///
+/// Fields mirror the cfbo envelope; most values are required because probes are
+/// expected to normalize outcomes themselves before calling this binary.
 struct CliArgs {
     run_mode: String,
     probe_name: String,
@@ -419,6 +430,8 @@ fn resolve_workspace_root() -> Result<Option<String>> {
         }
     }
 
+    // Match the documented fallback order: prefer git top-level when available,
+    // then PWD (if exported), finally the current working directory.
     if let Ok(output) = Command::new("git")
         .args(["rev-parse", "--show-toplevel"])
         .stdout(Stdio::piped())

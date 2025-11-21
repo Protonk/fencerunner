@@ -1,3 +1,10 @@
+//! Lightweight parsing of probe scripts for metadata.
+//!
+//! The helpers here scrape Bash probes for the identifiers the harness needs
+//! (probe name, primary/secondary capabilities) without executing the scripts.
+//! They intentionally err on the side of under-reporting when values look
+//! dynamic because the outputs drive coverage accounting and validation.
+
 use crate::catalog::CapabilityId;
 use anyhow::{Context, Result};
 use std::collections::BTreeSet;
@@ -5,6 +12,10 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 #[derive(Debug, Clone)]
+/// Partial probe metadata scraped from a shell script.
+///
+/// Fields remain optional when static parsing cannot determine a value; callers
+/// surface missing requirements with file context.
 pub struct ProbeMetadata {
     pub script: PathBuf,
     pub probe_name: Option<String>,
@@ -13,6 +24,10 @@ pub struct ProbeMetadata {
 }
 
 impl ProbeMetadata {
+    /// Extract metadata assignments from a probe script.
+    ///
+    /// Parsing is heuristic: the function looks for simple variable assignments
+    /// and ignores commented lines rather than attempting a full shell parse.
     pub fn from_script(path: &Path) -> Result<Self> {
         let contents =
             fs::read_to_string(path).with_context(|| format!("reading {}", path.display()))?;
@@ -26,6 +41,9 @@ impl ProbeMetadata {
     }
 }
 
+/// Collect every `.sh` script under the provided roots.
+///
+/// Directory traversal is recursive to support fixture locations used by tests.
 pub fn collect_probe_scripts(paths: &[PathBuf]) -> Result<Vec<PathBuf>> {
     let mut scripts = Vec::new();
     for root in paths {
@@ -165,6 +183,8 @@ fn array_segment(text: &str) -> (&str, bool) {
 
 fn parse_token(raw: &str) -> Option<CapabilityId> {
     let trimmed = raw.trim().trim_matches(|c| c == '"' || c == '\'');
+    // Ignore empty tokens and anything containing shell substitution to avoid
+    // claiming dynamic IDs that can only be resolved at runtime.
     if trimmed.is_empty() || trimmed.contains('$') {
         return None;
     }
