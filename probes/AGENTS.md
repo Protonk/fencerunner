@@ -12,10 +12,7 @@ As the Probe Author, you:
   `docs/boundary_object.md` to understand every field the probe must provide.
 - Review existing probes under `probes/` to see which behaviors already have
   coverage and how outcomes are classified.
-- Keep a tight edit/test loop. While iterating on a script, run the
-  interpreted quick-fail contract tester,
-  `tools/contract_gate/static_gate.sh --probe probes/<id>.sh`, to
-  validate syntax and structure in isolation.
+- Keep a tight edit/test loop. While iterating on a script, run the contract gate (`bin/probe-contract-gate probes/<id>.sh`). This is a quick-fail static and dynamic probe tester designed for rapid use.
 
 Keep each probe:
 - Small and single-purpose. When you need reusable helpers (path

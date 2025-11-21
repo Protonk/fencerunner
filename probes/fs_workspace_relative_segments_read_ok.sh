@@ -2,7 +2,6 @@
 set -euo pipefail
 
 # cap_fs_read_workspace_tree success case: read a workspace file using ./ and ../ segments.
-emit_record_bin="${repo_root}/bin/emit-record"
 repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." >/dev/null 2>&1 && pwd)
 emit_record_bin="${repo_root}/bin/emit-record"
 portable_path_helper="${repo_root}/bin/portable-path"
