@@ -87,10 +87,6 @@ Add any heavier “whole repo” validation here. Follow the same structure: sou
 - **Static probe contract errors** list per-file issues (missing shebang,
   mismatched `probe_name`, etc.). Open the failing script directly and fix the
   reported condition.
-- **Capability coverage failures** mean either a document drift or a probe now
-  references an unknown capability. Update `schema/capabilities.json` and
-  regenerate `docs/data/probe_cap_coverage_map.json` (via `codex-fence --coverage-map`)
-  in the same commit.
 - **Harness/baseline smoke failures** often indicate regressions in
   `bin/fence-run` or `bin/emit-record`. Run the failing script with `bash -x` to
   inspect the plumbing.

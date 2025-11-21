@@ -97,7 +97,7 @@ Once I decide on an API and freeze it I'll retract the "provisionally".
 | `docs/` | Human-readable explanations of catalogs, probes, and boundary objects; use alongside the schema files. |
 | `tests/` | Library helpers plus the static probe contract and Rust guard rails; see [tests/AGENTS.md](tests/AGENTS.md). |
 | `out/` | Probe boundary objects, one JSON file per `<probe>.<mode>` run, ready for diffing. |
-| `Makefile` | Convenience targets (`matrix`, `test`, `probe`, `validate-capabilities`) that glue the harness together. |
+| `Makefile` | Convenience targets (`matrix`, `probe`, `install`, `build-bin`) that glue the harness together. |
 
 Pair this map with [`AGENTS.md`](AGENTS.md) when you need deeper orientation for
 any subdirectory.
@@ -159,10 +159,6 @@ Use `codex-fence` for the common workflows:
   human-readable summary of what succeeded or failed.
 - `codex-fence --test` runs the static probe contract across every
   `probes/*.sh` script.
-- `codex-fence --coverage-map [path]` emits the capability→probe coverage map
-  to stdout or to the provided path.
-- `codex-fence --validate-capabilities` checks that probes, fixtures, and
-  stored boundary objects only reference cataloged capability IDs.
 
 Pipeline example:
 
@@ -210,11 +206,8 @@ Probe development centers on a tight loop plus repo-wide guard rails:
 - `cargo test --test second_tier` executes the Rust guard rails
   (`boundary_object_schema`,
   `harness_smoke_probe_fixture`, `baseline_no_codex_smoke`, etc.).
-- `make validate-capabilities` confirms that probes, fixtures, and stored
-  boundary objects only reference cataloged capability IDs (via
-  `codex-fence --validate-capabilities`).
 
-Capability guard rails now live in Rust (`codex-fence` + tests) with
-`tools/capabilities_adapter.sh` kept for legacy automation. When in doubt
-about a workflow or directory contract, follow the layered guidance described
-in the various `*/AGENTS.md` files.
+Capability guard rails live in the Rust test suites; `tools/capabilities_adapter.sh`
+is kept for legacy automation. When in doubt about a workflow or directory
+contract, follow the layered guidance described in the various `*/AGENTS.md`
+files.

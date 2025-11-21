@@ -92,8 +92,5 @@ The fast authoring loop favors single-probe runs:
   iterate on a single script.
 - `codex-fence --test` runs the static contract against every probe in the
   repository.
-- `cargo test --test second_tier` covers the Rust guard rails (capability map
-  sync, schema validation, harness smoke tests, etc.).
-- `make validate-capabilities` checks that every probe, fixture, and stored
-  boundary object references real capability ids via
-  `codex-fence --validate-capabilities`.
+- `cargo test --test second_tier` covers the Rust guard rails (schema validation
+  and harness smoke tests).

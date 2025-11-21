@@ -45,7 +45,7 @@ MODES ?= $(DEFAULT_MODES)
 MATRIX_TARGETS := $(foreach mode,$(MODES),$(addprefix $(OUTDIR)/,$(addsuffix .$(mode).json,$(PROBES))))
 
 # These targets do not correspond to files on disk.
-.PHONY: all matrix clean validate-capabilities probe install build-bin
+.PHONY: all matrix clean probe install build-bin
 
 # Default invocation runs the full probe matrix.
 all: matrix
@@ -87,10 +87,6 @@ probe:
 		exit 1; \
 	fi
 	tests/probe_contract/static_probe_contract.sh --probe "$(PROBE)"
-
-# Confirm capability metadata (schema, adapters, fixtures) remain in sync.
-validate-capabilities:
-	cargo run --bin codex-fence -- --validate-capabilities
 
 build-bin:
 	tools/sync_bin_helpers.sh

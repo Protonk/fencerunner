@@ -33,5 +33,5 @@
 | `schema/` | Machine-readable capability catalog and boundary-object schema consumed by tooling. |
 | `out/` | Probe outputs (`<probe>.<mode>.json`) produced by `bin/fence-run`; inspect diffs here. |
 | `tmp/` | Scratch space for probe/test runs; safe to clean. |
-| `Makefile` | Convenience targets (`matrix`, `probe`, `validate-capabilities`) that tie bin/tools/tests together. |
+| `Makefile` | Convenience targets (`matrix`, `probe`, `install`, `build-bin`) that tie bin/tools/tests together. |
 | `README.md` / `CONTRIBUTING.md` | Motivation plus repo-level contribution principles referenced above. |

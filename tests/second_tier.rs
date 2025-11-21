@@ -1,14 +1,9 @@
 #![cfg(unix)]
 
-use anyhow::{Context, Result, anyhow, bail};
-use codex_fence::{
-    BoundaryObject, CapabilityIndex, CoverageEntry, ProbeMetadata, build_probe_coverage_map,
-    collect_probe_scripts, filter_coverage_probes, find_repo_root, validate_boundary_objects,
-    validate_probe_capabilities,
-};
+use anyhow::{Context, Result, bail};
+use codex_fence::{BoundaryObject, find_repo_root};
 use jsonschema::JSONSchema;
 use serde_json::{Value, json};
-use std::collections::BTreeMap;
 use std::env;
 use std::ffi::OsString;
 use std::fs::{self, File};
@@ -486,46 +481,6 @@ fn repo_guard() -> RepoGuard {
 
 fn repo_root() -> PathBuf {
     find_repo_root().expect("tests require repository root")
-}
-
-fn load_coverage_map(repo_root: &Path) -> Result<BTreeMap<String, CoverageEntry>> {
-    let path = repo_root.join("docs/data/probe_cap_coverage_map.json");
-    let value: Value = serde_json::from_reader(File::open(&path)?)?;
-    let obj = value
-        .as_object()
-        .ok_or_else(|| anyhow!("coverage map must be an object"))?;
-    let mut map = BTreeMap::new();
-    for (key, entry) in obj {
-        let has_probe = entry
-            .get("has_probe")
-            .and_then(Value::as_bool)
-            .unwrap_or(false);
-        let probe_ids = entry
-            .get("probe_ids")
-            .and_then(Value::as_array)
-            .map(|arr| {
-                arr.iter()
-                    .filter_map(|v| v.as_str().map(|s| s.to_string()))
-                    .collect::<Vec<_>>()
-            })
-            .unwrap_or_default();
-        map.insert(
-            key.clone(),
-            CoverageEntry {
-                has_probe,
-                probe_ids,
-            },
-        );
-    }
-    Ok(map)
-}
-
-fn load_probe_metadata(scripts: &[PathBuf]) -> Result<Vec<ProbeMetadata>> {
-    let mut probes = Vec::new();
-    for script in scripts {
-        probes.push(ProbeMetadata::from_script(script)?);
-    }
-    Ok(probes)
 }
 
 fn parse_boundary_object(bytes: &[u8]) -> Result<(BoundaryObject, Value)> {

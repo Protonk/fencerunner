@@ -8,8 +8,7 @@ update these helpers together.
 ## CLI entry points
 
 ### `codex-fence`
-- **Purpose:** Front door for `--bang`, `--listen`, `--test`, plus metadata
-  utilities (`--coverage-map`, `--validate-capabilities`). Delegates to the
+- **Purpose:** Front door for `--bang`, `--listen`, `--test`. Delegates to the
   specialized helpers while guaranteeing `CODEX_FENCE_ROOT` points at the repo
   so binaries can find fixtures.
 - **Expectations:**
@@ -17,8 +16,6 @@ update these helpers together.
   - Prefer the compiled binaries (`bin/` first, then `target/{release,debug}`)
     when resolving helpers, falling back to `$PATH` only when necessary.
   - Propagate exit codes verbatim so harness automation can detect failures.
-  - `--test` and the metadata commands must run inside the repo so they can
-    resolve the catalog and fixtures; keep that ordering intact.
 
 ### `fence-run`
 - **Purpose:** Resolve probe paths, enforce the requested sandbox mode, and

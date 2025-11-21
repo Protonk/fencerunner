@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-emit_record_bin="${repo_root}/bin/emit-record"
 repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." >/dev/null 2>&1 && pwd)
 emit_record_bin="${repo_root}/bin/emit-record"
 portable_path_helper="${repo_root}/bin/portable-path"

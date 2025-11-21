@@ -117,14 +117,3 @@ If you add a new document here:
    - and extend tests to cover it.
 
 As a rule: documentation in `docs/` should help agents *interpret* the contracts that live elsewhere. It should not introduce contracts that only exist in prose.
-
-### `data/probe_cap_coverage_map.json`
-
-**Role**
-
-Stores a capability→probe coverage map consumed by probe authors.
-
-**Read this if**
-
-- You need to see which probes cover a given capability without scanning each
-  script.

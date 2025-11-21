@@ -11,8 +11,7 @@ As the Probe Author, you:
 - Read `schema/boundary_object.json` alongside
   `docs/boundary_object.md` to understand every field the probe must provide.
 - Review existing probes under `probes/` to see which behaviors already have
-  coverage and how outcomes are classified. The mapping is mirrored in
-  `docs/data/probe_cap_coverage_map.json`.
+  coverage and how outcomes are classified.
 - Keep a tight edit/test loop. While iterating on a script, run the
   interpreted quick-fail contract tester,
   `tests/probe_contract/static_probe_contract.sh --probe probes/<id>.sh`, to
@@ -166,8 +165,3 @@ Matching JSON output (trimmed for brevity):
 This JSON links the probe to capability `cap_fs_write_workspace_tree`, records
 the executed command, and classifies the outcome using the `observed_result`
 vocabulary. Use this pattern whenever you add a new probe.
-
-## Capability coverage map 
-
-Refer to `docs/data/probe_cap_coverage_map.json` for the canonical mapping of
-capabilities to the probes that exercise them. 

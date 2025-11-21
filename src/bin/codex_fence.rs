@@ -1,9 +1,5 @@
-use anyhow::{anyhow, Context, Result, bail};
-use codex_fence::{
-    build_probe_coverage_map, collect_probe_scripts, filter_coverage_probes, find_repo_root,
-    resolve_helper_binary, validate_boundary_objects, validate_probe_capabilities, CapabilityIndex,
-    ProbeMetadata,
-};
+use anyhow::{Context, Result, bail};
+use codex_fence::{find_repo_root, resolve_helper_binary};
 use std::env;
 use std::ffi::OsString;
 use std::fs;
@@ -30,14 +26,6 @@ fn run() -> Result<()> {
     };
 
     match cli.command {
-        CommandTarget::CoverageMap => {
-            let root = require_repo_root(repo_root.as_deref())?;
-            run_coverage_map(root, &cli.trailing_args)
-        }
-        CommandTarget::ValidateCapabilities => {
-            let root = require_repo_root(repo_root.as_deref())?;
-            run_capability_validation(root, &cli.trailing_args)
-        }
         _ => run_helper(&cli, repo_root.as_deref()),
     }
 }
@@ -52,8 +40,6 @@ enum CommandTarget {
     Bang,
     Listen,
     Test,
-    CoverageMap,
-    ValidateCapabilities,
 }
 
 impl CommandTarget {
@@ -62,15 +48,11 @@ impl CommandTarget {
             CommandTarget::Bang => "fence-bang",
             CommandTarget::Listen => "fence-listen",
             CommandTarget::Test => "fence-test",
-            CommandTarget::CoverageMap | CommandTarget::ValidateCapabilities => "",
         }
     }
 
     fn requires_repo_root(self) -> bool {
-        matches!(
-            self,
-            CommandTarget::Test | CommandTarget::CoverageMap | CommandTarget::ValidateCapabilities
-        )
+        matches!(self, CommandTarget::Test)
     }
 }
 
@@ -91,8 +73,6 @@ impl Cli {
             "--bang" | "-b" => CommandTarget::Bang,
             "--listen" | "-l" => CommandTarget::Listen,
             "--test" | "-t" => CommandTarget::Test,
-            "--coverage-map" => CommandTarget::CoverageMap,
-            "--validate-capabilities" => CommandTarget::ValidateCapabilities,
             "--help" | "-h" => usage(0),
             _ => usage(1),
         };
@@ -107,7 +87,7 @@ impl Cli {
 
 fn usage(code: i32) -> ! {
     eprintln!(
-        "Usage: codex-fence (--bang | --listen | --test | --coverage-map [OUTPUT] | --validate-capabilities) [args]\n\nCommands:\n  --bang, -b                 Run the probe matrix and emit cfbo-v1 records to stdout (NDJSON).\n  --listen, -l               Read cfbo-v1 JSON from stdin and print a human summary.\n  --test, -t                 Run the static probe contract across every probes/*.sh script.\n  --coverage-map [OUTPUT]    Emit the capability→probe coverage map to stdout or to OUTPUT.\n  --validate-capabilities    Validate that probes and generated outputs reference known capability IDs.\n\nExample:\n  codex-fence --bang | codex-fence --listen"
+        "Usage: codex-fence (--bang | --listen | --test) [args]\n\nCommands:\n  --bang, -b   Run the probe matrix and emit cfbo-v1 records to stdout (NDJSON).\n  --listen, -l Read cfbo-v1 JSON from stdin and print a human summary.\n  --test, -t   Run the static probe contract across every probes/*.sh script.\n\nExample:\n  codex-fence --bang | codex-fence --listen"
     );
     std::process::exit(code);
 }
@@ -161,77 +141,6 @@ fn run_helper(cli: &Cli, repo_root: Option<&Path>) -> Result<()> {
     }
 
     bail!("Helper terminated by signal")
-}
-
-fn run_coverage_map(repo_root: &Path, args: &[OsString]) -> Result<()> {
-    if args.len() > 1 {
-        bail!("--coverage-map accepts at most one optional output path");
-    }
-
-    let output_path = args.first().map(PathBuf::from);
-    let capability_index = CapabilityIndex::load(&repo_root.join("schema/capabilities.json"))
-        .context("loading capability catalog")?;
-    let probes = load_probe_metadata_from_dirs(&[repo_root.join("probes")])?;
-    let coverage_probes = filter_coverage_probes(&probes);
-    let coverage = build_probe_coverage_map(&capability_index, &coverage_probes)?;
-    let json = serde_json::to_string_pretty(&coverage)?;
-
-    if let Some(path) = output_path {
-        fs::write(&path, json).with_context(|| format!("writing {}", path.display()))?;
-        eprintln!("coverage map written to {}", path.display());
-    } else {
-        println!("{json}");
-    }
-
-    Ok(())
-}
-
-fn run_capability_validation(repo_root: &Path, args: &[OsString]) -> Result<()> {
-    if !args.is_empty() {
-        bail!("--validate-capabilities does not accept additional arguments");
-    }
-
-    let capability_index = CapabilityIndex::load(&repo_root.join("schema/capabilities.json"))
-        .context("loading capability catalog")?;
-    let probes = load_probe_metadata_from_dirs(&[
-        repo_root.join("probes"),
-        repo_root.join("tests/library/fixtures"),
-    ])?;
-
-    let mut errors = Vec::new();
-    errors.extend(validate_probe_capabilities(&capability_index, &probes));
-    errors.extend(validate_boundary_objects(
-        &capability_index,
-        &[repo_root.join("out")],
-    )?);
-
-    if errors.is_empty() {
-        println!("validate_capabilities: PASS");
-        return Ok(());
-    }
-
-    eprintln!("validate_capabilities: FAIL");
-    for err in &errors {
-        eprintln!("  - {err}");
-    }
-    bail!("capability validation failed");
-}
-
-fn load_probe_metadata_from_dirs(dirs: &[PathBuf]) -> Result<Vec<ProbeMetadata>> {
-    let scripts = collect_probe_scripts(dirs)?;
-    let mut probes = Vec::new();
-    for script in scripts {
-        probes.push(ProbeMetadata::from_script(&script)?);
-    }
-    Ok(probes)
-}
-
-fn require_repo_root<'a>(repo_root: Option<&'a Path>) -> Result<&'a Path> {
-    repo_root.ok_or_else(|| {
-        anyhow!(
-            "Unable to locate codex-fence repository root. Set CODEX_FENCE_ROOT to the cloned repository."
-        )
-    })
 }
 
 fn find_on_path(name: &str) -> Option<PathBuf> {

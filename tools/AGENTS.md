@@ -1,12 +1,11 @@
 # Tools Playbook for Agents
 
 This directory hosts the remaining guard-rail helpers for capability metadata.
-`capabilities_adapter.sh` stays as a legacy entry point for automated agents,
-but capability validation and coverage generation now live in Rust (`codex-fence
---validate-capabilities` / `--coverage-map`).
+`capabilities_adapter.sh` stays as a legacy entry point for automated agents and
+for shell callers that need to read `schema/capabilities.json`.
 
-Run the Rust helpers when you add probes or capabilities so the coverage map and
-capability checks stay in sync with the schema.
+Keep capability updates in sync with the Rust guard rails and schema; prefer the
+adapter for shell access instead of rolling ad-hoc parsers.
 
 Before changing or adding tooling:
 - Mirror the existing safety posture: every script sets `set -euo pipefail`,
