@@ -39,6 +39,9 @@ This file serves as documentation. For authoritative, test-enforced Probe and Pr
    variables such as `FENCE_SANDBOX_MODE`. Override the exported workspace via
    `--workspace-root PATH` or by setting `FENCE_WORKSPACE_ROOT`; pass an empty
    value to defer to `bin/emit-record`’s `git rev-parse`/`pwd` fallback.
+   Codex modes preflight sandbox write access via `mktemp`; if the host blocks
+   the sandbox from creating temp directories, `fence-run` emits a `preflight`
+   record (`observed_result=denied`) instead of invoking the probe.
 2. **Mode dispatch**
    - `baseline` runs the probe directly with no sandboxing.
    - `codex-sandbox` shells out through `codex sandbox …` so the probe runs

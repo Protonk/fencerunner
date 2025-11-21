@@ -7,7 +7,7 @@
 
 ## Root expectations
 - Treat this file as a router: decide which subsystem you are editing, then obey the `*/AGENTS.md` in that directory so guidance stays layered instead of duplicated here.
-- Use the supported workflows: `tools/validate_contract_gate.sh --probe <id>` (or `make probe PROBE=<id>`) for tight probe loops, `bin/fence-test` to sweep every probe contract, `cargo test --test suite` for guard rails, and `make matrix` when you need to exercise probes across modes.
+- Use the supported workflows: `tools/validate_contract_gate.sh --probe <id>` (or `make probe PROBE=<id>`) for tight probe loops, `bin/fence-test` to sweep every probe contract, `cargo test --test suite` for guard rails, and `make matrix` when you need to exercise probes across modes. Codex modes now preflight sandbox write access and emit a `preflight` record with `observed_result=denied` when the platform blocks mktemp/mkdir, so matrix runs keep going with an explicit signal instead of failing probes.
 - `bin/codex-fence` is the top-level CLI for bang/listen/test and delegates to Rust helpers; keep it aligned with the Makefile defaults and existing harness scripts instead of reimplementing probe logic.
 - Preserve the portability stance described in README/CONTRIBUTING—scripts must run on macOS `/bin/bash 3.2` and the `codex-universal` container with the Rust helpers that ship in `bin/` (sync them via `make build-bin`).
 - **Do not introduce new runtime dependencies beyond Bash and the existing Rust binaries.** If you need new behavior, express it in Bash or extend the Rust helpers instead of pulling additional interpreters into the runtime path.

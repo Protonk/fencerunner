@@ -11,9 +11,6 @@ if [[ ! -x "${validator}" ]]; then
   echo "probe-contract-gate: validator missing at ${validator}" >&2
   exit 1
 fi
-# Ensure fence-run is used in dynamic gate; shadow TMPDIR to avoid colliding
-# with user temp files.
-export TMPDIR="${repo_root}/tmp"
 
 if [[ $# -ne 1 ]]; then
   cat <<'USAGE' >&2

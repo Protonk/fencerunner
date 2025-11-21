@@ -203,6 +203,10 @@ Probe development centers on a tight loop plus repo-wide guard rails:
 - `cargo test --test suite` executes the Rust guard rails
   (`boundary_object_schema`,
   `harness_smoke_probe_fixture`, `baseline_no_codex_smoke`, etc.).
+- Codex modes require the Codex CLI; if the host blocks sandbox application
+  (for example, `sandbox-exec: sandbox_apply: Operation not permitted`), fence
+  preflights codex write access and emits a `preflight` record with
+  `observed_result=denied` instead of running probes. Remaining modes continue.
 
 Capability guard rails live in the Rust test suites; `tools/adapt_capabilities.sh`
 is kept for legacy automation. When in doubt about a workflow or directory

@@ -808,7 +808,6 @@ run_dynamic_gate() {
   local run_env=(env
     PATH="${path_prefix}"
     HOME="${shadow_root}"
-    TMPDIR="${shadow_root}/tmp"
     CODEX_FENCE_ROOT="${shadow_root}"
     PROBE_CONTRACT_GATE_STATE_DIR="${stub_state}"
     PROBE_CONTRACT_EXPECTED_RUN_MODE="${run_mode}"

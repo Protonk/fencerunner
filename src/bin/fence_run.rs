@@ -8,12 +8,14 @@
 
 use anyhow::{Context, Result, bail};
 use codex_fence::{codex_present, find_repo_root, resolve_probe};
+use serde_json::json;
 use std::env;
 use std::env::VarError;
 use std::ffi::OsString;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
+use tempfile::NamedTempFile;
 
 fn main() {
     if let Err(err) = run() {
@@ -34,6 +36,21 @@ fn run() -> Result<()> {
     let sandbox_mode = sandbox_mode_for_mode(&args.run_mode)?;
     let platform = detect_platform().unwrap_or_else(|| env::consts::OS.to_string());
     let command_spec = build_command_spec(&args.run_mode, &platform, &resolved_probe.path)?;
+
+    if codex_mode(&args.run_mode) {
+        if let Some(tmpdir) = workspace_tmpdir.as_ref() {
+            if run_codex_preflight(
+                &repo_root,
+                &args.run_mode,
+                &platform,
+                tmpdir,
+                &resolved_probe.path,
+            )? {
+                // Preflight emitted a denial record; skip running the probe.
+                return Ok(());
+            }
+        }
+    }
 
     run_command(
         command_spec,
@@ -198,6 +215,10 @@ fn ensure_probe_executable(path: &Path) -> Result<()> {
     Ok(())
 }
 
+fn codex_mode(run_mode: &str) -> bool {
+    matches!(run_mode, "codex-sandbox" | "codex-full")
+}
+
 fn has_execute_bit(metadata: &fs::Metadata) -> bool {
     #[cfg(unix)]
     {
@@ -333,6 +354,181 @@ fn run_command(
     Ok(())
 }
 
+fn classify_preflight_error(stderr: &str) -> (&'static str, Option<&'static str>, String) {
+    let lower = stderr.to_ascii_lowercase();
+    if lower.contains("operation not permitted") {
+        ("denied", Some("EPERM"), "codex sandbox preflight denied (operation not permitted)".to_string())
+    } else if lower.contains("permission denied") {
+        ("denied", Some("EACCES"), "codex sandbox preflight denied (permission denied)".to_string())
+    } else {
+        ("error", None, "codex sandbox preflight failed".to_string())
+    }
+}
+
+fn extract_probe_var(path: &Path, var: &str) -> Option<String> {
+    let contents = fs::read_to_string(path).ok()?;
+    for line in contents.lines() {
+        let trimmed = line.trim_start();
+        if !trimmed.starts_with(var) {
+            continue;
+        }
+        if let Some(rest) = trimmed.splitn(2, '=').nth(1) {
+            let val = rest
+                .split('#')
+                .next()
+                .unwrap_or("")
+                .trim()
+                .trim_matches(|c| c == '"' || c == '\'');
+            if !val.is_empty() {
+                return Some(val.to_string());
+            }
+        }
+    }
+    None
+}
+
+fn write_temp_payload(value: &serde_json::Value) -> Result<PathBuf> {
+    let mut file = NamedTempFile::new().context("create payload temp file")?;
+    serde_json::to_writer(&mut file, value)?;
+    let (_file, path) = file.keep().context("persist payload temp file")?;
+    Ok(path)
+}
+
+fn emit_preflight_record(
+    repo_root: &Path,
+    probe_path: &Path,
+    run_mode: &str,
+    target_path: &Path,
+    exit_code: i32,
+    stderr: &str,
+) -> Result<()> {
+    let emit_record = codex_fence::resolve_helper_binary(repo_root, "emit-record")?;
+    let probe_file = probe_path
+        .file_name()
+        .and_then(|s| s.to_str())
+        .unwrap_or("unknown");
+    let probe_id = probe_file.trim_end_matches(".sh");
+    let primary_capability = extract_probe_var(probe_path, "primary_capability_id")
+        .unwrap_or_else(|| "cap_fs_read_workspace_tree".to_string());
+    let probe_version = extract_probe_var(probe_path, "probe_version").unwrap_or_else(|| "1".to_string());
+    let (status, errno, message) = classify_preflight_error(stderr);
+
+    let command_str = format!(
+        "codex {} mktemp -d {}",
+        run_mode,
+        target_path.to_string_lossy()
+    );
+
+    let payload = json!({
+        "stdout_snippet": "",
+        "stderr_snippet": stderr,
+        "raw": {
+            "preflight_target": target_path.to_string_lossy(),
+            "preflight_kind": "codex_tmp",
+            "stderr": stderr,
+            "exit_code": exit_code
+        }
+    });
+
+    let operation_args = json!({
+        "preflight": true,
+        "target_path": target_path.to_string_lossy(),
+        "run_mode": run_mode
+    });
+
+    let payload_file = write_temp_payload(&payload)?;
+
+    let mut cmd = Command::new(&emit_record);
+    cmd.arg("--run-mode")
+        .arg(run_mode)
+        .arg("--probe-name")
+        .arg(probe_id)
+        .arg("--probe-version")
+        .arg(probe_version)
+        .arg("--primary-capability-id")
+        .arg(primary_capability)
+        .arg("--command")
+        .arg(&command_str)
+        .arg("--category")
+        .arg("preflight")
+        .arg("--verb")
+        .arg("mktemp")
+        .arg("--target")
+        .arg(target_path.to_string_lossy().to_string())
+        .arg("--status")
+        .arg(status)
+        .arg("--message")
+        .arg(&message)
+        .arg("--raw-exit-code")
+        .arg(exit_code.to_string())
+        .arg("--operation-args")
+        .arg(operation_args.to_string())
+        .arg("--payload-file")
+        .arg(payload_file);
+
+    if let Some(errno_val) = errno {
+        cmd.arg("--errno").arg(errno_val);
+    } else {
+        cmd.arg("--errno").arg("");
+    }
+
+    let status_out = cmd.status().context("failed to emit preflight record")?;
+    if !status_out.success() {
+        bail!("emit-record failed for preflight (exit {:?})", status_out.code());
+    }
+
+    Ok(())
+}
+
+fn run_codex_preflight(
+    repo_root: &Path,
+    run_mode: &str,
+    platform: &str,
+    workspace_tmpdir: &Path,
+    probe_path: &Path,
+) -> Result<bool> {
+    // Detect hosts that block codex sandbox writes before invoking the probe.
+    // When blocked, emit a boundary object describing the denial so matrix runs
+    // keep producing output for the affected mode.
+    ensure_codex_available()?;
+    let target = workspace_tmpdir.join("codex-preflight.XXXXXX");
+    let platform_target = platform_target(platform)?;
+
+    let mut args: Vec<OsString> = Vec::new();
+    match run_mode {
+        "codex-sandbox" => {
+            args.push(OsString::from("sandbox"));
+            args.push(OsString::from(platform_target));
+            args.push(OsString::from("--full-auto"));
+        }
+        "codex-full" => {
+            args.push(OsString::from("--dangerously-bypass-approvals-and-sandbox"));
+            args.push(OsString::from("sandbox"));
+            args.push(OsString::from(platform_target));
+        }
+        _ => return Ok(false),
+    }
+    args.push(OsString::from("--"));
+    args.push(OsString::from("/usr/bin/mktemp"));
+    args.push(OsString::from("-d"));
+    args.push(OsString::from(
+        target.as_os_str().to_string_lossy().to_string(),
+    ));
+
+    let mut cmd = Command::new("codex");
+    cmd.args(&args);
+    let output = cmd.output().context("codex preflight failed to spawn")?;
+
+    if output.status.success() {
+        return Ok(false);
+    }
+
+    let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+    let code = output.status.code().unwrap_or(-1);
+    emit_preflight_record(repo_root, probe_path, run_mode, &target, code, &stderr)?;
+    Ok(true)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -384,6 +580,22 @@ mod tests {
         assert!(tmpdir.starts_with(&canonical_root));
         assert!(tmpdir.ends_with("tmp"));
         assert!(tmpdir.is_dir());
+    }
+
+    #[test]
+    fn classify_preflight_recognizes_permission_denied() {
+        let (status, errno, message) =
+            classify_preflight_error("mktemp: Operation not permitted\n");
+        assert_eq!(status, "denied");
+        assert_eq!(errno, Some("EPERM"));
+        assert!(message.contains("preflight"));
+    }
+
+    #[test]
+    fn classify_preflight_defaults_to_error() {
+        let (status, errno, _) = classify_preflight_error("unexpected failure");
+        assert_eq!(status, "error");
+        assert!(errno.is_none());
     }
 
     struct TempWorkspace {

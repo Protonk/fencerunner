@@ -638,6 +638,8 @@ fn find_in_path(program: &str) -> Option<PathBuf> {
     None
 }
 
+// Keep a helper for future assertions; suppress unused warnings for now.
+#[allow(dead_code)]
 fn relative_to_repo(path: &Path, repo_root: &Path) -> String {
     path.strip_prefix(repo_root)
         .map(|p| p.display().to_string())

@@ -105,6 +105,17 @@ fn run_probe(repo_root: &Path, probe: &Probe, mode: &str) -> Result<()> {
         .with_context(|| format!("Failed to execute {}", runner.display()))?;
 
     if !output.status.success() {
+        // Gracefully skip codex modes when the host blocks sandbox application.
+        if mode.starts_with("codex")
+            && (output.status.code() == Some(71)
+                || String::from_utf8_lossy(&output.stderr).contains("sandbox_apply"))
+        {
+            eprintln!(
+                "fence-bang: skipping mode {mode} for probe {}: codex sandbox unavailable",
+                probe.id
+            );
+            return Ok(());
+        }
         let code = output.status.code().unwrap_or(-1);
         bail!(
             "Probe {} in mode {} returned non-zero exit code {code}",
