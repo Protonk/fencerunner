@@ -361,8 +361,8 @@ fn static_probe_contract_accepts_fixture() -> Result<()> {
     let _guard = repo_guard();
     let fixture = FixtureProbe::install(&repo_root, "tests_fixture_probe")?;
 
-    let mut cmd = Command::new(repo_root.join("tools/contract_gate/static_gate.sh"));
-    cmd.arg("--probe").arg(fixture.probe_id());
+    let mut cmd = Command::new(repo_root.join("tools/validate_contract_gate.sh"));
+    cmd.arg("--probe").arg(fixture.probe_id()).arg("--static-only");
     let output = run_command(cmd)?;
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(
@@ -403,8 +403,8 @@ primary_capability_id="cap_fs_read_workspace_tree"
     let broken =
         FixtureProbe::install_from_contents(&repo_root, "tests_static_contract_broken", contents)?;
 
-    let mut cmd = Command::new(repo_root.join("tools/contract_gate/static_gate.sh"));
-    cmd.arg("--probe").arg(broken.probe_id());
+    let mut cmd = Command::new(repo_root.join("tools/validate_contract_gate.sh"));
+    cmd.arg("--probe").arg(broken.probe_id()).arg("--static-only");
     let output = cmd
         .output()
         .context("failed to execute static probe contract")?;
@@ -453,11 +453,12 @@ fn contract_gate_dynamic_accepts_fixture() -> Result<()> {
 
     let mut cmd = Command::new(repo_root.join("bin/probe-contract-gate"));
     cmd.arg(fixture.probe_id());
+    cmd.env("PROBE_CONTRACT_MODES", "baseline");
     let output = run_command(cmd)?;
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(
-        stdout.contains("probe_contract_gate"),
-        "expected stub validation output in stdout, got: {stdout}"
+        stdout.contains("all gates passed"),
+        "expected contract gate success summary in stdout, got: {stdout}"
     );
     Ok(())
 }
@@ -484,6 +485,7 @@ exit 0
 
     let mut cmd = Command::new(repo_root.join("bin/probe-contract-gate"));
     cmd.arg(broken.probe_id());
+    cmd.env("PROBE_CONTRACT_MODES", "baseline");
     let output = cmd
         .output()
         .context("failed to execute probe-contract-gate for missing emit-record fixture")?;

@@ -1,6 +1,6 @@
 //! Entrypoint for the static probe contract gate.
 //!
-//! Invokes `tools/contract_gate/static_gate.sh` from the detected repo root and
+//! Invokes `tools/validate_contract_gate.sh` from the detected repo root and
 //! proxies its exit status so CI and local workflows can rely on a single Rust
 //! binary instead of the shell shim.
 
@@ -17,7 +17,7 @@ fn main() {
 
 fn run() -> Result<()> {
     let repo_root = find_repo_root()?;
-    let script = repo_root.join("tools/contract_gate/static_gate.sh");
+    let script = repo_root.join("tools/validate_contract_gate.sh");
     let status = Command::new(&script)
         .current_dir(&repo_root)
         .stdin(Stdio::inherit())

@@ -39,7 +39,7 @@ Everything in the repo exists to turn a capability into an auditable signal:
 1. **Catalog** – `schema/capabilities.json` enumerates what we care about (fs,
    network, process, etc.). `docs/capabilities.md` explains the structure while
    the Rust capability index keeps every consumer on the same view. The legacy
-   `tools/capabilities_adapter.sh` remains for shell-only automation.
+  `tools/adapt_capabilities.sh` remains for shell-only automation.
 2. **Probe contract** – A probe under `probes/<probe_id>.sh` binds one
    capability (`primary_capability_id`) to an observable action. The author
    follows [probes/AGENTS.md](probes/AGENTS.md), sources helpers from `lib/`,
@@ -197,14 +197,14 @@ mode, Codex version, or host OS.
 
 Probe development centers on a tight loop plus repo-wide guard rails:
 
-- `tools/contract_gate/static_gate.sh --probe <id>` (or
+- `tools/validate_contract_gate.sh --probe <id>` (or
   `make probe PROBE=<id>`) runs the interpreted static contract for one probe.
 - `bin/fence-test` runs the same static contract across every probe.
 - `cargo test --test suite` executes the Rust guard rails
   (`boundary_object_schema`,
   `harness_smoke_probe_fixture`, `baseline_no_codex_smoke`, etc.).
 
-Capability guard rails live in the Rust test suites; `tools/capabilities_adapter.sh`
+Capability guard rails live in the Rust test suites; `tools/adapt_capabilities.sh`
 is kept for legacy automation. When in doubt about a workflow or directory
 contract, follow the layered guidance described in the various `*/AGENTS.md`
 files.

@@ -17,7 +17,7 @@ public boundary-object schema. The directory is split into four layers:
 ## Quick start for agents
 
 1. **While editing a probe** run
-  `tools/contract_gate/static_gate.sh --probe <id>` (or
+  `tools/validate_contract_gate.sh --probe <id>` (or
   `make probe PROBE=<id>`). This invokes the interpreted contract tester for the
   resolved probe path and surfaces syntax/structural issues immediately.
 2. **Before sending a change** run `bin/fence-test` to sweep the static
@@ -58,7 +58,7 @@ circuit on missing prerequisites, and print `name: PASS/FAIL` summaries.
 
 - **Guard-rail comments:** Every script now starts with a summary block—keep this
   habit so future agents know why a suite exists.
-- **New probe-level checks:** Extend `tools/contract_gate/static_gate.sh`
+- **New probe-level checks:** Extend `tools/validate_contract_gate.sh`
   when adding additional structural or syntax rules so the single-probe
   workflow stays fast.
 - **New fixtures:** Place them under `tests/shims/` so multiple suites

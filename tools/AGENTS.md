@@ -4,10 +4,11 @@ This directory hosts helpers for automated agents developing in the repo.
 
 ## Available tooling
 
-- `capabilities_adapter.sh`: fast, simple reader for `capabilities.json`.
-- `contract_gate/`: Static and dynamic checker used by Probe Authors when creating new probes. 
-- `pathtools.sh`: canonicalizes probe paths and exports the `resolve_probe_script_path`
+- `adapt_capabilities.sh`: fast, simple reader for `capabilities.json`.
+- `validate_contract_gate.sh`: static + dynamic checker used by Probe Authors when creating new probes.
+- `resolve_paths.sh`: canonicalizes probe paths and exports the `resolve_probe_script_path`
   + `portable_realpath` helpers shared by the contract tools.
+- `list_run_modes.sh`: canonical list + parser for supported run modes.
 - `audits/INTERPRETERS.md`: AI agent prompts for audits.
 
 ## Modfiying tooling

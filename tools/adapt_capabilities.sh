@@ -12,12 +12,13 @@ set -euo pipefail
 script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)
 repo_root=$(cd "${script_dir}/.." >/dev/null 2>&1 && pwd)
 expected_schema_version="macOS_codex_v1"
+adapter_name="adapt_capabilities"
 
 # Allow callers to override the default schema path (useful for tests).
 capabilities_file="${1:-${repo_root}/schema/capabilities.json}"
 
 if [[ ! -f "${capabilities_file}" ]]; then
-  echo "capabilities_adapter: unable to find capabilities.json at ${capabilities_file}" >&2
+  echo "${adapter_name}: unable to find capabilities.json at ${capabilities_file}" >&2
   exit 1
 fi
 
@@ -48,20 +49,20 @@ def normalize_sources:
     } | with_entries(select(.value != null)));
 
 if (.schema_version | type) != "string" then
-  error("capabilities_adapter: expected schema_version to be a string, got \(.schema_version|type)")
+  error("adapt_capabilities: expected schema_version to be a string, got \(.schema_version|type)")
 elif (.schema_version | test("^[A-Za-z0-9_.-]+$") | not) then
-  error("capabilities_adapter: schema_version must match ^[A-Za-z0-9_.-]+$, got \(.schema_version)")
+  error("adapt_capabilities: schema_version must match ^[A-Za-z0-9_.-]+$, got \(.schema_version)")
 elif .schema_version != $expected_version then
-  error("capabilities_adapter: expected schema_version=\($expected_version), got \(.schema_version)")
+  error("adapt_capabilities: expected schema_version=\($expected_version), got \(.schema_version)")
 else
   (.capabilities // [])
   | reduce .[] as $cap (
       {};
       ($cap.operations | to_object) as $ops |
       if ($cap.id // "") == "" then
-        error("capabilities_adapter: encountered capability with no id")
+        error("adapt_capabilities: encountered capability with no id")
       elif has($cap.id) then
-        error("capabilities_adapter: duplicate capability id \($cap.id)")
+        error("adapt_capabilities: duplicate capability id \($cap.id)")
       else
         .[$cap.id] = {
           id: $cap.id,

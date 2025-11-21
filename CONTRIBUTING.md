@@ -28,7 +28,7 @@ valuable.
 ### Helpers and tooling
 
 - The fast probe contract entry point is
-  `tools/contract_gate/static_gate.sh`; extend it for new
+  `tools/validate_contract_gate.sh`; extend it for new
   syntax/structural checks instead of duplicating logic elsewhere.
 - `bin/emit-record`, `bin/fence-run`, and any new helpers must avoid
   introducing runtime dependencies beyond Bash, `jq`, and the Rust standard
@@ -40,7 +40,7 @@ valuable.
 
 ### Tests
 
-- The static probe contract lives at `tools/contract_gate/static_gate.sh`.
+- The static probe contract lives at `tools/validate_contract_gate.sh`.
   Keep it lightweight so single-probe loops (`--probe <id>` or `make probe`)
   remain instant, and remember that `bin/fence-test` runs this helper across
   every probe.

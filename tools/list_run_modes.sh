@@ -15,7 +15,7 @@ codex_fence_run_modes() {
   printf '%s\n' "baseline" "codex-sandbox" "codex-full"
 }
 
-# Mode resolver for tools/contract_gate. Respects PROBE_CONTRACT_MODES when
+# Mode resolver for contract-gate tooling. Respects PROBE_CONTRACT_MODES when
 # provided (space- or comma-separated), otherwise falls back to the canonical
 # list above.
 contract_gate_modes() {

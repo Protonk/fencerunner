@@ -22,7 +22,7 @@ This file serves as documentation. For authoritative, test-enforced Probe and Pr
 - **Capabilities:** Every probe declares exactly one
   `primary_capability_id` (with optional `secondary_capability_ids`). The ids
   come from `schema/capabilities.json` and are validated at emit time through
-  the Rust capability index (the legacy adapter in `tools/capabilities_adapter.sh`
+  the Rust capability index (the legacy adapter in `tools/adapt_capabilities.sh`
   remains for automation).
 - **Helpers:** Shared utilities live under `lib/` and the compiled helpers in
   `bin/`. Source only what you need instead of re-implementing interpreter
@@ -87,7 +87,7 @@ coerce bad output into a result.
 
 The fast authoring loop favors single-probe runs:
 
-- `tools/contract_gate/static_gate.sh --probe probes/<id>.sh` runs
+- `tools/validate_contract_gate.sh --probe probes/<id>.sh` runs
   the interpreted, quick-fail contract (syntax + structural checks) while you
   iterate on a single script.
 - `bin/fence-test` runs the static contract against every probe in the

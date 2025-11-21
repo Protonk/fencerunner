@@ -86,7 +86,7 @@ probe:
 		echo "Usage: make probe PROBE=<probe_id_or_path>"; \
 		exit 1; \
 	fi
-	tools/contract_gate/static_gate.sh --probe "$(PROBE)"
+	tools/validate_contract_gate.sh --probe "$(PROBE)"
 
 build-bin:
 	tools/sync_bin_helpers.sh
