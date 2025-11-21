@@ -13,7 +13,7 @@ public boundary-object schema. The directory is split into four layers:
 | Audits | `tests/audits/` | Agent instructions for conducting holistics and probe audits. |
 | Shims | `tests/shims/` | Shared Bash helpers + fixtures depended on by every suite. |
 | Fast tier | `tools/contract_gate/` | Static probe contract (syntax + structural checks) for one probe—the tight authoring loop. |
-| Second tier | `tests/second_tier.rs` | Global checks that validate documentation, schema, and harness plumbing (run via `cargo test --test second_tier`). |
+| Second tier | `tests/suite.rs` | Global checks that validate documentation, schema, and harness plumbing (run via `cargo test --test suite`). |
 
 The static probe contract must stay portable (`/bin/bash 3.2` on macOS), silent
 on success, and deterministic. The Rust guard rails inherit the same
@@ -28,14 +28,14 @@ expectations even though they run through Cargo.
 2. **Before sending a change** run `bin/fence-test` to sweep the static
   contract across every probe. 
 3. **Debugging**: The second-tier guard rails are standard Rust integration
-  tests. Use `cargo test --test second_tier <name>` (for example
-  `cargo test --test second_tier workspace_root_fallback`) to focus on one
+  tests. Use `cargo test --test suite <name>` (for example
+  `cargo test --test suite workspace_root_fallback`) to focus on one
   failing case. They only depend on in-repo helpers.
 
 ## Library components
 
 - Schema validation now lives entirely in the Rust guard rails—run
-  `cargo test --test second_tier boundary_object_schema` to lint the emitted
+  `cargo test --test suite boundary_object_schema` to lint the emitted
   boundary object against `schema/boundary_object.json` with the `jsonschema`
   crate.
 - `tests/shims/minimal_probe.sh` is a self-contained probe used by the
@@ -45,8 +45,8 @@ expectations even though they run through Cargo.
 
 ## Second-tier suite map
 
-All guard rails now live in `tests/second_tier.rs` and run as Rust integration
-tests. Target a specific scenario with `cargo test --test second_tier <name>`.
+All guard rails now live in `tests/suite.rs` and run as Rust integration
+tests. Target a specific scenario with `cargo test --test suite <name>`.
 
 | Test | Purpose | Notes |
 | --- | --- | --- |
@@ -68,12 +68,12 @@ circuit on missing prerequisites, and print `name: PASS/FAIL` summaries.
   workflow stays fast.
 - **New fixtures:** Place them under `tests/shims/` so multiple suites
   can share them, and document any special behavior.
-- **New suites:** Add more Rust tests to `tests/second_tier.rs`. Keep them
+- **New suites:** Add more Rust tests to `tests/suite.rs`. Keep them
   hermetic, reuse the fixture helpers, and gate probe directory mutations with
   the shared mutex already defined in that file.
 - **Negative harness tests:** When adding guard rails (path canonicalization,
   workspace boundaries, etc.), follow the pattern used in the
-  `probe_resolution_guards` test inside `tests/second_tier.rs` to ensure failure
+  `probe_resolution_guards` test inside `tests/suite.rs` to ensure failure
   modes remain enforced.
 
 ## When things fail

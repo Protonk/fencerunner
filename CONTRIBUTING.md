@@ -44,15 +44,15 @@ valuable.
   Keep it lightweight so single-probe loops (`--probe <id>` or `make probe`)
   remain instant, and remember that `bin/fence-test` runs this helper across
   every probe.
-- The Rust-based guard rails live in `tests/second_tier.rs` and run via
-  `cargo test --test second_tier` (`boundary_object_schema`, `harness_smoke_probe_fixture`, `baseline_no_codex_smoke`, etc.). When expanding coverage, keep these tests
+- The Rust-based guard rails live in `tests/suite.rs` and run via
+  `cargo test --test suite` (`boundary_object_schema`, `harness_smoke_probe_fixture`, `baseline_no_codex_smoke`, etc.). When expanding coverage, keep these tests
   hermetic and deterministic.
 - The directory layout, fixtures, and suite expectations are captured in
   [`tests/AGENTS.md`](tests/AGENTS.md). Update that guide whenever you add a new
   suite or change workflows so agents know how to reproduce failures.
 - Place reusable fixtures under `tests/shims/` and keep them synced
   with the capability catalog (the validation scripts scan these files too).
-- Add new guard rails to `tests/second_tier.rs` when the checks are global or
+- Add new guard rails to `tests/suite.rs` when the checks are global or
   slow. Ensure they short-circuit quickly on missing prerequisites so macOS
   authors can still iterate with `cargo test`.
 - Maintain the guard-rail block comment + inline notes that live at the top of

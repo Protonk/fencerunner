@@ -92,5 +92,5 @@ The fast authoring loop favors single-probe runs:
   iterate on a single script.
 - `bin/fence-test` runs the static contract against every probe in the
   repository.
-- `cargo test --test second_tier` covers the Rust guard rails (schema validation
+- `cargo test --test suite` covers the Rust guard rails (schema validation
   and harness smoke tests).

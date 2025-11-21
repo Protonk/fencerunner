@@ -1,5 +1,8 @@
 #![cfg(unix)]
 
+// Centralized integration suite for the fence harness; exercises schema validation,
+// probe resolution rules, and helper utilities so changes surface in one place.
+
 use anyhow::{Context, Result, bail};
 use codex_fence::{BoundaryObject, find_repo_root};
 use jsonschema::JSONSchema;
@@ -14,6 +17,8 @@ use std::process::{Command, Output};
 use std::sync::{Mutex, MutexGuard, OnceLock};
 use tempfile::{NamedTempFile, TempDir};
 
+// Ensures boundary objects emitted via emit-record satisfy the cfbo-v1 schema and
+// contain the required contextual metadata.
 #[test]
 fn boundary_object_schema() -> Result<()> {
     let repo_root = repo_root();
@@ -191,6 +196,8 @@ fn boundary_object_schema() -> Result<()> {
     Ok(())
 }
 
+// Runs the minimal fixture probe through fence-run baseline to confirm the
+// generated record reflects success and payload propagation.
 #[test]
 fn harness_smoke_probe_fixture() -> Result<()> {
     let repo_root = repo_root();
@@ -218,6 +225,8 @@ fn harness_smoke_probe_fixture() -> Result<()> {
     Ok(())
 }
 
+// Verifies baseline mode succeeds without codex binaries while sandbox mode
+// fails when codex is absent from PATH, preventing false positives.
 #[test]
 fn baseline_no_codex_smoke() -> Result<()> {
     let repo_root = repo_root();
@@ -260,6 +269,8 @@ fn baseline_no_codex_smoke() -> Result<()> {
     Ok(())
 }
 
+// Checks that workspace_root falls back to the caller's cwd when the env hint
+// is blank, matching legacy agent expectations.
 #[test]
 fn workspace_root_fallback() -> Result<()> {
     let repo_root = repo_root();
@@ -287,6 +298,8 @@ fn workspace_root_fallback() -> Result<()> {
     Ok(())
 }
 
+// Exercises the guard rails that keep probe execution inside probes/, blocking
+// both absolute paths and escaping symlinks.
 #[test]
 fn probe_resolution_guards() -> Result<()> {
     let repo_root = repo_root();
@@ -341,6 +354,7 @@ fn probe_resolution_guards() -> Result<()> {
     Ok(())
 }
 
+// Confirms the static contract gate accepts the canonical fixture probe.
 #[test]
 fn static_probe_contract_accepts_fixture() -> Result<()> {
     let repo_root = repo_root();
@@ -359,6 +373,8 @@ fn static_probe_contract_accepts_fixture() -> Result<()> {
     Ok(())
 }
 
+// Ensures static contract enforcement rejects probes missing strict-mode
+// shell options so safety rules stay consistent.
 #[test]
 fn static_probe_contract_rejects_missing_strict_mode() -> Result<()> {
     let repo_root = repo_root();
@@ -405,6 +421,8 @@ primary_capability_id="cap_fs_read_workspace_tree"
     Ok(())
 }
 
+// Helper for installing temporary probe shims under probes/ and cleaning them
+// up after each test.
 struct FixtureProbe {
     path: PathBuf,
     name: String,
@@ -455,6 +473,7 @@ impl Drop for FixtureProbe {
     }
 }
 
+// Removes the referenced file on drop so tests can create temporary symlinks.
 struct FileGuard {
     path: PathBuf,
 }
@@ -465,6 +484,7 @@ impl Drop for FileGuard {
     }
 }
 
+// Serializes repository-mutating tests so fixture installs do not conflict.
 struct RepoGuard {
     _guard: MutexGuard<'static, ()>,
 }

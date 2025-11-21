@@ -7,7 +7,7 @@
 
 ## Root expectations
 - Treat this file as a router: decide which subsystem you are editing, then obey the `*/AGENTS.md` in that directory so guidance stays layered instead of duplicated here.
-- Use the supported workflows: `tools/contract_gate/static_gate.sh --probe <id>` (or `make probe PROBE=<id>`) for tight probe loops, `bin/fence-test` to sweep every probe contract, `cargo test --test second_tier` for guard rails, and `make matrix` when you need to exercise probes across modes.
+- Use the supported workflows: `tools/contract_gate/static_gate.sh --probe <id>` (or `make probe PROBE=<id>`) for tight probe loops, `bin/fence-test` to sweep every probe contract, `cargo test --test suite` for guard rails, and `make matrix` when you need to exercise probes across modes.
 - `bin/codex-fence` is the top-level CLI for bang/listen/test and delegates to Rust helpers; keep it aligned with the Makefile defaults and existing harness scripts instead of reimplementing probe logic.
 - Preserve the portability stance described in README/CONTRIBUTING—scripts must run on macOS `/bin/bash 3.2` and the `codex-universal` container with the Rust helpers that ship in `bin/` (sync them via `make build-bin`).
 - **Do not introduce new runtime dependencies beyond Bash and the existing Rust binaries.** If you need new behavior, express it in Bash or extend the Rust helpers instead of pulling additional interpreters into the runtime path.
@@ -28,7 +28,7 @@
 | `src/bin/` | Rust implementations of `codex-fence`, `fence-run`, `emit-record`, `detect-stack`, `fence-bang/listen/test`, and `portable-path`. |
 | `tools/` | Tools to support agent tool calls during development.  |
 | `probes/` | Flat directory of `<probe_id>.sh` scripts plus the probe author contract. |
-| `tests/` | Library helpers, the static probe contract, and Rust guard rails (`tests/second_tier.rs`). |
+| `tests/` | Library helpers, the static probe contract, and Rust guard rails (`tests/suite.rs`). |
 | `docs/` | Human-readable explanations for schemas, probes, and boundary objects; cross-check with machine artifacts. |
 | `schema/` | Machine-readable capability catalog and boundary-object schema consumed by tooling. |
 | `out/` | Probe outputs (`<probe>.<mode>.json`) produced by `bin/fence-run`; inspect diffs here. |

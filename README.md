@@ -201,7 +201,7 @@ Probe development centers on a tight loop plus repo-wide guard rails:
 - `tools/contract_gate/static_gate.sh --probe <id>` (or
   `make probe PROBE=<id>`) runs the interpreted static contract for one probe.
 - `bin/fence-test` runs the same static contract across every probe.
-- `cargo test --test second_tier` executes the Rust guard rails
+- `cargo test --test suite` executes the Rust guard rails
   (`boundary_object_schema`,
   `harness_smoke_probe_fixture`, `baseline_no_codex_smoke`, etc.).
 

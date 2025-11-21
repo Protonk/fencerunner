@@ -5,6 +5,8 @@ use codex_fence::{
 use serde_json::{Value, json};
 use std::collections::BTreeSet;
 use std::env;
+use std::ffi::OsString;
+use std::fmt::Write;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
@@ -143,10 +145,11 @@ struct CliArgs {
 
 impl CliArgs {
     fn parse() -> Result<Self> {
-        let mut args = env::args().skip(1);
+        let mut args = env::args_os().skip(1);
         let mut config = PartialArgs::default();
 
-        while let Some(arg) = args.next() {
+        while let Some(arg_os) = args.next() {
+            let arg = os_to_string(arg_os);
             match arg.as_str() {
                 "--run-mode" => config.run_mode = Some(next_value(&mut args, "--run-mode")?),
                 "--probe-name" | "--probe-id" => {
@@ -284,8 +287,9 @@ impl PartialArgs {
     }
 }
 
-fn next_value(args: &mut impl Iterator<Item = String>, flag: &str) -> Result<String> {
+fn next_value(args: &mut impl Iterator<Item = OsString>, flag: &str) -> Result<String> {
     args.next()
+        .map(os_to_string)
         .ok_or_else(|| anyhow!("Missing value for {flag}"))
 }
 
@@ -293,6 +297,37 @@ fn parse_i64(value: String, label: &str) -> Result<i64> {
     value
         .parse::<i64>()
         .with_context(|| format!("Failed to parse {label} as integer"))
+}
+
+fn os_to_string(value: OsString) -> String {
+    match value.into_string() {
+        Ok(val) => val,
+        Err(os) => escape_os_value(os),
+    }
+}
+
+#[cfg(unix)]
+fn escape_os_value(value: OsString) -> String {
+    use std::os::unix::ffi::OsStrExt;
+    escape_bytes(value.as_os_str().as_bytes())
+}
+
+#[cfg(not(unix))]
+fn escape_os_value(value: OsString) -> String {
+    value.to_string_lossy().into_owned()
+}
+
+#[cfg(unix)]
+fn escape_bytes(bytes: &[u8]) -> String {
+    let mut out = String::with_capacity(bytes.len());
+    for &byte in bytes {
+        if byte.is_ascii_graphic() || byte == b' ' {
+            out.push(byte as char);
+        } else {
+            write!(&mut out, "\\x{byte:02X}").expect("write to string");
+        }
+    }
+    out
 }
 
 fn validate_status(status: &str) -> Result<()> {
