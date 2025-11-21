@@ -177,6 +177,26 @@ bin/fence-run baseline fs_outside_workspace
 Swap `baseline` for `codex-sandbox` or `codex-full` to explore other modes. The
 Codex modes require the `codex` CLI on `PATH`.
 
+### Mode details (macOS):
+
+- `codex-sandbox` uses `codex sandbox macos --full-auto -- <probe>` to mirror
+  the workspace-write Seatbelt profile Codex applies to a trusted repo. Run it
+  from the repo root (or another trusted workspace) so writes are allowed.
+- `codex-full` uses `codex --dangerously-bypass-approvals-and-sandbox -- <probe>`
+  to run without Codex re-enabling Seatbelt; do **not** route it through
+  `codex sandbox macos`.
+- Bare `codex sandbox macos -- <command>` applies a strict read-only profile and
+  is only useful when you explicitly want `EPERM` denials.
+
+Spot checks:
+
+- Workspace-write sandbox: `codex sandbox macos --full-auto -- bash -lc 'mkdir -p tmp/sandbox-write && mktemp -d /tmp/codex-full-auto.XXXXXX'`
+- Read-only harness: `codex sandbox macos -- /usr/bin/mktemp -d /tmp/codex-readonly.XXXXXX` (expect `Operation not permitted`)
+- No Seatbelt: `codex --dangerously-bypass-approvals-and-sandbox /bin/mkdir /tmp/codex-no-sandbox.$(date +%s)`
+  - If your Codex build rejects dash-prefixed args even after `--`, stick to
+    no-flag commands (like `mkdir` above) or wrap the operation in a tiny helper
+    script and run that script path instead.
+
 ### Sweep probes across modes
 
 ```sh

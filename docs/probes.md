@@ -44,12 +44,16 @@ This file serves as documentation. For authoritative, test-enforced Probe and Pr
    record (`observed_result=denied`) instead of invoking the probe.
 2. **Mode dispatch**
    - `baseline` runs the probe directly with no sandboxing.
-   - `codex-sandbox` shells out through `codex sandbox …` so the probe runs
-     inside the seatbelt profile the CLI configures for the current platform.
+   - `codex-sandbox` shells out through `codex sandbox macos --full-auto -- …`
+     so the probe runs inside the same workspace-write seatbelt profile Codex
+     applies to a trusted repo. Skip `--full-auto` only when you explicitly want
+     the read-only profile; it will deny writes to both the workspace and `/tmp`.
      (Requires the Codex CLI in `PATH`.)
-   - `codex-full` shells out through the Codex CLI with the
-     `--dangerously-bypass-approvals-and-sandbox` flag so that the probe runs
-     under Codex’s unsandboxed profile. (Requires the Codex CLI in `PATH`.)
+   - `codex-full` uses the Codex CLI with
+     `--dangerously-bypass-approvals-and-sandbox` *without* the `sandbox`
+     subcommand (`codex --dangerously-bypass-approvals-and-sandbox -- …`) so the
+     probe runs with no Codex-applied Seatbelt profile. (Requires the Codex CLI
+     in `PATH`.)
 3. **Result capture** – the probe prints one JSON boundary object to stdout.
    `make matrix` stores each run as `out/<probe>.<mode>.json` so you can diff
    runs across modes, CLI versions, or host machines.
