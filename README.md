@@ -129,8 +129,9 @@ make build-bin
 This command wraps `tools/sync_bin_helpers.sh`, which compiles the release
 binaries and copies them into `bin/` so every helper resolver can find them
 without depending on `target/{debug,release}`. The sync script also stamps
-`CODEX_FENCE_ROOT_HINT` into the binaries so installed CLIs can still locate
-the repository. Re-run it after pulling new commits or touching any code under
+`CODEX_FENCE_ROOT_HINT` into the binaries (falling back to the crate path via
+the build script) so installed CLIs can still locate the repository even when
+run outside the clone. Re-run it after pulling new commits or touching any code under
 `src/bin/`.
 
 ## Installation
