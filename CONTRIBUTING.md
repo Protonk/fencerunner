@@ -42,8 +42,8 @@ valuable.
 
 - The static probe contract lives at `tools/contract_gate/static_gate.sh`.
   Keep it lightweight so single-probe loops (`--probe <id>` or `make probe`)
-  remain instant, and remember that `codex-fence --test` now runs this helper
-  across every probe.
+  remain instant, and remember that `bin/fence-test` runs this helper across
+  every probe.
 - The Rust-based guard rails live in `tests/second_tier.rs` and run via
   `cargo test --test second_tier` (`boundary_object_schema`, `harness_smoke_probe_fixture`, `baseline_no_codex_smoke`, etc.). When expanding coverage, keep these tests
   hermetic and deterministic.

@@ -157,8 +157,6 @@ Use `codex-fence` for the common workflows:
   `PROBES`/`MODES` overrides as `make matrix`.
 - `codex-fence --listen` consumes cfbo-v1 JSON from stdin and prints a
   human-readable summary of what succeeded or failed.
-- `codex-fence --test` runs the static probe contract across every
-  `probes/*.sh` script.
 
 Pipeline example:
 
@@ -202,7 +200,7 @@ Probe development centers on a tight loop plus repo-wide guard rails:
 
 - `tools/contract_gate/static_gate.sh --probe <id>` (or
   `make probe PROBE=<id>`) runs the interpreted static contract for one probe.
-- `codex-fence --test` runs the same static contract across every probe.
+- `bin/fence-test` runs the same static contract across every probe.
 - `cargo test --test second_tier` executes the Rust guard rails
   (`boundary_object_schema`,
   `harness_smoke_probe_fixture`, `baseline_no_codex_smoke`, etc.).

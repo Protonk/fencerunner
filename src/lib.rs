@@ -1,4 +1,4 @@
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use serde_json::Value;
 use std::collections::BTreeMap;
 use std::{
@@ -9,20 +9,20 @@ use std::{
 pub mod boundary;
 pub mod catalog;
 pub mod coverage;
-pub mod probe_metadata;
 pub mod metadata_validation;
+pub mod probe_metadata;
 
 pub use boundary::{
     BoundaryObject, CapabilityContext, OperationInfo, Payload, ProbeInfo, ResultInfo, RunInfo,
     StackInfo,
 };
 pub use catalog::{
-    load_catalog_from_path, CatalogKey, CatalogRepository, Capability, CapabilityCatalog,
-    CapabilityCategory, CapabilityId, CapabilityIndex, CapabilityLayer, CapabilitySnapshot,
+    Capability, CapabilityCatalog, CapabilityCategory, CapabilityId, CapabilityIndex,
+    CapabilityLayer, CapabilitySnapshot, CatalogKey, CatalogRepository, load_catalog_from_path,
 };
-pub use coverage::{build_probe_coverage_map, filter_coverage_probes, CoverageEntry};
+pub use coverage::{CoverageEntry, build_probe_coverage_map, filter_coverage_probes};
 pub use metadata_validation::{validate_boundary_objects, validate_probe_capabilities};
-pub use probe_metadata::{collect_probe_scripts, ProbeMetadata};
+pub use probe_metadata::{ProbeMetadata, collect_probe_scripts};
 
 const ROOT_SENTINEL: &str = "bin/.gitkeep";
 const SYNCED_BIN_DIR: &str = "bin";
@@ -106,9 +106,7 @@ pub fn resolve_helper_binary(repo_root: &Path, name: &str) -> Result<PathBuf> {
 
 pub fn codex_present() -> bool {
     env::var_os("PATH")
-        .map(|paths| {
-            env::split_paths(&paths).any(|dir| helper_is_executable(&dir.join("codex")))
-        })
+        .map(|paths| env::split_paths(&paths).any(|dir| helper_is_executable(&dir.join("codex"))))
         .unwrap_or(false)
 }
 
@@ -167,8 +165,12 @@ pub struct Probe {
 
 pub fn canonical_probes_root(repo_root: &Path) -> Result<PathBuf> {
     let probes_root = repo_root.join("probes");
-    fs::canonicalize(&probes_root)
-        .with_context(|| format!("Unable to canonicalize probes dir at {}", probes_root.display()))
+    fs::canonicalize(&probes_root).with_context(|| {
+        format!(
+            "Unable to canonicalize probes dir at {}",
+            probes_root.display()
+        )
+    })
 }
 
 pub fn resolve_probe(repo_root: &Path, identifier: &str) -> Result<Probe> {

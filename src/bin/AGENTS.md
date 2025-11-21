@@ -8,7 +8,7 @@ update these helpers together.
 ## CLI entry points
 
 ### `codex-fence`
-- **Purpose:** Front door for `--bang`, `--listen`, `--test`. Delegates to the
+- **Purpose:** Front door for `--bang` and `--listen`. Delegates to the
   specialized helpers while guaranteeing `CODEX_FENCE_ROOT` points at the repo
   so binaries can find fixtures.
 - **Expectations:**
@@ -71,8 +71,8 @@ update these helpers together.
 - **Expectations:**
   - Keep the CLI simple; any extra flags should mirror the static contract
     helper’s capabilities.
-  - Surface script exit codes verbatim for CI consumption; `codex-fence --test`
-    delegates directly to this binary.
+  - Surface script exit codes verbatim for CI consumption; callers now trigger
+    the static contract by invoking this binary directly.
 
 ## Shared helpers
 

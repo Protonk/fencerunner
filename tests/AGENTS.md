@@ -25,7 +25,7 @@ expectations even though they run through Cargo.
   `tools/contract_gate/static_gate.sh --probe <id>` (or
   `make probe PROBE=<id>`). This invokes the interpreted contract tester for the
   resolved probe path and surfaces syntax/structural issues immediately.
-2. **Before sending a change** run `codex-fence --test` to sweep the static
+2. **Before sending a change** run `bin/fence-test` to sweep the static
   contract across every probe. 
 3. **Debugging**: The second-tier guard rails are standard Rust integration
   tests. Use `cargo test --test second_tier <name>` (for example

@@ -250,7 +250,9 @@ fn ensure_codex_available() -> Result<()> {
     if codex_present() {
         return Ok(());
     }
-    bail!("codex CLI not found; codex-* modes require codex. Install codex or run baseline instead.")
+    bail!(
+        "codex CLI not found; codex-* modes require codex. Install codex or run baseline instead."
+    )
 }
 
 fn detect_platform() -> Option<String> {

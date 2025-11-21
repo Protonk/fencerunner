@@ -1,6 +1,4 @@
-use crate::catalog::{
-    CatalogKey, Capability, CapabilityId, CapabilitySnapshot, CatalogRepository,
-};
+use crate::catalog::{Capability, CapabilityId, CapabilitySnapshot, CatalogKey, CatalogRepository};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -141,8 +139,8 @@ fn empty_object() -> Value {
 mod tests {
     use super::*;
     use crate::catalog::identity::{CapabilityCategory, CapabilityLayer, CatalogKey};
-    use crate::catalog::repository::CatalogRepository;
     use crate::catalog::load_catalog_from_path;
+    use crate::catalog::repository::CatalogRepository;
     use std::path::PathBuf;
 
     fn catalog_path() -> PathBuf {
@@ -208,7 +206,10 @@ mod tests {
     fn boundary_object_round_trips() {
         let bo = sample_boundary_object();
         let value = serde_json::to_value(&bo).expect("serialized");
-        assert_eq!(value.get("schema_version").and_then(|v| v.as_str()), Some("cfbo-v1"));
+        assert_eq!(
+            value.get("schema_version").and_then(|v| v.as_str()),
+            Some("cfbo-v1")
+        );
         let back: BoundaryObject = serde_json::from_value(value).expect("deserialized");
         assert_eq!(back.schema_version, "cfbo-v1");
         assert_eq!(back.run.mode, "baseline");
@@ -240,11 +241,7 @@ mod tests {
                 .map(|cap| vec![cap])
                 .unwrap_or_default();
 
-            let bo = sample_boundary_object().with_capabilities(
-                key.clone(),
-                primary,
-                &secondary,
-            );
+            let bo = sample_boundary_object().with_capabilities(key.clone(), primary, &secondary);
             let primary_id = primary.id.clone();
             let secondary_ids: Vec<CapabilityId> =
                 secondary.iter().map(|cap| cap.id.clone()).collect();

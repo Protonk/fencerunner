@@ -170,4 +170,3 @@ fn parse_token(raw: &str) -> Option<CapabilityId> {
     }
     Some(CapabilityId(trimmed.to_string()))
 }
-

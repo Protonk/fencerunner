@@ -108,10 +108,7 @@ fn collect_nonsuccess(records: &[BoundaryObject]) -> Vec<String> {
         if record.result.observed_result == "success" {
             continue;
         }
-        let capability = record
-            .primary_capability_id()
-            .0
-            .as_str();
+        let capability = record.primary_capability_id().0.as_str();
         let mut detail = format!(
             "{} [{}] -> {} (capability {}, target {})",
             record.probe.id,

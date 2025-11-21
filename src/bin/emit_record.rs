@@ -1,8 +1,8 @@
-use anyhow::{anyhow, bail, Context, Result};
+use anyhow::{Context, Result, anyhow, bail};
 use codex_fence::{
-    find_repo_root, resolve_helper_binary, CapabilityId, CapabilityIndex, CapabilitySnapshot,
+    CapabilityId, CapabilityIndex, CapabilitySnapshot, find_repo_root, resolve_helper_binary,
 };
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::collections::BTreeSet;
 use std::env;
 use std::fs;
@@ -74,12 +74,19 @@ fn run() -> Result<()> {
 
     let primary_capability = capability_index
         .capability(&args.primary_capability_id)
-        .ok_or_else(|| anyhow!("Unable to resolve capability metadata for {}", args.primary_capability_id.0))?;
+        .ok_or_else(|| {
+            anyhow!(
+                "Unable to resolve capability metadata for {}",
+                args.primary_capability_id.0
+            )
+        })?;
     let secondary_capabilities =
         resolve_secondary_capabilities(&capability_index, &secondary_capability_ids)?;
     let primary_capability_snapshot = primary_capability.snapshot();
-    let secondary_capability_snapshots: Vec<CapabilitySnapshot> =
-        secondary_capabilities.iter().map(|cap| cap.snapshot()).collect();
+    let secondary_capability_snapshots: Vec<CapabilitySnapshot> = secondary_capabilities
+        .iter()
+        .map(|cap| cap.snapshot())
+        .collect();
 
     let record = json!({
         "schema_version": "cfbo-v1",
@@ -434,7 +441,10 @@ mod tests {
 
     #[test]
     fn normalize_secondary_deduplicates_and_trims() {
-        let caps = sample_index(&[("cap_a", "filesystem", "os_sandbox"), ("cap_b", "process", "agent_runtime")]);
+        let caps = sample_index(&[
+            ("cap_a", "filesystem", "os_sandbox"),
+            ("cap_b", "process", "agent_runtime"),
+        ]);
         let input = vec![
             CapabilityId(" cap_a ".to_string()),
             CapabilityId("cap_b".to_string()),

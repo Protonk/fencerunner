@@ -1,6 +1,6 @@
 use crate::catalog::load_catalog_from_path;
 use crate::catalog::{Capability, CapabilityCatalog, CapabilityId, CatalogKey};
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use std::collections::BTreeMap;
 use std::path::Path;
 
@@ -80,4 +80,3 @@ fn build_index(catalog: &CapabilityCatalog) -> Result<BTreeMap<CapabilityId, Cap
     }
     Ok(map)
 }
-

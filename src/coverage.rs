@@ -1,6 +1,6 @@
 use crate::catalog::CapabilityIndex;
 use crate::probe_metadata::ProbeMetadata;
-use anyhow::{anyhow, bail, Result};
+use anyhow::{Result, anyhow, bail};
 use serde::Serialize;
 use std::collections::BTreeMap;
 

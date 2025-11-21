@@ -45,10 +45,7 @@ pub fn validate_boundary_objects(
         let data = match fs::read_to_string(&json_file) {
             Ok(data) => data,
             Err(err) => {
-                errors.push(format!(
-                    "{}: unable to read: {err}",
-                    json_file.display()
-                ));
+                errors.push(format!("{}: unable to read: {err}", json_file.display()));
                 continue;
             }
         };
@@ -56,10 +53,7 @@ pub fn validate_boundary_objects(
         let value: Value = match serde_json::from_str(&data) {
             Ok(val) => val,
             Err(err) => {
-                errors.push(format!(
-                    "{}: invalid JSON: {err}",
-                    json_file.display()
-                ));
+                errors.push(format!("{}: invalid JSON: {err}", json_file.display()));
                 continue;
             }
         };
@@ -148,4 +142,3 @@ fn extract_capability_ids(value: &Value) -> Vec<CapabilityId> {
 
     ids
 }
-

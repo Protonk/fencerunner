@@ -384,11 +384,8 @@ primary_capability_id="cap_fs_read_workspace_tree"
   --payload-file /dev/null \
   --operation-args "{}"
 "#;
-    let broken = FixtureProbe::install_from_contents(
-        &repo_root,
-        "tests_static_contract_broken",
-        contents,
-    )?;
+    let broken =
+        FixtureProbe::install_from_contents(&repo_root, "tests_static_contract_broken", contents)?;
 
     let mut cmd = Command::new(repo_root.join("tools/contract_gate/static_gate.sh"));
     cmd.arg("--probe").arg(broken.probe_id());

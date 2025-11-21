@@ -1,5 +1,5 @@
 use crate::catalog::identity::{
-    CatalogKey, CapabilityCategory, CapabilityId, CapabilityLayer, CapabilitySnapshot,
+    CapabilityCategory, CapabilityId, CapabilityLayer, CapabilitySnapshot, CatalogKey,
 };
 use anyhow::Result;
 use serde::Deserialize;

@@ -90,7 +90,7 @@ The fast authoring loop favors single-probe runs:
 - `tools/contract_gate/static_gate.sh --probe probes/<id>.sh` runs
   the interpreted, quick-fail contract (syntax + structural checks) while you
   iterate on a single script.
-- `codex-fence --test` runs the static contract against every probe in the
+- `bin/fence-test` runs the static contract against every probe in the
   repository.
 - `cargo test --test second_tier` covers the Rust guard rails (schema validation
   and harness smoke tests).

@@ -1,7 +1,7 @@
 use anyhow::{Context, Result, bail};
 use codex_fence::{
-    codex_present, find_repo_root, list_probes, resolve_helper_binary, resolve_probe, split_list,
-    Probe,
+    Probe, codex_present, find_repo_root, list_probes, resolve_helper_binary, resolve_probe,
+    split_list,
 };
 use serde_json::Value;
 use std::{

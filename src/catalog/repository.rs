@@ -1,4 +1,4 @@
-use crate::catalog::identity::{CatalogKey, CapabilityId};
+use crate::catalog::identity::{CapabilityId, CatalogKey};
 use crate::catalog::model::{Capability, CapabilityCatalog};
 use std::collections::BTreeMap;
 
@@ -17,10 +17,7 @@ impl CatalogRepository {
     }
 
     pub fn find_capability(&self, key: &CatalogKey, id: &CapabilityId) -> Option<&Capability> {
-        self.get(key)?
-            .capabilities
-            .iter()
-            .find(|cap| &cap.id == id)
+        self.get(key)?.capabilities.iter().find(|cap| &cap.id == id)
     }
 }
 

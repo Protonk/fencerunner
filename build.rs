@@ -10,9 +10,7 @@ fn main() {
 
     if let Some(raw_hint) = hint {
         let candidate = PathBuf::from(raw_hint);
-        let canonical = candidate
-            .canonicalize()
-            .unwrap_or(candidate);
+        let canonical = candidate.canonicalize().unwrap_or(candidate);
 
         println!(
             "cargo:rustc-env=CODEX_FENCE_ROOT_HINT={}",

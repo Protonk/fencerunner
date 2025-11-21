@@ -15,19 +15,9 @@ fn main() {
 
 fn run() -> Result<()> {
     let cli = Cli::parse()?;
-    let repo_root = match find_repo_root() {
-        Ok(path) => Some(path),
-        Err(err) => {
-            if cli.command.requires_repo_root() {
-                return Err(err);
-            }
-            None
-        }
-    };
+    let repo_root = find_repo_root().ok();
 
-    match cli.command {
-        _ => run_helper(&cli, repo_root.as_deref()),
-    }
+    run_helper(&cli, repo_root.as_deref())
 }
 
 struct Cli {
@@ -39,7 +29,6 @@ struct Cli {
 enum CommandTarget {
     Bang,
     Listen,
-    Test,
 }
 
 impl CommandTarget {
@@ -47,12 +36,7 @@ impl CommandTarget {
         match self {
             CommandTarget::Bang => "fence-bang",
             CommandTarget::Listen => "fence-listen",
-            CommandTarget::Test => "fence-test",
         }
-    }
-
-    fn requires_repo_root(self) -> bool {
-        matches!(self, CommandTarget::Test)
     }
 }
 
@@ -72,7 +56,6 @@ impl Cli {
         let command = match flag_str {
             "--bang" | "-b" => CommandTarget::Bang,
             "--listen" | "-l" => CommandTarget::Listen,
-            "--test" | "-t" => CommandTarget::Test,
             "--help" | "-h" => usage(0),
             _ => usage(1),
         };
@@ -87,7 +70,7 @@ impl Cli {
 
 fn usage(code: i32) -> ! {
     eprintln!(
-        "Usage: codex-fence (--bang | --listen | --test) [args]\n\nCommands:\n  --bang, -b   Run the probe matrix and emit cfbo-v1 records to stdout (NDJSON).\n  --listen, -l Read cfbo-v1 JSON from stdin and print a human summary.\n  --test, -t   Run the static probe contract across every probes/*.sh script.\n\nExample:\n  codex-fence --bang | codex-fence --listen"
+        "Usage: codex-fence (--bang | --listen) [args]\n\nCommands:\n  --bang, -b   Run the probe matrix and emit cfbo-v1 records to stdout (NDJSON).\n  --listen, -l Read cfbo-v1 JSON from stdin and print a human summary.\n\nExample:\n  codex-fence --bang | codex-fence --listen"
     );
     std::process::exit(code);
 }
@@ -192,14 +175,14 @@ mod tests {
     #[test]
     fn finds_helper_on_path() {
         let temp = TempDir::new();
-        let helper = temp.root.join("fence-test");
+        let helper = temp.root.join("fence-bang");
         fs::write(&helper, "#!/bin/sh\n").unwrap();
         make_executable(&helper);
         let original_path = env::var_os("PATH");
         unsafe {
             env::set_var("PATH", temp.root.to_str().unwrap());
         }
-        let resolved = resolve_helper("fence-test", None).unwrap();
+        let resolved = resolve_helper("fence-bang", None).unwrap();
         assert_eq!(resolved, helper);
         if let Some(path) = original_path {
             unsafe {
@@ -221,7 +204,7 @@ mod tests {
             static COUNTER: AtomicUsize = AtomicUsize::new(0);
             let mut dir = env::temp_dir();
             dir.push(format!(
-                "codex-fence-test-{}-{}",
+                "codex-fence-cli-{}-{}",
                 std::process::id(),
                 COUNTER.fetch_add(1, Ordering::SeqCst)
             ));
