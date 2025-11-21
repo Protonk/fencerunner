@@ -10,9 +10,12 @@ primary_capability_id="cap_agent_sandbox_env_marker"
 marker_var="CODEX_SANDBOX_ENV_VAR"
 printf -v command_executed "printenv %s" "${marker_var}"
 
-stdout_tmp=$(mktemp)
-stderr_tmp=$(mktemp)
-payload_tmp=$(mktemp)
+tmp_dir="${repo_root}/tmp/${probe_name}"
+mkdir -p "${tmp_dir}"
+
+stdout_tmp=$(mktemp "${tmp_dir}/stdout.XXXXXX")
+stderr_tmp=$(mktemp "${tmp_dir}/stderr.XXXXXX")
+payload_tmp=$(mktemp "${tmp_dir}/payload.XXXXXX")
 trap 'rm -f "${stdout_tmp}" "${stderr_tmp}" "${payload_tmp}"' EXIT
 
 status="error"

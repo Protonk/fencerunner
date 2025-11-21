@@ -12,23 +12,17 @@ target_path="${FENCE_TRUST_LIST_PATH:-${HOME}/.config/codex/trust-list.json}"
 printf -v command_executed "cat %q" "${target_path}"
 
 scratch_dir="${repo_root}/tmp/${probe_name}"
-mkdir -p "${scratch_dir}"
+if ! mkdir -p "${scratch_dir}" 2>/dev/null; then
+  scratch_dir=""
+fi
 
-create_temp_file() {
-  local prefix=$1
-  local tmpfile
-  if tmpfile=$(mktemp "${scratch_dir}/${prefix}.XXXXXX" 2>/dev/null); then
-    printf '%s\n' "${tmpfile}"
-  else
-    tmpfile="${scratch_dir}/${prefix}.fallback.$$"
-    : >"${tmpfile}"
-    printf '%s\n' "${tmpfile}"
+payload_tmp=""
+cleanup() {
+  if [[ -n "${payload_tmp}" && -f "${payload_tmp}" ]]; then
+    rm -f "${payload_tmp}"
   fi
 }
-
-stderr_tmp=$(create_temp_file "stderr")
-payload_tmp=$(create_temp_file "payload")
-trap 'rm -f "${stderr_tmp}" "${payload_tmp}"' EXIT
+trap cleanup EXIT
 
 status="error"
 errno_value=""
@@ -36,12 +30,12 @@ message=""
 raw_exit_code=""
 
 set +e
-cat "${target_path}" >/dev/null 2>"${stderr_tmp}"
+stderr_text=$(cat "${target_path}" >/dev/null 2>&1)
 exit_code=$?
 set -e
 
 raw_exit_code="${exit_code}"
-stderr_text=$(tr -d '\0' <"${stderr_tmp}")
+stderr_text=$(printf '%s' "${stderr_text}" | tr -d '\0')
 lower_err=$(printf '%s' "${stderr_text}" | tr 'A-Z' 'a-z')
 
 if [[ ${exit_code} -eq 0 ]]; then
@@ -90,45 +84,64 @@ if [[ ${exit_code} -eq 0 ]]; then
   stdout_snippet="(suppressed: trust list contents not logged)"
 fi
 
-raw_payload=$(jq -n \
-  --arg path "${target_path}" \
-  --arg stderr "${stderr_text}" \
-  --argjson exit_code "${exit_code}" \
-  --arg bytes_read "${bytes_read}" \
-  --arg hash "${hash_value}" \
-  --arg hash_tool "${hash_tool}" \
-  '{path: $path,
-    exit_code: $exit_code,
-    bytes_read: (if ($bytes_read | length) > 0 then ($bytes_read | tonumber) else null end),
-    sha256: (if ($hash | length) > 0 then $hash else null end),
-    hash_tool: (if ($hash_tool | length) > 0 then $hash_tool else null end),
-    content_logged: false,
-    stderr: $stderr}')
+if [[ -n "${scratch_dir}" ]]; then
+  if payload_tmp=$(TMPDIR="${scratch_dir}" mktemp 2>/dev/null); then
+    :
+  fi
+fi
+if [[ -z "${payload_tmp}" ]]; then
+  if payload_tmp=$(mktemp 2>/dev/null); then
+    :
+  fi
+fi
 
-jq -n \
-  --arg stdout_snippet "${stdout_snippet}" \
-  --arg stderr_snippet "${stderr_text}" \
-  --argjson raw "${raw_payload}" \
-  '{stdout_snippet: ($stdout_snippet | if length > 400 then (.[:400] + "…") else . end),
-    stderr_snippet: ($stderr_snippet | if length > 400 then (.[:400] + "…") else . end),
-    raw: $raw}' >"${payload_tmp}"
+if [[ -n "${payload_tmp}" ]]; then
+  raw_payload=$(jq -n \
+    --arg path "${target_path}" \
+    --arg stderr "${stderr_text}" \
+    --argjson exit_code "${exit_code}" \
+    --arg bytes_read "${bytes_read}" \
+    --arg hash "${hash_value}" \
+    --arg hash_tool "${hash_tool}" \
+    '{path: $path,
+      exit_code: $exit_code,
+      bytes_read: (if ($bytes_read | length) > 0 then ($bytes_read | tonumber) else null end),
+      sha256: (if ($hash | length) > 0 then $hash else null end),
+      hash_tool: (if ($hash_tool | length) > 0 then $hash_tool else null end),
+      content_logged: false,
+      stderr: $stderr}')
+
+  jq -n \
+    --arg stdout_snippet "${stdout_snippet}" \
+    --arg stderr_snippet "${stderr_text}" \
+    --argjson raw "${raw_payload}" \
+    '{stdout_snippet: ($stdout_snippet | if length > 400 then (.[:400] + "…") else . end),
+      stderr_snippet: ($stderr_snippet | if length > 400 then (.[:400] + "…") else . end),
+      raw: $raw}' >"${payload_tmp}"
+fi
 
 operation_args=$(jq -n \
   --arg path "${target_path}" \
   '{path: $path}')
 
-"${emit_record_bin}" \
-  --run-mode "${run_mode}" \
-  --probe-name "${probe_name}" \
-  --probe-version "1" \
-  --primary-capability-id "${primary_capability_id}" \
-  --command "${command_executed}" \
-  --category "agent_policy" \
-  --verb "read" \
-  --target "${target_path}" \
-  --status "${status}" \
-  --errno "${errno_value}" \
-  --message "${message}" \
-  --raw-exit-code "${raw_exit_code}" \
-  --payload-file "${payload_tmp}" \
+emit_args=(
+  --run-mode "${run_mode}"
+  --probe-name "${probe_name}"
+  --probe-version "1"
+  --primary-capability-id "${primary_capability_id}"
+  --command "${command_executed}"
+  --category "agent_policy"
+  --verb "read"
+  --target "${target_path}"
+  --status "${status}"
+  --errno "${errno_value}"
+  --message "${message}"
+  --raw-exit-code "${raw_exit_code}"
   --operation-args "${operation_args}"
+)
+
+if [[ -n "${payload_tmp}" && -f "${payload_tmp}" ]]; then
+  emit_args+=(--payload-file "${payload_tmp}")
+fi
+
+"${emit_record_bin}" "${emit_args[@]}"
