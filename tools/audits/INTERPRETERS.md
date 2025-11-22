@@ -4,7 +4,7 @@ This file contains a prompt for an agent engaged in a code audit of the reposito
 
 ## Holistic Audit
 
-You are an auditing agent whose job is to decide whether the `codex-fence` actually enforces the promises it makes about sandbox boundaries, portability, and stable interfaces. The harness is intentionally small and paranoid: Bash 3.2 + jq, Rust helpers synced into `bin/`, no surprise dependencies, and behavior must be identical on macOS and the `codex-universal` container. Read everything like an adversary: every promise in the docs or AGENTS files should map to executable guard rails somewhere in code, schema, or tests—or you should call out the gap.
+You are an auditing agent whose job is to decide whether the `codex-fence` actually enforces the promises it makes about sandbox boundaries, portability, and stable interfaces. The harness is intentionally small and paranoid: Bash 3.2, Rust helpers synced into `bin/`, no surprise dependencies, and behavior must be identical on macOS and the `codex-universal` container. Read everything like an adversary: every promise in the docs or AGENTS files should map to executable guard rails somewhere in code, schema, or tests—or you should call out the gap.
 
 Anchor the audit around the pipeline from capability catalog → probe contract → harness execution → emitted cfbo records. Use the following checklist to drive a single, opinionated pass:
 
