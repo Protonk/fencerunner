@@ -6,12 +6,11 @@ tests.
 ## Mental model
 
 `tests/` enforces that probes and helpers stay portable and in sync with the
-public boundary-object schema. The directory is split into four layers:
+public boundary-object schema. The directory is split into two layers:
 
 | Layer | Entry point | Purpose |
 | --- | --- | --- |
-| Audits | `tests/audits/` | Agent instructions for conducting holistics and probe audits. |
-| Shims | `tests/shims/` | Shared Bash helpers + fixtures depended on by every suite. |
+| Mocks | `tests/mocks/` | Mocks for testing, currently a mock probe. |
 | Tests | `tests/suite.rs` | Global checks that validate documentation, schema, and harness plumbing (run via `cargo test --test suite`). |
 
 ## Quick start for agents
@@ -33,7 +32,7 @@ public boundary-object schema. The directory is split into four layers:
   `cargo test --test suite boundary_object_schema` to lint the emitted
   boundary object against `schema/boundary_object.json` with the `jsonschema`
   crate.
-- `tests/shims/minimal_probe.sh` is a self-contained probe used by the
+- `tests/mocks/minimal_probe.sh` is a self-contained probe used by the
   smoke suites. It writes to a temporary workspace and pipes a deterministic
   record into `bin/emit-record`. Prefer copying this file when you need a dummy
   probe rather than inventing ad‑hoc scripts.
@@ -63,7 +62,7 @@ circuit on missing prerequisites, and print `name: PASS/FAIL` summaries.
 - **New probe-level checks:** Extend `tools/validate_contract_gate.sh`
   when adding additional structural or syntax rules so the single-probe
   workflow stays fast.
-- **New fixtures:** Place them under `tests/shims/` so multiple suites
+- **New fixtures:** Place them under `tests/mocks/` so multiple suites
   can share them, and document any special behavior.
 - **New suites:** Add more Rust tests to `tests/suite.rs`. Keep them
   hermetic, reuse the fixture helpers, and gate probe directory mutations with

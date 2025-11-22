@@ -50,7 +50,7 @@ valuable.
 - The directory layout, fixtures, and suite expectations are captured in
   [`tests/AGENTS.md`](tests/AGENTS.md). Update that guide whenever you add a new
   suite or change workflows so agents know how to reproduce failures.
-- Place reusable fixtures under `tests/shims/` and keep them synced
+- Place reusable fixtures under `tests/mocks/` and keep them synced
   with the capability catalog (the validation scripts scan these files too).
 - Add new guard rails to `tests/suite.rs` when the checks are global or
   slow. Ensure they short-circuit quickly on missing prerequisites so macOS

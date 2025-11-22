@@ -640,7 +640,7 @@ exit 0
     Ok(())
 }
 
-// Helper for installing temporary probe shims under probes/ and cleaning them
+// Helper for installing temporary probe mocks under probes/ and cleaning them
 // up after each test.
 struct FixtureProbe {
     path: PathBuf,
@@ -649,7 +649,7 @@ struct FixtureProbe {
 
 impl FixtureProbe {
     fn install(repo_root: &Path, name: &str) -> Result<Self> {
-        let source = repo_root.join("tests/shims/minimal_probe.sh");
+        let source = repo_root.join("tests/mocks/minimal_probe.sh");
         let dest = repo_root.join("probes").join(format!("{name}.sh"));
         if dest.exists() {
             bail!("fixture already exists at {}", dest.display());
