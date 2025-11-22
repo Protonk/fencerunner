@@ -187,10 +187,10 @@ fn workspace_plan_from_override(value: WorkspaceOverride) -> WorkspacePlan {
 /// root so codex sandbox profiles align with the trusted tree, otherwise fall
 /// back to the repository root.
 fn command_cwd_for(plan: &WorkspacePlan, default_root: &Path) -> PathBuf {
-    plan.export_value
-        .as_ref()
-        .map(PathBuf::from)
-        .unwrap_or_else(|| default_root.to_path_buf())
+    if let Some(value) = plan.export_value.as_ref() {
+        return PathBuf::from(value);
+    }
+    env::current_dir().unwrap_or_else(|_| default_root.to_path_buf())
 }
 
 fn canonicalize_path(path: &Path) -> PathBuf {

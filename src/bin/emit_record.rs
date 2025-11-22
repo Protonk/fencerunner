@@ -8,8 +8,9 @@
 use anyhow::{Context, Result, anyhow, bail};
 use codex_fence::{
     CapabilityId, CapabilityIndex, CapabilitySnapshot, find_repo_root, resolve_helper_binary,
+    split_list,
 };
-use serde_json::{Value, json};
+use serde_json::{Map, Value, json};
 use std::collections::BTreeSet;
 use std::env;
 use std::ffi::OsString;
@@ -55,17 +56,8 @@ fn run() -> Result<()> {
 
     let capabilities_schema_version = capability_index.key().clone();
 
-    let payload = match &args.payload_file {
-        Some(path) => {
-            if !path.is_file() {
-                bail!("Payload file not found: {}", path.display());
-            }
-            read_json_file(path)?
-        }
-        None => default_payload(),
-    };
-
-    let operation_args = parse_json_string(&args.operation_args, "operation args")?;
+    let payload = args.payload.build()?;
+    let operation_args = args.operation_args.build("operation args")?;
 
     let stack_json = run_command_json(&detect_stack, &[&args.run_mode])
         .with_context(|| format!("Failed to execute {}", detect_stack.display()))?;
@@ -147,8 +139,8 @@ struct CliArgs {
     duration_ms: Option<i64>,
     raw_exit_code: Option<i64>,
     error_detail: Option<String>,
-    payload_file: Option<PathBuf>,
-    operation_args: String,
+    payload: PayloadArgs,
+    operation_args: JsonObjectBuilder,
     primary_capability_id: CapabilityId,
     secondary_capability_ids: Vec<CapabilityId>,
     command: String,
@@ -192,10 +184,102 @@ impl CliArgs {
                 }
                 "--payload-file" => {
                     let value = PathBuf::from(next_value(&mut args, "--payload-file")?);
-                    config.payload_file = Some(value);
+                    config.payload.set_payload_file(value)?;
+                }
+                "--payload-stdout" => {
+                    let value = next_value(&mut args, "--payload-stdout")?;
+                    config
+                        .payload
+                        .set_stdout(TextSource::Inline(value))?;
+                }
+                "--payload-stdout-file" => {
+                    let value = PathBuf::from(next_value(&mut args, "--payload-stdout-file")?);
+                    config
+                        .payload
+                        .set_stdout(TextSource::File(value))?;
+                }
+                "--payload-stderr" => {
+                    let value = next_value(&mut args, "--payload-stderr")?;
+                    config
+                        .payload
+                        .set_stderr(TextSource::Inline(value))?;
+                }
+                "--payload-stderr-file" => {
+                    let value = PathBuf::from(next_value(&mut args, "--payload-stderr-file")?);
+                    config
+                        .payload
+                        .set_stderr(TextSource::File(value))?;
+                }
+                "--payload-raw" => {
+                    let value = next_value(&mut args, "--payload-raw")?;
+                    config
+                        .payload
+                        .raw
+                        .merge_json_string(&value, "payload raw")?;
+                }
+                "--payload-raw-file" => {
+                    let value = PathBuf::from(next_value(&mut args, "--payload-raw-file")?);
+                    config
+                        .payload
+                        .raw
+                        .merge_json_file(&value, "payload raw")?;
+                }
+                "--payload-raw-field" => {
+                    let key = next_value(&mut args, "--payload-raw-field")?;
+                    let value = next_value(&mut args, "--payload-raw-field")?;
+                    config.payload.raw.insert_string(key, value);
+                }
+                "--payload-raw-field-json" => {
+                    let key = next_value(&mut args, "--payload-raw-field-json")?;
+                    let value = next_value(&mut args, "--payload-raw-field-json")?;
+                    config
+                        .payload
+                        .raw
+                        .insert_json_value(key, value, "payload raw field")?;
+                }
+                "--payload-raw-null" => {
+                    let key = next_value(&mut args, "--payload-raw-null")?;
+                    config.payload.raw.insert_null(key);
+                }
+                "--payload-raw-list" => {
+                    let key = next_value(&mut args, "--payload-raw-list")?;
+                    let value = next_value(&mut args, "--payload-raw-list")?;
+                    let entries = split_list(&value);
+                    config.payload.raw.insert_list(key, entries);
                 }
                 "--operation-args" => {
-                    config.operation_args = Some(next_value(&mut args, "--operation-args")?)
+                    let value = next_value(&mut args, "--operation-args")?;
+                    config
+                        .operation_args
+                        .merge_json_string(&value, "operation args")?;
+                }
+                "--operation-args-file" => {
+                    let value = PathBuf::from(next_value(&mut args, "--operation-args-file")?);
+                    config
+                        .operation_args
+                        .merge_json_file(&value, "operation args")?;
+                }
+                "--operation-arg" => {
+                    let key = next_value(&mut args, "--operation-arg")?;
+                    let value = next_value(&mut args, "--operation-arg")?;
+                    config.operation_args.insert_string(key, value);
+                }
+                "--operation-arg-json" => {
+                    let key = next_value(&mut args, "--operation-arg-json")?;
+                    let value = next_value(&mut args, "--operation-arg-json")?;
+                    config
+                        .operation_args
+                        .insert_json_value(key, value, "operation arg")?;
+                }
+                "--operation-arg-null" => {
+                    let key = next_value(&mut args, "--operation-arg-null")?;
+                    config.operation_args.insert_null(key);
+                }
+                "--operation-arg-list" => {
+                    let key = next_value(&mut args, "--operation-arg-list")?;
+                    let value = next_value(&mut args, "--operation-arg-list")?;
+                    let entries = split_list(&value);
+                    config.operation_args.insert_list(key, entries);
                 }
                 "--primary-capability-id" => {
                     config.primary_capability_id =
@@ -237,8 +321,8 @@ struct PartialArgs {
     duration_ms: Option<i64>,
     raw_exit_code: Option<i64>,
     error_detail: Option<String>,
-    payload_file: Option<PathBuf>,
-    operation_args: Option<String>,
+    payload: PayloadArgs,
+    operation_args: JsonObjectBuilder,
     primary_capability_id: Option<String>,
     secondary_capability_ids: Vec<String>,
     command: Option<String>,
@@ -259,7 +343,7 @@ impl PartialArgs {
             duration_ms,
             raw_exit_code,
             error_detail,
-            payload_file,
+            payload,
             operation_args,
             primary_capability_id,
             secondary_capability_ids,
@@ -279,8 +363,8 @@ impl PartialArgs {
             duration_ms,
             raw_exit_code,
             error_detail: error_detail.filter(not_empty),
-            payload_file,
-            operation_args: operation_args.unwrap_or_else(|| "{}".to_string()),
+            payload,
+            operation_args,
             primary_capability_id: CapabilityId(Self::require(
                 "--primary-capability-id",
                 primary_capability_id,
@@ -296,6 +380,202 @@ impl PartialArgs {
     fn require(flag: &str, value: Option<String>) -> Result<String> {
         value.ok_or_else(|| anyhow!("Missing required flag: {flag}"))
     }
+}
+
+#[derive(Default, Clone)]
+struct PayloadArgs {
+    payload_file: Option<PathBuf>,
+    stdout: Option<TextSource>,
+    stderr: Option<TextSource>,
+    raw: JsonObjectBuilder,
+}
+
+impl PayloadArgs {
+    fn set_payload_file(&mut self, path: PathBuf) -> Result<()> {
+        if self.payload_file.is_some() {
+            bail!("--payload-file provided multiple times");
+        }
+        self.payload_file = Some(path);
+        Ok(())
+    }
+
+    fn set_stdout(&mut self, source: TextSource) -> Result<()> {
+        if self.stdout.is_some() {
+            bail!("stdout snippet provided multiple times");
+        }
+        self.stdout = Some(source);
+        Ok(())
+    }
+
+    fn set_stderr(&mut self, source: TextSource) -> Result<()> {
+        if self.stderr.is_some() {
+            bail!("stderr snippet provided multiple times");
+        }
+        self.stderr = Some(source);
+        Ok(())
+    }
+
+    fn build(self) -> Result<Value> {
+        if let Some(ref path) = self.payload_file {
+            if self.has_inline_fields() {
+                bail!("--payload-file cannot be combined with inline payload flags");
+            }
+            if !path.is_file() {
+                bail!("Payload file not found: {}", path.display());
+            }
+            return read_json_file(&path);
+        }
+
+        let stdout_snippet = build_snippet_value(self.stdout)?;
+        let stderr_snippet = build_snippet_value(self.stderr)?;
+        let raw = self.raw.build("payload raw object")?;
+
+        Ok(json!({
+            "stdout_snippet": stdout_snippet,
+            "stderr_snippet": stderr_snippet,
+            "raw": raw,
+        }))
+    }
+
+    fn has_inline_fields(&self) -> bool {
+        self.stdout.is_some() || self.stderr.is_some() || !self.raw.is_empty()
+    }
+}
+
+#[derive(Default, Clone)]
+struct JsonObjectBuilder {
+    sources: Vec<JsonValueSource>,
+}
+
+impl JsonObjectBuilder {
+    fn merge_json_string(&mut self, raw: &str, label: &str) -> Result<()> {
+        let value: Value =
+            serde_json::from_str(raw).with_context(|| format!("Invalid JSON for {label}"))?;
+        self.push_object(value, label)
+    }
+
+    fn merge_json_file(&mut self, path: &Path, label: &str) -> Result<()> {
+        if !path.is_file() {
+            bail!("{label} file not found: {}", path.display());
+        }
+        let value = read_json_file(path)?;
+        self.push_object(value, label)
+    }
+
+    fn push_object(&mut self, value: Value, label: &str) -> Result<()> {
+        match value {
+            Value::Object(map) => {
+                self.sources.push(JsonValueSource::MergeObject(map));
+                Ok(())
+            }
+            _ => bail!("{label} must be a JSON object"),
+        }
+    }
+
+    fn insert_string(&mut self, key: String, value: String) {
+        self.sources.push(JsonValueSource::SetField {
+            key,
+            value: Value::String(value),
+        });
+    }
+
+    fn insert_json_value(&mut self, key: String, raw: String, label: &str) -> Result<()> {
+        let value: Value = serde_json::from_str(&raw)
+            .with_context(|| format!("Invalid JSON for {label} value {key}"))?;
+        self.sources.push(JsonValueSource::SetField { key, value });
+        Ok(())
+    }
+
+    fn insert_null(&mut self, key: String) {
+        self.sources
+            .push(JsonValueSource::SetField { key, value: Value::Null });
+    }
+
+    fn insert_list(&mut self, key: String, values: Vec<String>) {
+        let arr = values.into_iter().map(Value::String).collect();
+        self.sources.push(JsonValueSource::SetField {
+            key,
+            value: Value::Array(arr),
+        });
+    }
+
+    fn build(&self, label: &str) -> Result<Value> {
+        let mut map: Map<String, Value> = Map::new();
+        for source in &self.sources {
+            match source {
+                JsonValueSource::MergeObject(obj) => merge_object(&mut map, obj),
+                JsonValueSource::SetField { key, value } => {
+                    map.insert(key.clone(), value.clone());
+                    Ok(())
+                }
+            }
+            .with_context(|| format!("while building {label}"))?;
+        }
+        Ok(Value::Object(map))
+    }
+
+    fn is_empty(&self) -> bool {
+        self.sources.is_empty()
+    }
+}
+
+#[derive(Clone)]
+enum JsonValueSource {
+    MergeObject(Map<String, Value>),
+    SetField { key: String, value: Value },
+}
+
+#[derive(Clone)]
+enum TextSource {
+    Inline(String),
+    File(PathBuf),
+}
+
+fn merge_object(target: &mut Map<String, Value>, source: &Map<String, Value>) -> Result<()> {
+    for (key, value) in source {
+        target.insert(key.clone(), value.clone());
+    }
+    Ok(())
+}
+
+fn build_snippet_value(source: Option<TextSource>) -> Result<Value> {
+    let Some(src) = source else {
+        return Ok(Value::Null);
+    };
+    let text = read_text_source(&src)?;
+    Ok(Value::String(truncate_snippet(&text)))
+}
+
+fn read_text_source(source: &TextSource) -> Result<String> {
+    let raw = match source {
+        TextSource::Inline(value) => value.clone(),
+        TextSource::File(path) => {
+            if !path.is_file() {
+                bail!("Snippet file not found: {}", path.display());
+            }
+            String::from_utf8_lossy(&fs::read(path)?).into_owned()
+        }
+    };
+    Ok(clean_text(&raw))
+}
+
+fn clean_text(raw: &str) -> String {
+    raw.replace('\0', "")
+}
+
+const SNIPPET_MAX_CHARS: usize = 400;
+const SNIPPET_ELLIPSIS: &str = "\u{2026}";
+
+fn truncate_snippet(text: &str) -> String {
+    let mut acc = String::new();
+    for (idx, ch) in text.chars().enumerate() {
+        if idx >= SNIPPET_MAX_CHARS {
+            acc.push_str(SNIPPET_ELLIPSIS);
+            return acc;
+        }
+        acc.push(ch);
+    }
+    acc
 }
 
 fn next_value(args: &mut impl Iterator<Item = OsString>, flag: &str) -> Result<String> {
@@ -381,11 +661,7 @@ fn validate_capability_id(
 
 fn read_json_file(path: &Path) -> Result<Value> {
     let data = fs::read_to_string(path)?;
-    serde_json::from_str(&data).context("Payload file contained invalid JSON")
-}
-
-fn parse_json_string(raw: &str, label: &str) -> Result<Value> {
-    serde_json::from_str(raw).with_context(|| format!("Invalid JSON for {label}"))
+    serde_json::from_str(&data).context("File contained invalid JSON")
 }
 
 fn run_command_json(path: &Path, args: &[&str]) -> Result<Value> {
@@ -399,14 +675,6 @@ fn run_command_json(path: &Path, args: &[&str]) -> Result<Value> {
         bail!("{} failed: {stderr}", path.display());
     }
     serde_json::from_slice(&output.stdout).context("Failed to parse command output as JSON")
-}
-
-fn default_payload() -> Value {
-    json!({
-        "stdout_snippet": Value::Null,
-        "stderr_snippet": Value::Null,
-        "raw": {},
-    })
 }
 
 fn resolve_secondary_capabilities<'a>(
@@ -467,7 +735,7 @@ fn print_usage() {
 fn usage() -> &'static str {
     "Usage: emit-record --run-mode MODE --probe-name NAME --probe-version VERSION \
   --primary-capability-id CAP_ID --command COMMAND \
-  --category CATEGORY --verb VERB --target TARGET --status STATUS [options]\n\nOptions:\n  --errno ERRNO\n  --message MESSAGE\n  --duration-ms MILLIS\n  --raw-exit-code CODE\n  --error-detail TEXT\n  --secondary-capability-id CAP_ID   # repeat for multiple entries\n  --payload-file PATH\n  --operation-args JSON_OBJECT\n"
+  --category CATEGORY --verb VERB --target TARGET --status STATUS [options]\n\nOptions:\n  --errno ERRNO\n  --message MESSAGE\n  --duration-ms MILLIS\n  --raw-exit-code CODE\n  --error-detail TEXT\n  --secondary-capability-id CAP_ID   # repeat for multiple entries\n  --payload-file PATH (JSON object)\n  --payload-stdout TEXT | --payload-stdout-file PATH\n  --payload-stderr TEXT | --payload-stderr-file PATH\n  --payload-raw JSON_OBJECT | --payload-raw-file PATH\n  --payload-raw-field KEY VALUE\n  --payload-raw-field-json KEY JSON_VALUE\n  --payload-raw-null KEY\n  --payload-raw-list KEY \"a,b,c\"\n  --operation-args JSON_OBJECT | --operation-args-file PATH\n  --operation-arg KEY VALUE\n  --operation-arg-json KEY JSON_VALUE\n  --operation-arg-null KEY\n  --operation-arg-list KEY \"a,b,c\"\n"
 }
 
 fn not_empty(value: &String) -> bool {
@@ -537,6 +805,62 @@ mod tests {
         )
         .unwrap();
         assert!(CapabilityIndex::load(file.path()).is_err());
+    }
+
+    #[test]
+    fn json_object_builder_overrides_fields() {
+        let mut builder = JsonObjectBuilder::default();
+        builder
+            .merge_json_string(r#"{"a":1,"b":2}"#, "object")
+            .expect("merge");
+        builder.insert_string("b".to_string(), "override".to_string());
+        builder.insert_list(
+            "c".to_string(),
+            vec!["first".to_string(), "second".to_string()],
+        );
+        builder
+            .insert_json_value("d".to_string(), "true".to_string(), "object")
+            .expect("json value");
+        let value = builder.build("test object").expect("build object");
+        let obj = value.as_object().expect("object shape");
+        assert_eq!(obj.get("a").and_then(Value::as_i64), Some(1));
+        assert_eq!(obj.get("b").and_then(Value::as_str), Some("override"));
+        assert_eq!(
+            obj.get("c")
+                .and_then(Value::as_array)
+                .map(|arr| arr.len()),
+            Some(2)
+        );
+        assert_eq!(obj.get("d").and_then(Value::as_bool), Some(true));
+    }
+
+    #[test]
+    fn payload_builder_accepts_inline_snippets() {
+        let mut payload = PayloadArgs::default();
+        payload
+            .set_stdout(TextSource::Inline("hello".to_string()))
+            .unwrap();
+        payload
+            .set_stderr(TextSource::Inline("stderr".to_string()))
+            .unwrap();
+        payload.raw.insert_null("raw_key".to_string());
+        let built = payload.build().expect("payload build");
+        assert_eq!(
+            built
+                .pointer("/stdout_snippet")
+                .and_then(Value::as_str),
+            Some("hello")
+        );
+        assert_eq!(
+            built
+                .pointer("/stderr_snippet")
+                .and_then(Value::as_str),
+            Some("stderr")
+        );
+        assert!(built
+            .pointer("/raw/raw_key")
+            .map(|v| v.is_null())
+            .unwrap_or(false));
     }
 
     fn sample_index(entries: &[(&str, &str, &str)]) -> CapabilityIndex {

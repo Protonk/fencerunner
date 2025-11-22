@@ -30,12 +30,27 @@ fn run() -> Result<()> {
     let probes = resolve_probes(&repo_root)?;
     let modes = resolve_modes()?;
 
+    let mut errors: Vec<String> = Vec::new();
     for mode in modes {
         for probe in &probes {
-            run_probe(&repo_root, probe, &mode)?;
+            if let Err(err) = run_probe(&repo_root, probe, &mode) {
+                let message =
+                    format!("probe {} in mode {} failed: {err:#}", probe.id, mode);
+                eprintln!("fence-bang: {message}");
+                errors.push(message);
+            }
         }
     }
-    Ok(())
+
+    if errors.is_empty() {
+        Ok(())
+    } else {
+        bail!(
+            "{} probe(s) failed; see stderr for details:\n{}",
+            errors.len(),
+            errors.join("\n")
+        )
+    }
 }
 
 fn resolve_modes() -> Result<Vec<String>> {

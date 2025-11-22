@@ -20,7 +20,15 @@ if [[ -z "${repo_root}" ]]; then
   echo "minimal_probe: unable to locate repo root" >&2
   exit 1
 fi
+
 emit_record_bin="${repo_root}/bin/emit-record"
+target_debug="${repo_root}/target/debug/emit-record"
+target_release="${repo_root}/target/release/emit-record"
+if [[ -x "${target_debug}" ]]; then
+  emit_record_bin="${target_debug}"
+elif [[ -x "${target_release}" ]]; then
+  emit_record_bin="${target_release}"
+fi
 
 probe_name="tests_fixture_probe"
 run_mode="${FENCE_RUN_MODE:-baseline}"
@@ -32,13 +40,6 @@ trap 'rm -rf "${workspace_tmp}"' EXIT
 printf 'fixture-line' > "${target_file}"
 # Mirror what bin/fence-run would capture so the record looks realistic.
 command_executed="printf fixture-line > ${target_file}"
-
-payload_tmp=$(mktemp)
-trap 'rm -rf "${workspace_tmp}" "${payload_tmp}"' EXIT
-
-# Build a payload stub instead of reading from stdin so tests stay hermetic.
-jq -n --arg stdout_snippet "fixture ok" --arg stderr_snippet "" --argjson raw '{"probe":"fixture"}' \
-  '{stdout_snippet: $stdout_snippet, stderr_snippet: $stderr_snippet, raw: $raw}' > "${payload_tmp}"
 
 # Emit the same boundary object a real probe would create.
 "${emit_record_bin}" \
@@ -52,5 +53,7 @@ jq -n --arg stdout_snippet "fixture ok" --arg stderr_snippet "" --argjson raw '{
   --target "${target_file}" \
   --status success \
   --raw-exit-code 0 \
-  --payload-file "${payload_tmp}" \
-  --operation-args '{"fixture":true}'
+  --payload-stdout "fixture ok" \
+  --payload-stderr "" \
+  --payload-raw-field "probe" "fixture" \
+  --operation-arg-json "fixture" "true"

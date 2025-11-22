@@ -28,8 +28,7 @@ printf -v command_executed "python3 %q" "${fork_python_script}"
 
 stdout_tmp=$(mktemp)
 stderr_tmp=$(mktemp)
-payload_tmp=$(mktemp)
-trap 'rm -f "${stdout_tmp}" "${stderr_tmp}" "${payload_tmp}" "${fork_python_script}"' EXIT
+trap 'rm -f "${stdout_tmp}" "${stderr_tmp}" "${fork_python_script}"' EXIT
 
 status="error"
 errno_value=""
@@ -69,24 +68,6 @@ if [[ "${stdout_text}" == *"child pid="* ]]; then
   child_observed="true"
 fi
 
-raw_payload=$(jq -n \
-  --arg stdout "${stdout_text}" \
-  --arg stderr "${stderr_text}" \
-  --argjson child_observed "$child_observed" \
-  '{child_observed: $child_observed == true, stdout_lines: ($stdout | split("\n") | map(select(length > 0))), stderr_lines: ($stderr | split("\n") | map(select(length > 0)))}')
-
-jq -n \
-  --arg stdout_snippet "${stdout_text}" \
-  --arg stderr_snippet "${stderr_text}" \
-  --argjson raw "${raw_payload}" \
-  '{stdout_snippet: ($stdout_snippet | if length > 400 then (.[:400] + "…") else . end),
-    stderr_snippet: ($stderr_snippet | if length > 400 then (.[:400] + "…") else . end),
-    raw: $raw}' >"${payload_tmp}"
-
-operation_args=$(jq -n \
-  --arg attempt "python3 os.fork + waitpid" \
-  '{attempt: $attempt}')
-
 "${emit_record_bin}" \
   --run-mode "${run_mode}" \
   --probe-name "${probe_name}" \
@@ -100,5 +81,9 @@ operation_args=$(jq -n \
   --errno "${errno_value}" \
   --message "${message}" \
   --raw-exit-code "${raw_exit_code}" \
-  --payload-file "${payload_tmp}" \
-  --operation-args "${operation_args}"
+  --payload-stdout "${stdout_text}" \
+  --payload-stderr "${stderr_text}" \
+  --payload-raw-field-json "child_observed" "${child_observed}" \
+  --payload-raw-field "stdout" "${stdout_text}" \
+  --payload-raw-field "stderr" "${stderr_text}" \
+  --operation-arg "attempt" "python3 os.fork + waitpid"
