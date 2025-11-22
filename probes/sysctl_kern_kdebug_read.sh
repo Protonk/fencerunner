@@ -16,9 +16,8 @@ printf -v command_executed "%q -n %q" "${sysctl_bin}" "${target_key}"
 
 stdout_tmp=$(mktemp)
 stderr_tmp=$(mktemp)
-payload_tmp=$(mktemp)
 cleanup() {
-  rm -f "${stdout_tmp}" "${stderr_tmp}" "${payload_tmp}"
+  rm -f "${stdout_tmp}" "${stderr_tmp}"
 }
 trap cleanup EXIT
 
@@ -66,42 +65,14 @@ else
   fi
 fi
 
-truncate() {
-  local value="$1"
-  if [[ ${#value} -gt 400 ]]; then
-    printf '%s…' "${value:0:400}"
-  else
-    printf '%s' "${value}"
-  fi
-}
-
-stdout_snippet=$(truncate "${stdout_text:-}")
-stderr_snippet=$(truncate "${stderr_text:-}")
-
-raw_payload=$(jq -n \
-  --arg key "${target_key}" \
-  --arg sysctl_bin "${sysctl_bin}" \
-  --arg stdout "${stdout_text:-}" \
-  --arg stderr "${stderr_text:-}" \
-  --argjson exit_code "${raw_exit_code:-0}" \
-  '{key: $key,
-    sysctl_bin: $sysctl_bin,
-    stdout: (if ($stdout | length) > 0 then $stdout else null end),
-    stderr: (if ($stderr | length) > 0 then $stderr else null end),
-    exit_code: $exit_code}')
-
-jq -n \
-  --arg stdout_snippet "${stdout_snippet}" \
-  --arg stderr_snippet "${stderr_snippet}" \
-  --argjson raw "${raw_payload}" \
-  '{stdout_snippet: (if ($stdout_snippet | length) > 0 then $stdout_snippet else "" end),
-    stderr_snippet: (if ($stderr_snippet | length) > 0 then $stderr_snippet else "" end),
-    raw: $raw}' >"${payload_tmp}"
-
-operation_args=$(jq -n \
-  --arg key "${target_key}" \
-  --arg sysctl_bin "${sysctl_bin}" \
-  '{key: $key, sysctl_bin: $sysctl_bin}')
+raw_stdout_flag=(--payload-raw-null "stdout")
+if [[ -n "${stdout_text:-}" ]]; then
+  raw_stdout_flag=(--payload-raw-field "stdout" "${stdout_text}")
+fi
+raw_stderr_flag=(--payload-raw-null "stderr")
+if [[ -n "${stderr_text:-}" ]]; then
+  raw_stderr_flag=(--payload-raw-field "stderr" "${stderr_text}")
+fi
 
 "${emit_record_bin}" \
   --run-mode "${run_mode}" \
@@ -116,5 +87,12 @@ operation_args=$(jq -n \
   --errno "${errno_value}" \
   --message "${message}" \
   --raw-exit-code "${raw_exit_code}" \
-  --payload-file "${payload_tmp}" \
-  --operation-args "${operation_args}"
+  --payload-stdout "${stdout_text:-}" \
+  --payload-stderr "${stderr_text:-}" \
+  --payload-raw-field "key" "${target_key}" \
+  --payload-raw-field "sysctl_bin" "${sysctl_bin}" \
+  --payload-raw-field-json "exit_code" "${raw_exit_code:-0}" \
+  "${raw_stdout_flag[@]}" \
+  "${raw_stderr_flag[@]}" \
+  --operation-arg "key" "${target_key}" \
+  --operation-arg "sysctl_bin" "${sysctl_bin}"

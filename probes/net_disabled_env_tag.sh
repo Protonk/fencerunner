@@ -17,8 +17,7 @@ printf -v command_executed "curl -m %q -s -o /dev/null -w %%{http_code} -I %q" "
 
 stdout_tmp=$(mktemp)
 stderr_tmp=$(mktemp)
-payload_tmp=$(mktemp)
-trap 'rm -f "${stdout_tmp}" "${stderr_tmp}" "${payload_tmp}"' EXIT
+trap 'rm -f "${stdout_tmp}" "${stderr_tmp}"' EXIT
 
 status="error"
 errno_value=""
@@ -60,31 +59,15 @@ else
   fi
 fi
 
-raw_json=$(jq -n \
-  --arg network_disabled_env "${network_disabled_flag}" \
-  --arg http_status "${stdout_text}" \
-  --argjson timeout "${timeout_seconds}" \
-  --arg url "${target_url}" \
-  --argjson curl_exit "${exit_code}" \
-  '{network_disabled_env: ($network_disabled_env | if length > 0 then . else null end),
-    http_status: ($http_status | if length > 0 then . else null end),
-    url: $url,
-    timeout_seconds: $timeout,
-    curl_exit_code: $curl_exit}')
+network_env_flag=(--payload-raw-null "network_disabled_env")
+if [[ -n "${network_disabled_flag}" ]]; then
+  network_env_flag=(--payload-raw-field "network_disabled_env" "${network_disabled_flag}")
+fi
 
-jq -n \
-  --arg stdout_snippet "${stdout_text}" \
-  --arg stderr_snippet "${stderr_text}" \
-  --argjson raw "${raw_json}" \
-  '{stdout_snippet: ($stdout_snippet | if length > 400 then (.[:400] + "…") else . end),
-    stderr_snippet: ($stderr_snippet | if length > 400 then (.[:400] + "…") else . end),
-    raw: $raw}' >"${payload_tmp}"
-
-operation_args=$(jq -n \
-  --arg method "HEAD" \
-  --arg url "${target_url}" \
-  --argjson timeout "${timeout_seconds}" \
-  '{method: $method, url: $url, timeout_seconds: $timeout}')
+http_status_flag=(--payload-raw-null "http_status")
+if [[ -n "${stdout_text}" ]]; then
+  http_status_flag=(--payload-raw-field "http_status" "${stdout_text}")
+fi
 
 "${emit_record_bin}" \
   --run-mode "${run_mode}" \
@@ -99,5 +82,13 @@ operation_args=$(jq -n \
   --errno "${errno_value}" \
   --message "${message}" \
   --raw-exit-code "${raw_exit_code}" \
-  --payload-file "${payload_tmp}" \
-  --operation-args "${operation_args}"
+  --payload-stdout "${stdout_text}" \
+  --payload-stderr "${stderr_text}" \
+  --payload-raw-field "url" "${target_url}" \
+  --payload-raw-field-json "timeout_seconds" "${timeout_seconds}" \
+  --payload-raw-field-json "curl_exit_code" "${exit_code}" \
+  "${network_env_flag[@]}" \
+  "${http_status_flag[@]}" \
+  --operation-arg "method" "HEAD" \
+  --operation-arg "url" "${target_url}" \
+  --operation-arg-json "timeout_seconds" "${timeout_seconds}"

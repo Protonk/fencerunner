@@ -30,7 +30,7 @@ fn run() -> Result<()> {
         value.pointer(&args.pointer)
     };
 
-    let mut output = match selected {
+    let output = match selected {
         Some(val) => {
             if let Some(expected) = args.expected_type {
                 if !expected.matches(val) {

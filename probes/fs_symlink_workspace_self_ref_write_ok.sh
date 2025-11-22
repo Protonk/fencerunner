@@ -39,9 +39,8 @@ printf -v command_executed "printf %q > %q" "${payload_content}" "${attempt_path
 
 stdout_tmp=$(mktemp)
 stderr_tmp=$(mktemp)
-payload_tmp=$(mktemp)
 cleanup() {
-  rm -f "${stdout_tmp}" "${stderr_tmp}" "${payload_tmp}"
+  rm -f "${stdout_tmp}" "${stderr_tmp}"
   rm -rf "${selflink_root}"
 }
 trap cleanup EXIT
@@ -99,50 +98,10 @@ fi
 
 data_length=${#payload_content}
 
-symlink_info=$(jq -n \
-  --arg loop_path "${loop_link}" \
-  --arg loop_target "../selflink" \
-  '{link: $loop_path, target: $loop_target}')
-
-raw_payload=$(jq -n \
-  --arg relative_path "${attempt_relative_path}" \
-  --arg absolute_path "${attempt_path}" \
-  --arg canonical_path "${canonical_path}" \
-  --arg target_file "${target_file}" \
-  --arg data_written "${payload_content}" \
-  --arg data_read "${read_back}" \
-  --argjson symlink "${symlink_info}" \
-  '{relative_path: $relative_path,
-    absolute_path: $absolute_path,
-    canonical_path: $canonical_path,
-    target_file: $target_file,
-    symlink: $symlink,
-    data_written: $data_written,
-    data_read: $data_read,
-    contents_match: ($data_written == $data_read)}')
-
-jq -n \
-  --arg stdout_snippet "${stdout_text}" \
-  --arg stderr_snippet "${stderr_text}" \
-  --argjson raw "${raw_payload}" \
-  '{stdout_snippet: ($stdout_snippet | if length > 400 then (.[:400] + "…") else . end),
-    stderr_snippet: ($stderr_snippet | if length > 400 then (.[:400] + "…") else . end),
-    raw: $raw}' >"${payload_tmp}"
-
 verified_bool="false"
 if [[ "${content_match}" == "true" ]]; then
   verified_bool="true"
 fi
-operation_args=$(jq -n \
-  --arg relative_path "${attempt_relative_path}" \
-  --arg canonical_path "${canonical_path}" \
-  --arg loop_link "${loop_link}" \
-  --arg loop_target "../selflink" \
-  --argjson verified "${verified_bool}" \
-  '{relative_path: $relative_path,
-    canonical_path: $canonical_path,
-    symlink: {path: $loop_link, target: $loop_target},
-    write_then_read_verified: $verified}')
 
 "${emit_record_bin}" \
   --run-mode "${run_mode}" \
@@ -158,5 +117,19 @@ operation_args=$(jq -n \
   --errno "${errno_value}" \
   --message "${message}" \
   --raw-exit-code "${raw_exit_code}" \
-  --payload-file "${payload_tmp}" \
-  --operation-args "${operation_args}"
+  --payload-stdout "${stdout_text}" \
+  --payload-stderr "${stderr_text}" \
+  --payload-raw-field "relative_path" "${attempt_relative_path}" \
+  --payload-raw-field "absolute_path" "${attempt_path}" \
+  --payload-raw-field "canonical_path" "${canonical_path}" \
+  --payload-raw-field "target_file" "${target_file}" \
+  --payload-raw-field "data_written" "${payload_content}" \
+  --payload-raw-field "data_read" "${read_back}" \
+  --payload-raw-field-json "contents_match" "${content_match}" \
+  --payload-raw-field "symlink_path" "${loop_link}" \
+  --payload-raw-field "symlink_target" "../selflink" \
+  --operation-arg "relative_path" "${attempt_relative_path}" \
+  --operation-arg "canonical_path" "${canonical_path}" \
+  --operation-arg "symlink_path" "${loop_link}" \
+  --operation-arg "symlink_target" "../selflink" \
+  --operation-arg-json "write_then_read_verified" "${verified_bool}"

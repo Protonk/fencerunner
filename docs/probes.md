@@ -6,7 +6,7 @@ matches the probe id), performs a single well-defined action, and reports what
 the Codex fence did with that action. This document explains how probes are
 built, how the harness runs them, and how their results are captured.
 
-This file serves as documentation. For authoritative, test-enforced Probe and Probe Author contracts, follow [probes/AGENTS.md](probes/AGENTS.md). 
+This file serves as documentation. For authoritative, test-enforced Probe and Probe Author contracts, follow [probes/AGENTS.md](probes/AGENTS.md).
 
 ## What makes a probe
 
@@ -14,21 +14,24 @@ This file serves as documentation. For authoritative, test-enforced Probe and Pr
   the probe id recorded in boundary objects. The tree is flat—categorization is
   handled by the capability metadata rather than subdirectories.
 - **Contract:** Start with `#!/usr/bin/env bash`, immediately enable
-  `set -euo pipefail`, and exit `0` after emitting JSON via `bin/emit-record`.
-- **Behavior:** Probe code performs one observable operation (write a file,
-  read a sysctl, open a socket, spawn a process, etc.) and records what
-  happened. Treat the sandbox as a black box; if the action partially succeeds,
-  capture that nuance in the payload.
+  `set -euo pipefail`, perform a single observable action, and exit `0` after
+  emitting exactly one JSON record via `bin/emit-record`. stdout must contain
+  only the boundary object.
+- **Behavior:** Perform one observable operation (write a file, read a sysctl,
+  open a socket, spawn a process, etc.) and record what happened. Treat the
+  sandbox as a black box; if the action partially succeeds, capture that nuance
+  in the payload and status.
 - **Capabilities:** Every probe declares exactly one
   `primary_capability_id` (with optional `secondary_capability_ids`). The ids
   come from `schema/capabilities.json` and are validated at emit time through
   the Rust capability index (the legacy adapter in `tools/adapt_capabilities.sh`
   remains for automation).
-- **Helpers:** Shared utilities live under `lib/` and the compiled helpers in
-  `bin/`. Source only what you need instead of re-implementing interpreter
-  detection. Canonical and relative path lookups now route through the Rust
-  helper `bin/portable-path`, so prefer `portable-path realpath|relpath`
-  whenever you need normalized paths.
+- **Helpers:** Prefer the compiled helpers in `bin/` over ad-hoc logic.
+  Path canonicalization routes through `bin/portable-path`; JSON extraction
+  (when you must parse another program’s JSON) goes through `bin/json-extract`
+  instead of jq/Python. Build payloads/operation args with `emit-record`
+  flags (`--payload-stdout/-stderr`, `--payload-raw-field[-json|-list|-null]`,
+  `--operation-arg[-json|-list|-null]`) rather than constructing JSON manually.
 
 ## How the harness runs a probe
 
@@ -89,6 +92,10 @@ coerce bad output into a result.
 - **Non-interactive:** Never read from stdin or assume a TTY.
 - **Workspace awareness:** Stay inside the workspace unless the probe’s sole
   purpose is to cross that boundary, and record the target you touched.
+- **Deterministic JSON:** Let `emit-record` and the Rust helpers handle JSON
+  serialization; avoid jq in probes and prefer `json-extract` for parsing
+  third-party JSON. Do not branch on interpreter availability—fail loudly if a
+  required tool is missing.
 
 ## Testing probes
 

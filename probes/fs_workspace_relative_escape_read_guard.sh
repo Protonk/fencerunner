@@ -37,8 +37,7 @@ printf -v command_executed "ls -ld %q" "${escape_target}"
 
 stdout_tmp=$(mktemp)
 stderr_tmp=$(mktemp)
-payload_tmp=$(mktemp)
-trap 'rm -f "${stdout_tmp}" "${stderr_tmp}" "${payload_tmp}"' EXIT
+trap 'rm -f "${stdout_tmp}" "${stderr_tmp}"' EXIT
 
 status="error"
 errno_value=""
@@ -89,33 +88,6 @@ else
   fi
 fi
 
-raw_json=$(jq -n \
-  --arg relative_path "${escape_target}" \
-  --arg canonical_path "${canonical_target}" \
-  --arg relative_home "${relative_home}" \
-  --arg documents_dir "${documents_dir}" \
-  '{relative_escape_path: $relative_path,
-    canonical_target: $canonical_path,
-    relative_home_path: $relative_home,
-    documents_dir: $documents_dir,
-    via_relative_segments: true}')
-
-jq -n \
-  --arg stdout_snippet "${stdout_text:-}" \
-  --arg stderr_snippet "${stderr_text:-}" \
-  --argjson raw "${raw_json}" \
-  '{stdout_snippet: ($stdout_snippet | if length > 400 then (.[:400] + "…") else . end),
-    stderr_snippet: ($stderr_snippet | if length > 400 then (.[:400] + "…") else . end),
-    raw: $raw}' >"${payload_tmp}"
-
-operation_args=$(jq -n \
-  --arg path_type "directory" \
-  --arg escape_strategy "dotdot_segments" \
-  --arg relative_home "${relative_home}" \
-  '{path_type: $path_type,
-    escape_strategy: $escape_strategy,
-    relative_home_path: $relative_home}')
-
 "${emit_record_bin}" \
   --run-mode "${run_mode}" \
   --probe-name "${probe_name}" \
@@ -129,5 +101,13 @@ operation_args=$(jq -n \
   --errno "${errno_value}" \
   --message "${message}" \
   --raw-exit-code "${raw_exit_code}" \
-  --payload-file "${payload_tmp}" \
-  --operation-args "${operation_args}"
+  --payload-stdout "${stdout_text:-}" \
+  --payload-stderr "${stderr_text:-}" \
+  --payload-raw-field "relative_escape_path" "${escape_target}" \
+  --payload-raw-field "canonical_target" "${canonical_target}" \
+  --payload-raw-field "relative_home_path" "${relative_home}" \
+  --payload-raw-field "documents_dir" "${documents_dir}" \
+  --payload-raw-field-json "via_relative_segments" "true" \
+  --operation-arg "path_type" "directory" \
+  --operation-arg "escape_strategy" "dotdot_segments" \
+  --operation-arg "relative_home_path" "${relative_home}"

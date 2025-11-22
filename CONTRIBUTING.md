@@ -31,7 +31,7 @@ valuable.
   `tools/validate_contract_gate.sh`; extend it for new
   syntax/structural checks instead of duplicating logic elsewhere.
 - `bin/emit-record`, `bin/fence-run`, and any new helpers must avoid
-  introducing runtime dependencies beyond Bash, `jq`, and the Rust standard
+  introducing runtime dependencies beyond Bash and the Rust standard
   library—keep probe plumbing lightweight and portable.
 - After touching Rust helpers under `src/bin/`, run `make build-bin` (or
   `tools/sync_bin_helpers.sh`) so the synced binaries in `bin/` match

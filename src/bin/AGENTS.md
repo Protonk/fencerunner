@@ -106,4 +106,5 @@ update these helpers together.
 - Keep new policies reflected in docs/tests (README, `docs/*.md`, harness
   scripts) so shell callers stay in sync with the Rust behavior.
 - Maintain portability: everything must run on macOS `/bin/bash 3.2` and inside
-  the `codex-universal` container with only the shipped Rust binaries plus `jq`.
+  the `codex-universal` container with only the shipped Rust binaries
+  (jq is only required for the shell-based contract gate).

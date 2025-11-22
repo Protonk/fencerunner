@@ -18,8 +18,7 @@ done
 
 stdout_tmp=$(mktemp)
 stderr_tmp=$(mktemp)
-payload_tmp=$(mktemp)
-trap 'rm -f "${stdout_tmp}" "${stderr_tmp}" "${payload_tmp}"' EXIT
+trap 'rm -f "${stdout_tmp}" "${stderr_tmp}"' EXIT
 
 status="error"
 errno_value=""
@@ -65,26 +64,25 @@ else
   message="sysctl multi-key read failed with exit code ${exit_code}"
 fi
 
-keys_json=$(printf '%s\n' "${keys[@]}" | jq -R . | jq -s .)
+values_json='[]'
 if [[ ${value_count} -gt 0 ]]; then
-  values_json=$(printf '%s\n' "${value_lines[@]}" | jq -R . | jq -s .)
-else
-  values_json='[]'
+  values_json="["
+  for value in "${value_lines[@]}"; do
+    escaped_value=${value//\"/\\\"}
+    values_json+="\"${escaped_value}\","
+  done
+  values_json="${values_json%,}]"
 fi
 
-jq -n \
-  --arg stdout_snippet "${stdout_text}" \
-  --arg stderr_snippet "${stderr_text}" \
-  --argjson keys "${keys_json}" \
-  --argjson values "${values_json}" \
-  '{stdout_snippet: ($stdout_snippet | if length > 400 then (.[:400] + "…") else . end),
-    stderr_snippet: ($stderr_snippet | if length > 400 then (.[:400] + "…") else . end),
-    raw: {keys: $keys, values: $values}}' >"${payload_tmp}"
-
-operation_args=$(jq -n \
-  --argjson keys "${keys_json}" \
-  --arg sysctl_bin "${sysctl_bin}" \
-  '{keys: $keys, mode: "multi_key", sysctl_bin: $sysctl_bin}')
+keys_json="[]"
+if [[ ${key_count} -gt 0 ]]; then
+  keys_json="["
+  for key in "${keys[@]}"; do
+    escaped_key=${key//\"/\\\"}
+    keys_json+="\"${escaped_key}\","
+  done
+  keys_json="${keys_json%,}]"
+fi
 
 "${emit_record_bin}" \
   --run-mode "${run_mode}" \
@@ -99,5 +97,10 @@ operation_args=$(jq -n \
   --errno "${errno_value}" \
   --message "${message}" \
   --raw-exit-code "${raw_exit_code}" \
-  --payload-file "${payload_tmp}" \
-  --operation-args "${operation_args}"
+  --payload-stdout "${stdout_text}" \
+  --payload-stderr "${stderr_text}" \
+  --payload-raw-field-json "keys" "${keys_json}" \
+  --payload-raw-field-json "values" "${values_json}" \
+  --operation-arg-json "keys" "${keys_json}" \
+  --operation-arg "mode" "multi_key" \
+  --operation-arg "sysctl_bin" "${sysctl_bin}"

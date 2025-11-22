@@ -88,7 +88,7 @@ Once I decide on an API and freeze it I'll retract the "provisionally".
 | Path | Role |
 | --- | --- |
 | `probes/` | Executable probe scripts + author contract; each maps capabilities to observations. |
-| `src/bin/` | Rust source for the helper binaries (`codex-fence`, `fence-run`, `emit-record`, `detect-stack`, `portable-path`, `fence-bang/listen/test`). |
+| `src/bin/` | Rust source for the helper binaries (`codex-fence`, `fence-run`, `emit-record`, `detect-stack`, `portable-path`, `json-extract`, `fence-bang/listen/test`). |
 | `src/` | Shared Rust modules for boundary objects and capability catalogs used by the binaries. |
 | `bin/` | Synced Rust binaries produced by `make build-bin` from `src/bin/`; artifacts live here (git-ignored) so callers can run `bin/<helper>` directly. |
 | `tools/` | Helpers for agents in the Probe Author role. |
@@ -104,17 +104,15 @@ any subdirectory.
 ## Requirements
 
 - POSIX shell utilities + `bash 3.2`
-- `jq`
 - `make`
 - Rust toolchain (`cargo`/`rustc`) to build and sync the helper binaries and run the Rust integration tests
 - `python3` (used by the network/process probes—keep the system interpreter around)
 - The `codex` CLI (only if you plan to exercise Codex modes)
 
 The goal is to limit probe noise by keeping things lightweight: probes depend on
-Bash + `jq` and the Rust helpers synced into `bin/`. Fresh clones and test runs
-need a Rust toolchain because `make build-bin` and `cargo test` compile those
-helpers. Use the system `python3` for the probes that need it, and install `jq`
-if your OS does not bundle it.
+Bash plus the Rust helpers synced into `bin/` (no jq at runtime). Fresh clones
+and test runs need a Rust toolchain because `make build-bin` and `cargo test`
+compile those helpers. Use the system `python3` for the probes that need it.
 
 ## Building the helpers
 

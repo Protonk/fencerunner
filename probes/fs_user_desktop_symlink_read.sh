@@ -14,11 +14,10 @@ target_dir="${FENCE_USER_DESKTOP_PATH:-${HOME}/Desktop}"
 
 stdout_tmp=$(mktemp)
 stderr_tmp=$(mktemp)
-payload_tmp=$(mktemp)
 probe_dir=$(mktemp -d "${repo_root}/tmp_desktop_symlink.XXXXXX")
 symlink_path="${probe_dir}/desktop_link"
 cleanup() {
-  rm -f "${stdout_tmp}" "${stderr_tmp}" "${payload_tmp}"
+  rm -f "${stdout_tmp}" "${stderr_tmp}"
   rm -rf "${probe_dir}"
 }
 trap cleanup EXIT
@@ -74,21 +73,6 @@ if [[ -z "${command_executed:-}" ]]; then
   printf -v command_executed "ls -ld %q" "${symlink_path}"
 fi
 
-jq -n \
-  --arg stdout_snippet "${stdout_text:-}" \
-  --arg stderr_snippet "${stderr_text:-}" \
-  --arg symlink_path "${symlink_path}" \
-  --arg target_dir "${target_dir}" \
-  '{stdout_snippet: ($stdout_snippet | if length > 400 then (.[:400] + "…") else . end),
-    stderr_snippet: ($stderr_snippet | if length > 400 then (.[:400] + "…") else . end),
-    raw: {symlink_path: $symlink_path, target_dir: $target_dir}}' >"${payload_tmp}"
-
-operation_args=$(jq -n \
-  --arg symlink_path "${symlink_path}" \
-  --arg target_dir "${target_dir}" \
-  '{path_type: "directory", read_type: "list", via_symlink: true,
-    symlink_path: $symlink_path, target_dir: $target_dir}')
-
 "${emit_record_bin}" \
   --run-mode "${run_mode}" \
   --probe-name "${probe_name}" \
@@ -103,5 +87,12 @@ operation_args=$(jq -n \
   --errno "${errno_value}" \
   --message "${message}" \
   --raw-exit-code "${raw_exit_code}" \
-  --payload-file "${payload_tmp}" \
-  --operation-args "${operation_args}"
+  --payload-stdout "${stdout_text:-}" \
+  --payload-stderr "${stderr_text:-}" \
+  --payload-raw-field "symlink_path" "${symlink_path}" \
+  --payload-raw-field "target_dir" "${target_dir}" \
+  --operation-arg "path_type" "directory" \
+  --operation-arg "read_type" "list" \
+  --operation-arg-json "via_symlink" "true" \
+  --operation-arg "symlink_path" "${symlink_path}" \
+  --operation-arg "target_dir" "${target_dir}"

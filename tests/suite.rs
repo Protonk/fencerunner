@@ -472,6 +472,94 @@ primary_capability_id="cap_fs_read_workspace_tree"
     Ok(())
 }
 
+// Exercises the dynamic probe contract gate to ensure the stub parser stays in
+// sync with emit-record flag usage for jq-free probes.
+#[test]
+fn dynamic_probe_contract_accepts_fixture() -> Result<()> {
+    let repo_root = repo_root();
+    let _guard = repo_guard();
+    let fixture = FixtureProbe::install(&repo_root, "tests_fixture_probe")?;
+
+    let mut cmd = Command::new(repo_root.join("tools/validate_contract_gate.sh"));
+    cmd.arg("--probe")
+        .arg(fixture.probe_id())
+        .arg("--modes")
+        .arg("baseline")
+        .env("CODEX_FENCE_PREFER_TARGET", "1");
+    let output = cmd
+        .output()
+        .context("failed to execute dynamic probe contract")?;
+    assert!(
+        output.status.success(),
+        "dynamic contract gate failed: stdout={}, stderr={}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains("dynamic gate passed"),
+        "expected dynamic gate to report pass; stdout was: {stdout}"
+    );
+    Ok(())
+}
+
+// Validates json-extract helper semantics: pointer selection, type enforcement,
+// defaults, and failure on type mismatch.
+#[test]
+fn json_extract_enforces_pointer_and_type() -> Result<()> {
+    let repo_root = repo_root();
+    let helper = helper_binary(&repo_root, "json-extract");
+    let mut file = NamedTempFile::new().context("failed to create json fixture")?;
+    writeln!(file, "{}", r#"{"nested":{"flag":true},"number":7,"text":"hello"}"#)?;
+
+    // Happy path: extract nested flag as bool.
+    let mut ok_cmd = Command::new(&helper);
+    ok_cmd
+        .arg("--file")
+        .arg(file.path())
+        .arg("--pointer")
+        .arg("/nested/flag")
+        .arg("--type")
+        .arg("bool");
+    let output = run_command(ok_cmd)?;
+    let value: Value = serde_json::from_slice(&output.stdout)?;
+    assert_eq!(value, Value::Bool(true));
+
+    // Default applies when pointer missing.
+    let mut default_cmd = Command::new(&helper);
+    default_cmd
+        .arg("--file")
+        .arg(file.path())
+        .arg("--pointer")
+        .arg("/missing")
+        .arg("--type")
+        .arg("string")
+        .arg("--default")
+        .arg("\"fallback\"");
+    let default_output = run_command(default_cmd)?;
+    let default_value: Value = serde_json::from_slice(&default_output.stdout)?;
+    assert_eq!(default_value, Value::String("fallback".to_string()));
+
+    // Type mismatch should fail.
+    let mut bad_type = Command::new(&helper);
+    bad_type
+        .arg("--file")
+        .arg(file.path())
+        .arg("--pointer")
+        .arg("/number")
+        .arg("--type")
+        .arg("string");
+    let bad_output = bad_type
+        .output()
+        .context("failed to run json-extract bad type")?;
+    assert!(
+        !bad_output.status.success(),
+        "json-extract should fail on type mismatch"
+    );
+
+    Ok(())
+}
+
 // Ensures probe-contract-gate fails fast when static issues are present.
 #[test]
 fn contract_gate_rejects_static_violation() -> Result<()> {
