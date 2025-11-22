@@ -658,6 +658,21 @@ exit 0
     Ok(())
 }
 
+// Runs the `fence-test` binary so `cargo test` fails whenever the full
+// contract gate rejects any checked-in probe.
+#[test]
+fn fence_test_contract_gate_succeeds() -> Result<()> {
+    let repo_root = repo_root();
+    let _guard = repo_guard();
+    let fence_test = helper_binary(&repo_root, "fence-test");
+
+    let mut cmd = Command::new(fence_test);
+    cmd.current_dir(&repo_root);
+    run_command(cmd)?;
+
+    Ok(())
+}
+
 // Helper for installing temporary probe mocks under probes/ and cleaning them
 // up after each test.
 struct FixtureProbe {

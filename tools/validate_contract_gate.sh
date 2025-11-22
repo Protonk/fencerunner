@@ -14,6 +14,18 @@ gate_name="validate_contract_gate"
 script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)
 repo_root=$(cd "${script_dir}/.." >/dev/null 2>&1 && pwd)
 
+maybe_exec_fence_test() {
+  local candidate
+  for candidate in \
+    "${repo_root}/target/debug/fence-test" \
+    "${repo_root}/target/release/fence-test" \
+    "${repo_root}/bin/fence-test"; do
+    if [[ -x "${candidate}" ]]; then
+      FENCE_TEST_FORCE_SCRIPT=1 exec "${candidate}" "$@"
+    fi
+  done
+}
+
 paths_helper="${repo_root}/tools/resolve_paths.sh"
 modes_helper="${repo_root}/tools/list_run_modes.sh"
 fence_run_bin="${repo_root}/bin/fence-run"
@@ -574,6 +586,10 @@ STUB
 if [[ "${1-}" == "--emit-record-stub" ]]; then
   shift
   emit_record_stub_main "$@"
+fi
+
+if [[ "${BASH_SOURCE[0]}" == "${0}" && -z "${FENCE_TEST_FORCE_SCRIPT:-}" ]]; then
+  maybe_exec_fence_test "$@"
 fi
 
 run_with_timeout() {

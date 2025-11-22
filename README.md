@@ -84,8 +84,8 @@ make install PREFIX=~/.local   # optional: install codex-fence/fence-*
 
 Project tests:
 - `cargo test` exercises unit helpers plus CLI smokes; binaries are built
-  automatically for the integration suites.
-- Repo-wide: `bin/fence-test` runs the static contract across all probes.
+  automatically for the integration suites. The suite invokes `fence-test`, so
+  contract-gate regressions now fail the default test run.
 - Rust guard rails: `cargo test --test suite` (schema validation, harness
   smokes, dynamic gate coverage, json-extract semantics).
 

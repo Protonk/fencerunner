@@ -67,12 +67,15 @@ update these helpers together.
 ### `fence-test`
 - **Purpose:** Execute `tools/validate_contract_gate.sh` for the
   full probe set while enforcing repo root detection and a predictable
-  environment.
+  environment. The shell helper now prefers this binary when it’s available,
+  falling back to the interpreted gate only when the compiled helper is
+  missing.
 - **Expectations:**
   - Keep the CLI simple; any extra flags should mirror the static contract
     helper’s capabilities.
-  - Surface script exit codes verbatim for CI consumption; callers now trigger
-    the static contract by invoking this binary directly.
+  - Surface script exit codes verbatim for CI consumption; callers trigger the
+    static contract by invoking this binary (either directly or via the shell
+    shim).
 
 ## Shared helpers
 

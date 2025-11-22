@@ -103,7 +103,8 @@ The fast authoring loop favors single-probe runs:
 - `tools/validate_contract_gate.sh --probe probes/<id>.sh` runs
   the interpreted, quick-fail contract (syntax + structural checks) while you
   iterate on a single script.
-- `bin/fence-test` runs the static contract against every probe in the
-  repository.
-- `cargo test --test suite` covers the Rust guard rails (schema validation
-  and harness smoke tests).
+- `cargo test --test suite` covers the Rust guard rails (schema validation,
+  harness smoke tests) and now shells out to `fence-test`, so every probe’s
+  contract gate runs as part of the normal test loop. The standalone
+  `bin/fence-test` binary remains available if you need to focus on the gate
+  itself.

@@ -19,8 +19,10 @@ public boundary-object schema. The directory is split into two layers:
   `tools/validate_contract_gate.sh --probe <id>` (or
   `make probe PROBE=<id>`). This invokes the interpreted contract tester for the
   resolved probe path and surfaces syntax/structural issues immediately.
-2. **Before sending a change** run `bin/fence-test` to sweep the static
-  contract across every probe. 
+2. **Before sending a change** run `cargo test --test suite` (or simply
+  `cargo test`). The `fence_test_contract_gate_succeeds` integration test executes
+  the compiled `fence-test` helper, so the full static + dynamic contract gate
+  now runs as part of the standard test loop. 
 3. **Debugging**: The second-tier guard rails are standard Rust integration
   tests. Use `cargo test --test suite <name>` (for example
   `cargo test --test suite workspace_root_fallback`) to focus on one
