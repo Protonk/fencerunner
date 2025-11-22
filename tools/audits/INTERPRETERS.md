@@ -4,7 +4,7 @@ This file contains a prompt for an agent engaged in a code audit of the reposito
 
 ## Holistic Audit
 
-You are an auditing agent dropped cold into `codex-fence`. Your job is to decide whether the repo actually enforces the promises it makes about sandbox boundaries, portability, and stable interfaces. The harness is intentionally small and paranoid: Bash 3.2 + jq, Rust helpers synced into `bin/`, no surprise dependencies, and behavior must be identical on macOS and the `codex-universal` container. Read everything like an adversary: every promise in the docs or AGENTS files should map to executable guard rails somewhere in code, schema, or tests—or you should call out the gap.
+You are an auditing agent whose job is to decide whether the `codex-fence` actually enforces the promises it makes about sandbox boundaries, portability, and stable interfaces. The harness is intentionally small and paranoid: Bash 3.2 + jq, Rust helpers synced into `bin/`, no surprise dependencies, and behavior must be identical on macOS and the `codex-universal` container. Read everything like an adversary: every promise in the docs or AGENTS files should map to executable guard rails somewhere in code, schema, or tests—or you should call out the gap.
 
 Anchor the audit around the pipeline from capability catalog → probe contract → harness execution → emitted cfbo records. Use the following checklist to drive a single, opinionated pass:
 
@@ -23,11 +23,3 @@ Anchor the audit around the pipeline from capability catalog → probe contract 
 7) **Portability + attack surface.** Throughout, hunt for portability regressions (GNUisms, Bash 4+ features, Python dependencies creeping into runtime paths), unpinned system calls, or new filesystem/network touches that exceed “one observation, no side effects.” Confirm scripts fail fast with actionable errors and stay hermetic (no reliance on repo‑local state beyond documented inputs/outputs).
 
 End with an adversarial summary: which guarantees are truly locked in by code/tests/schemas, which are only aspirational, and where small changes (argument parsing, path handling, schema evolution) could weaken the fence or surprise downstream consumers.
-
-## Probe Audit
-
-You are a Probe Auditing agent embedded in the `codex-fence` repository. You are given a fixed set of probe scripts under `probes/`, along with the usual documentation and helpers, and your task is to assess how well these probes adhere to the probe author contract and the broader repository guarantees without losing track of the overall pattern.
-
-Use `probes/AGENTS.md`, `schema/capabilities.json`, `schema/boundary_object.json`, and the explanatory probe and boundary-object docs (`docs/probes.md`, `docs/boundary_object.md`) to establish a compact mental checklist of what every probe is expected to do: one focused observable action, portable Bash, correct capability IDs and outcome classification, a single record emitted through the harness, and no stdout noise beyond the JSON boundary object. As you read probes, apply that checklist consistently rather than re-deriving rules for each file, and scan for outliers that diverge from the common structure or reuse patterns you see in most scripts.
-
-While you work, pay attention to side effects and ergonomics: look for probes whose behavior, error handling, or use of shared helpers could surprise downstream agents, introduce portability problems, or subtly violate workspace and sandbox expectations (for example by touching paths or environment in ways that go beyond their stated observation). Prefer to compare similar probes against each other to keep context in working memory, and highlight cases where a probe’s comments, capability metadata, or emitted fields describe intent that is not matched by the actual operation it performs.
