@@ -85,8 +85,7 @@ contract without an obvious row, add both the row and the tests.
 - **Workspace/path issues:** rerun the failing test with `RUST_LOG=debug` to see
   the path planning traces emitted by `fence_run_support`.
 - **Probe contract gates:** run `tools/validate_contract_gate.sh --probe <id>` or
-  `fence-test --probe <id>` to isolate the offending script. Contract errors are
-  line-oriented; fix the script, then re-run the suite.
+  `fence-test --probe <id>` to gate the offending script. Edit in a tight loop until the probe passes the contract gate--only then do you run the full suite.
 
 Keeping this file current is part of the contract. If you add a new class of
 checks, describe them here so the next agent knows exactly how the test suite
