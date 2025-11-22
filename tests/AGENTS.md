@@ -1,100 +1,93 @@
 # tests/AGENTS.md
 
-This guide orients agents who need to understand, extend, or debug the harness
-tests. 
+This document is the contract for anyone touching the test harness. Whether you
+are a human developer or an automated agent, treat this as the playbook for
+keeping the board green. Every change must leave `cargo test` passing, because a
+single command now executes the entire suite.
 
-## Mental model
+## Mission control
 
-`tests/` enforces that probes and helpers stay portable and in sync with the
-public boundary-object schema. The directory is split into two layers:
+1. **Single entry point:** `cargo test` (or `cargo test --test suite`) runs
+   everything. There are no other Rust targets or doctests, so noisy output
+   means something regressed.
+2. **Board must stay green:** the suite encodes the portability + contract
+   guarantees promised in `README.md`, `CONTRIBUTING.md`, and the schema docs.
+   If the suite fails you either broke a contract or you discovered an existing
+   gap—fix the code or extend the tests before landing.
+3. **Document the why:** when you add a new guard rail, put the rationale in the
+   test body and, if it enforces a repo-wide rule, mention it here too. Future
+   agents should be able to map every expectation back to a contract statement.
 
-| Layer | Entry point | Purpose |
+## Directory map
+
+| Path | Purpose | Notes |
 | --- | --- | --- |
-| Mocks | `tests/mocks/` | Mocks for testing, currently a mock probe. |
-| Tests | `tests/suite.rs` | Global checks that validate documentation, schema, and harness plumbing (run via `cargo test --test suite`). |
+| `tests/suite.rs` | Single integration entry point. | Host for every guard rail: contract gates, schema checks, CLI smokes, workspace invariants. Target individual cases with `cargo test --test suite <name>`. |
+| `tests/support/` | Shared helpers. | Builds helper binaries once per run, provides temp repositories, mutex guards, path utilities. Always prefer these over ad-hoc fixtures. |
+| `tests/mocks/` | Shell fixtures used by the suite. | Minimal probes and data files that suite tests can execute. Keep side-effects inside the provided temp dirs. |
 
-## Quick start for agents
+## Running and diagnosing tests
 
-1. **While editing a probe** run
-  `tools/validate_contract_gate.sh --probe <id>` (or
-  `make probe PROBE=<id>`). This invokes the interpreted contract tester for the
-  resolved probe path and surfaces syntax/structural issues immediately.
-2. **Before sending a change** run `cargo test --test suite` (or simply
-  `cargo test`). The `fence_test_contract_gate_succeeds` integration test executes
-  the compiled `fence-test` helper, so the full static + dynamic contract gate
-  now runs as part of the standard test loop. 
-3. **Debugging**: The second-tier guard rails are standard Rust integration
-  tests. Use `cargo test --test suite <name>` (for example
-  `cargo test --test suite workspace_root_fallback`) to focus on one
-  failing case. They only depend on in-repo helpers.
-
-Shared test helpers live in `tests/common.rs`; they build the helper binaries
-once for the suite so `cargo test` and the CLI smokes (`tests/bin_smoke.rs`)
-can run without extra setup.
-
-## Library components
-
-- Schema validation now lives entirely in the Rust guard rails—run
-  `cargo test --test suite boundary_object_schema` to lint the emitted
-  boundary object against `schema/boundary_object.json` with the `jsonschema`
-  crate.
-- `tests/mocks/minimal_probe.sh` is a self-contained probe used by the
-  smoke suites. It writes to a temporary workspace and pipes a deterministic
-  record into `bin/emit-record`. Prefer copying this file when you need a dummy
-  probe rather than inventing ad‑hoc scripts.
-
-## suite map
-
-All guard rails now live in `tests/suite.rs` and run as Rust integration
-tests. Target a specific scenario with `cargo test --test suite <name>`.
-
-| Test | Purpose | Notes |
-| --- | --- | --- |
-| `boundary_object_schema` | Runs `bin/emit-record` with a fixture payload and validates the resulting JSON plus the boundary object schema. | Extend the assertions and schema when the boundary_object contract grows. |
-| `harness_smoke_probe_fixture` | Runs the fixture probe via `bin/fence-run baseline` and checks the returned boundary object. | Keeps the baseline path honest; extend if fixtures gain new fields. |
-| `baseline_no_codex_smoke` | Temporarily hides the Codex CLI from `PATH` and asserts baseline runs still succeed while codex modes fail. | Make sure new smoke fixtures do not depend on `codex`. |
-| `workspace_root_fallback` | Executes the fixture probe with `FENCE_WORKSPACE_ROOT` cleared to confirm `bin/emit-record` falls back to `git rev-parse`/`pwd`. | Protects the documented workspace root fallback contract. |
-| `probe_resolution_guards` | Attempts to run `bin/fence-run` against paths/symlinks outside `probes/` and expects hard failures. | Use as a template for future negative guard-rail tests. |
-| `dynamic_probe_contract_accepts_fixture` | Runs `tools/validate_contract_gate.sh --probe …` (dynamic gate) against the fixture probe to keep the stub parser aligned with emit-record flags. | Keep in sync with contract gate behavior and emit patterns. |
-| `json_extract_enforces_pointer_and_type` | Validates `bin/json-extract` pointer/type/default semantics. | Extend when `json-extract` grows new flags. |
-
-Add any heavier “whole repo” validation here. Follow the same structure: short-
-circuit on missing prerequisites, and print `name: PASS/FAIL` summaries.
-
-Additional CLI smokes live in `tests/bin_smoke.rs` to keep the small helper
-binaries honest (codex-fence path resolution, detect-stack modes,
-json-extract defaults, portable-path relpath). They reuse the shared helpers
-above and run as part of `cargo test`.
+- **Full sweep:** `cargo test`. Watch for exactly two sections of output: the
+  empty library unit bucket and `tests/suite.rs`. Anything else means someone
+  reintroduced stray targets.
+- **Focused run:** `cargo test --test suite <name>` to iterate on a failing case.
+  Use `-- --nocapture` when you need stdout/stderr from helpers.
+- **Probe contract loop:** `tools/validate_contract_gate.sh --probe <id>` (or
+  `make probe PROBE=<id>`) is still the fastest way to vet a single probe. The
+  integration suite asserts those gates stay wired up.
+- **Schema debugging:** the `boundary_object_schema` test writes the failing JSON
+  payload to `tmp/` with the test name. Open that file before re-running to see
+  what changed.
 
 ## Adding or modifying tests
 
-- **Guard-rail comments:** Every script now starts with a summary block—keep this
-  habit so future agents know why a suite exists.
-- **New probe-level checks:** Extend `tools/validate_contract_gate.sh`
-  when adding additional structural or syntax rules so the single-probe
-  workflow stays fast.
-- **New fixtures:** Place them under `tests/mocks/` so multiple suites
-  can share them, and document any special behavior.
-- **New suites:** Add more Rust tests to `tests/suite.rs`. Keep them
-  hermetic, reuse the fixture helpers, and gate probe directory mutations with
-  the shared mutex already defined in that file.
-- **Negative harness tests:** When adding guard rails (path canonicalization,
-  workspace boundaries, etc.), follow the pattern used in the
-  `probe_resolution_guards` test inside `tests/suite.rs` to ensure failure
-  modes remain enforced.
+1. **Decide the contract you are protecting.** Examples: boundary-object shape,
+   helper CLI semantics, workspace isolation, catalog synchronization. Cite that
+   contract in the test name or first comment.
+2. **Use `tests/support`.**
+   - `support::helpers()` builds binaries once and caches their paths.
+   - `TempRepo` hands you a throwaway workspace with automatic cleanup.
+   - `ProbeFixture` gives you ready-made probe metadata. Never invent new path
+     juggling logic when a helper already exists.
+3. **Keep tests hermetic.** Write to the temp repo created by the helper, avoid
+   touching the real workspace, and guard shared global state with the provided
+   mutex.
+4. **Structure:** prefer `Result<()>`-returning tests for easy `?` usage.
+   Ensure failures `bail!` with actionable messages.
+5. **Fixtures:** place new shell probes or data under `tests/mocks/`. Document
+   expectations in comments and keep them deterministic so CI stays stable.
+6. **Docs:** when a new test enforces a repo-wide promise, update this file and
+   the relevant docs (usually `tests/AGENTS.md`, maybe `docs/*.md`) so future
+   agents understand the coverage.
 
-## When things fail
+## Mapping tests to contracts
 
-- **Static probe contract errors** list per-file issues (missing shebang,
-  mismatched `probe_name`, etc.). Open the failing script directly and fix the
-  reported condition.
-- **Harness/baseline smoke failures** often indicate regressions in
-  `bin/fence-run` or `bin/emit-record`. Run the failing script with `bash -x` to
-  inspect the plumbing.
-- **Schema failures** will dump the offending JSON record; compare it with
-  `docs/boundary_object.md` and update the schema/tests in lock-step. The Rust
-  guard rails enforce the JSON schema; the dynamic gate only verifies shape and
-  required flags.
+| Contract surface | Representative tests |
+| --- | --- |
+| Boundary object schema + payload semantics | `boundary_object_schema`, `boundary_object_round_trips_structs`, `capabilities_schema_version_serializes_in_json` |
+| Capability catalog + context wiring | `load_real_catalog_smoke`, `repository_lookup_context_matches_capabilities`, `capability_snapshot_serializes_to_expected_shape` |
+| Helper binaries & CLI ergonomics | `json_extract_*`, `portable_path_relpath_*`, `detect_stack_reports_expected_sandbox_modes`, `contract_gate_*`, `fence_bang_*` |
+| Workspace + sandbox guarantees | `workspace_root_fallback`, `workspace_tmpdir_*`, `probe_resolution_guards`, `baseline_no_codex_smoke` |
+| Probe contracts & fixtures | `harness_smoke_probe_fixture`, `dynamic_probe_contract_accepts_fixture`, `static_probe_contract_*` |
 
-Keeping this structure light and documented lets agents diagnose a broken probe
-run quickly, even when the error surfaced far away from their changes.
+Use this table to decide where to plug a new test. If your change touches a
+contract without an obvious row, add both the row and the tests.
+
+## When failures occur
+
+- **Schema or catalog diffs:** compare the emitted JSON against `docs/boundary_object.md`
+  or `schema/capabilities.json`. Update schemas and regenerate helpers before
+  re-running.
+- **CLI guard rails:** reproduce locally with the same helper command printed by
+  the test (they log the exact arguments). Most rely on binaries under `bin/`,
+  so rebuild those if they drift.
+- **Workspace/path issues:** rerun the failing test with `RUST_LOG=debug` to see
+  the path planning traces emitted by `fence_run_support`.
+- **Probe contract gates:** run `tools/validate_contract_gate.sh --probe <id>` or
+  `fence-test --probe <id>` to isolate the offending script. Contract errors are
+  line-oriented; fix the script, then re-run the suite.
+
+Keeping this file current is part of the contract. If you add a new class of
+checks, describe them here so the next agent knows exactly how the test suite
+covers our promises.

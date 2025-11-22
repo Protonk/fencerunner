@@ -108,32 +108,3 @@ pub fn load_catalog_from_path(path: &Path) -> Result<CapabilityCatalog> {
     let catalog: CapabilityCatalog = serde_json::from_str(&data)?;
     Ok(catalog)
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn catalog_path() -> std::path::PathBuf {
-        Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("schema")
-            .join("capabilities.json")
-    }
-
-    #[test]
-    fn load_real_catalog() {
-        let catalog = load_catalog_from_path(&catalog_path()).expect("catalog loads");
-        assert!(!catalog.key.0.is_empty());
-        assert!(!catalog.capabilities.is_empty());
-        for cap in catalog.capabilities {
-            assert!(!cap.id.0.is_empty());
-            assert!(
-                !matches!(cap.category, CapabilityCategory::Other(ref v) if v.is_empty()),
-                "category should not be empty"
-            );
-            assert!(
-                !matches!(cap.layer, CapabilityLayer::Other(ref v) if v.is_empty()),
-                "layer should not be empty"
-            );
-        }
-    }
-}

@@ -2,11 +2,23 @@
 
 // Centralized integration suite for the fence harness; exercises schema validation,
 // probe resolution rules, and helper utilities so changes surface in one place.
-mod common;
+mod support;
 
 use anyhow::{Context, Result, bail};
-use codex_fence::BoundaryObject;
-use common::{helper_binary, repo_root, run_command};
+use codex_fence::{
+    self, BoundaryObject, CapabilityCategory, CapabilityContext, CapabilityId, CapabilityIndex,
+    CapabilityLayer, CapabilitySnapshot, CatalogKey, CatalogRepository, OperationInfo, Payload,
+    Probe, ProbeInfo, ProbeMetadata, ResultInfo, RunInfo, StackInfo, codex_present,
+    list_probes, load_catalog_from_path, resolve_helper_binary, resolve_probe,
+};
+use codex_fence::emit_support::{
+    JsonObjectBuilder, PayloadArgs, TextSource, normalize_secondary_ids, validate_status,
+};
+use codex_fence::fence_run_support::{
+    WorkspaceOverride, canonicalize_path, classify_preflight_error, resolve_probe_metadata,
+    workspace_plan_from_override, workspace_tmpdir_plan,
+};
+use support::{helper_binary, make_executable, repo_root, run_command};
 use jsonschema::JSONSchema;
 use serde_json::{Value, json};
 use std::env;
@@ -16,6 +28,7 @@ use std::io::Write;
 use std::os::unix::fs::{PermissionsExt, symlink};
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Mutex, MutexGuard, OnceLock};
 use tempfile::{NamedTempFile, TempDir};
 
@@ -673,6 +686,688 @@ fn fence_test_contract_gate_succeeds() -> Result<()> {
     Ok(())
 }
 
+// === Helper binary + library guard tests ===
+
+#[test]
+fn resolve_helper_prefers_release() -> Result<()> {
+    let temp = TempRepo::new();
+    let release_dir = temp.root.join("target/release");
+    fs::create_dir_all(&release_dir)?;
+    let helper = release_dir.join("fence-run");
+    fs::write(&helper, "#!/bin/sh\n")?;
+    make_executable(&helper)?;
+    let resolved = resolve_helper_binary(&temp.root, "fence-run")?;
+    assert_eq!(resolved, helper);
+    Ok(())
+}
+
+#[test]
+fn resolve_helper_falls_back_to_bin() -> Result<()> {
+    let temp = TempRepo::new();
+    let bin_dir = temp.root.join("bin");
+    fs::create_dir_all(&bin_dir)?;
+    let helper = bin_dir.join("emit-record");
+    fs::write(&helper, "#!/bin/sh\n")?;
+    make_executable(&helper)?;
+    let resolved = resolve_helper_binary(&temp.root, "emit-record")?;
+    assert_eq!(resolved, helper);
+    Ok(())
+}
+
+#[test]
+#[cfg(unix)]
+fn codex_present_requires_executable() -> Result<()> {
+    let temp = TempRepo::new();
+    let codex_bin = temp.root.join("codex");
+    fs::write(&codex_bin, "#!/bin/sh\nexit 0\n")?;
+
+    let _guard = PathGuard::set(&temp.root);
+    assert!(!codex_present(), "non-executable binary should be ignored");
+
+    make_executable(&codex_bin)?;
+    assert!(codex_present(), "executable codex should be detected");
+    Ok(())
+}
+
+#[test]
+fn list_and_resolve_probes_share_semantics() -> Result<()> {
+    let temp = TempRepo::new();
+    let probes_dir = temp.root.join("probes");
+    fs::create_dir_all(&probes_dir)?;
+    let script = probes_dir.join("example.sh");
+    fs::write(&script, "#!/usr/bin/env bash\nexit 0\n")?;
+    make_executable(&script)?;
+
+    let probes = list_probes(&temp.root)?;
+    assert_eq!(probes.len(), 1);
+    assert_eq!(probes[0].id, "example");
+
+    let resolved = resolve_probe(&temp.root, "example")?;
+    assert_eq!(resolved.path, fs::canonicalize(&script)?);
+    let resolved_with_ext = resolve_probe(&temp.root, "example.sh")?;
+    assert_eq!(resolved_with_ext.path, resolved.path);
+    Ok(())
+}
+
+#[test]
+fn boundary_object_round_trips_structs() -> Result<()> {
+    let bo = sample_boundary_object();
+    let value = serde_json::to_value(&bo)?;
+    assert_eq!(
+        value.get("schema_version").and_then(|v| v.as_str()),
+        Some("cfbo-v1")
+    );
+    let back: BoundaryObject = serde_json::from_value(value)?;
+    assert_eq!(back.schema_version, "cfbo-v1");
+    assert_eq!(back.run.mode, "baseline");
+    assert_eq!(back.capability_context.primary.id.0, "cap_id");
+    Ok(())
+}
+
+#[test]
+fn capabilities_schema_version_serializes_in_json() -> Result<()> {
+    let mut bo = sample_boundary_object();
+    bo.capabilities_schema_version = Some(CatalogKey("macOS_codex_v1".to_string()));
+    let value = serde_json::to_value(&bo)?;
+    assert_eq!(
+        value
+            .get("capabilities_schema_version")
+            .and_then(|v| v.as_str()),
+        Some("macOS_codex_v1")
+    );
+    Ok(())
+}
+
+#[test]
+fn repository_lookup_context_matches_capabilities() -> Result<()> {
+    let catalog = load_catalog_from_path(&catalog_path())?;
+    let key = catalog.key.clone();
+    let primary = catalog.capabilities.first().expect("cap present");
+    let secondary = catalog
+        .capabilities
+        .get(1)
+        .map(|cap| vec![cap])
+        .unwrap_or_default();
+    let primary_id = primary.id.clone();
+    let secondary_ids: Vec<_> = secondary.iter().map(|cap| cap.id.clone()).collect();
+    let bo = sample_boundary_object().with_capabilities(key.clone(), primary, &secondary);
+    let mut repo = CatalogRepository::default();
+    repo.register(catalog);
+
+    let (resolved_primary, resolved_secondary) = repo.lookup_context(&bo).expect("context");
+    assert_eq!(resolved_primary.id, primary_id);
+    if let Some(expected_secondary) = secondary_ids.first() {
+        assert_eq!(resolved_secondary.first().unwrap().id, *expected_secondary);
+    }
+    Ok(())
+}
+
+#[test]
+fn capability_snapshot_serializes_to_expected_shape() -> Result<()> {
+    let snapshot = CapabilitySnapshot {
+        id: CapabilityId("cap_test".to_string()),
+        category: CapabilityCategory::Filesystem,
+        layer: CapabilityLayer::OsSandbox,
+    };
+    let ctx = CapabilityContext {
+        primary: snapshot.clone(),
+        secondary: vec![snapshot.clone()],
+    };
+    let value = serde_json::to_value(&ctx)?;
+    assert_eq!(
+        value
+            .get("primary")
+            .and_then(|v| v.get("category"))
+            .and_then(|v| v.as_str()),
+        Some("filesystem")
+    );
+    assert_eq!(
+        value
+            .get("secondary")
+            .and_then(|v| v.as_array())
+            .map(|arr| arr.len()),
+        Some(1)
+    );
+    Ok(())
+}
+
+#[test]
+fn category_round_trips_known_and_unknown() {
+    let known = CapabilityCategory::SandboxProfile;
+    let json = serde_json::to_string(&known).unwrap();
+    assert_eq!(json.trim_matches('"'), "sandbox_profile");
+    let back: CapabilityCategory = serde_json::from_str(&json).unwrap();
+    assert_eq!(back, known);
+
+    let custom_json = "\"custom_category\"";
+    let parsed: CapabilityCategory = serde_json::from_str(custom_json).unwrap();
+    assert_eq!(
+        parsed,
+        CapabilityCategory::Other("custom_category".to_string())
+    );
+    let serialized = serde_json::to_string(&parsed).unwrap();
+    assert_eq!(serialized, custom_json);
+}
+
+#[test]
+fn layer_round_trips_known_and_unknown() {
+    let known = CapabilityLayer::AgentRuntime;
+    let json = serde_json::to_string(&known).unwrap();
+    assert_eq!(json.trim_matches('"'), "agent_runtime");
+    let back: CapabilityLayer = serde_json::from_str(&json).unwrap();
+    assert_eq!(back, known);
+
+    let other_json = "\"custom_layer\"";
+    let parsed: CapabilityLayer = serde_json::from_str(other_json).unwrap();
+    assert_eq!(parsed, CapabilityLayer::Other("custom_layer".to_string()));
+    let serialized = serde_json::to_string(&parsed).unwrap();
+    assert_eq!(serialized, other_json);
+}
+
+#[test]
+fn snapshot_serde_matches_schema() -> Result<()> {
+    let snapshot = CapabilitySnapshot {
+        id: CapabilityId("cap_example".into()),
+        category: CapabilityCategory::Filesystem,
+        layer: CapabilityLayer::OsSandbox,
+    };
+    let json = serde_json::to_value(&snapshot)?;
+    assert_eq!(json.get("id").and_then(|v| v.as_str()), Some("cap_example"));
+    assert_eq!(
+        json.get("category").and_then(|v| v.as_str()),
+        Some("filesystem")
+    );
+    assert_eq!(json.get("layer").and_then(|v| v.as_str()), Some("os_sandbox"));
+
+    let back: CapabilitySnapshot = serde_json::from_value(json)?;
+    assert_eq!(back.id.0, "cap_example");
+    assert!(matches!(back.category, CapabilityCategory::Filesystem));
+    assert!(matches!(back.layer, CapabilityLayer::OsSandbox));
+    Ok(())
+}
+
+#[test]
+fn catalog_key_and_id_round_trip() {
+    let key = CatalogKey("macOS_codex_v1".to_string());
+    let serialized = serde_json::to_string(&key).unwrap();
+    assert_eq!(serialized, "\"macOS_codex_v1\"");
+    let parsed: CatalogKey = serde_json::from_str(&serialized).unwrap();
+    assert_eq!(parsed, key);
+
+    let id = CapabilityId("cap_fs_read_workspace_tree".to_string());
+    let serialized_id = serde_json::to_string(&id).unwrap();
+    assert_eq!(serialized_id, "\"cap_fs_read_workspace_tree\"");
+    let parsed_id: CapabilityId = serde_json::from_str(&serialized_id).unwrap();
+    assert_eq!(parsed_id, id);
+}
+
+#[test]
+fn load_real_catalog_smoke() -> Result<()> {
+    let catalog = load_catalog_from_path(&catalog_path())?;
+    assert!(!catalog.key.0.is_empty());
+    assert!(!catalog.capabilities.is_empty());
+    for cap in catalog.capabilities {
+        assert!(!cap.id.0.is_empty());
+        assert!(
+            !matches!(cap.category, CapabilityCategory::Other(ref v) if v.is_empty()),
+            "category should not be empty"
+        );
+        assert!(
+            !matches!(cap.layer, CapabilityLayer::Other(ref v) if v.is_empty()),
+            "layer should not be empty"
+        );
+    }
+    Ok(())
+}
+
+#[test]
+fn finds_capability_in_registered_catalog() -> Result<()> {
+    let catalog = load_catalog_from_path(&catalog_path())?;
+    let key = catalog.key.clone();
+    let known_capability = catalog
+        .capabilities
+        .first()
+        .expect("catalog should have capabilities")
+        .id
+        .clone();
+
+    let mut repo = CatalogRepository::default();
+    repo.register(catalog);
+
+    let resolved = repo.find_capability(&key, &known_capability);
+    assert!(resolved.is_some());
+    Ok(())
+}
+
+// === emit-record builders and payload helpers ===
+
+#[test]
+fn validate_status_allows_known_values() {
+    for value in ["success", "denied", "partial", "error"] {
+        validate_status(value).expect("status should pass");
+    }
+    assert!(validate_status("bogus").is_err());
+}
+
+#[test]
+fn normalize_secondary_deduplicates_and_trims() -> Result<()> {
+    let caps = sample_capability_index(&[
+        ("cap_a", "filesystem", "os_sandbox"),
+        ("cap_b", "process", "agent_runtime"),
+    ])?;
+    let input = vec![
+        CapabilityId(" cap_a ".to_string()),
+        CapabilityId("cap_b".to_string()),
+        CapabilityId("".to_string()),
+        CapabilityId("cap_a".to_string()),
+    ];
+    let normalized = normalize_secondary_ids(&caps, &input)?;
+    assert_eq!(
+        normalized,
+        vec![
+            CapabilityId("cap_a".to_string()),
+            CapabilityId("cap_b".to_string())
+        ]
+    );
+    Ok(())
+}
+
+#[test]
+fn normalize_secondary_rejects_unknown() -> Result<()> {
+    let caps = sample_capability_index(&[("cap_a", "filesystem", "os_sandbox")])?;
+    let input = vec![
+        CapabilityId("cap_a".to_string()),
+        CapabilityId("cap_missing".to_string()),
+    ];
+    assert!(normalize_secondary_ids(&caps, &input).is_err());
+    Ok(())
+}
+
+#[test]
+fn capability_index_enforces_schema_version() -> Result<()> {
+    let mut file = NamedTempFile::new()?;
+    serde_json::to_writer(
+        &mut file,
+        &json!({
+            "schema_version": "unexpected",
+            "scope": {"description": "test", "policy_layers": [], "categories": {}},
+            "docs": {},
+            "capabilities": []
+        }),
+    )?;
+    assert!(CapabilityIndex::load(file.path()).is_err());
+    Ok(())
+}
+
+#[test]
+fn json_object_builder_overrides_fields() -> Result<()> {
+    let mut builder = JsonObjectBuilder::default();
+    builder.merge_json_string(r#"{"a":1,"b":2}"#, "object")?;
+    builder.insert_string("b".to_string(), "override".to_string());
+    builder.insert_list(
+        "c".to_string(),
+        vec!["first".to_string(), "second".to_string()],
+    );
+    builder.insert_json_value("d".to_string(), "true".to_string(), "object")?;
+    let value = builder.build("test object")?;
+    let obj = value.as_object().expect("object shape");
+    assert_eq!(obj.get("a").and_then(Value::as_i64), Some(1));
+    assert_eq!(obj.get("b").and_then(Value::as_str), Some("override"));
+    assert_eq!(
+        obj.get("c").and_then(Value::as_array).map(|arr| arr.len()),
+        Some(2)
+    );
+    assert_eq!(obj.get("d").and_then(Value::as_bool), Some(true));
+    Ok(())
+}
+
+#[test]
+fn payload_builder_accepts_inline_snippets() -> Result<()> {
+    let mut payload = PayloadArgs::default();
+    payload.set_stdout(TextSource::Inline("hello".to_string()))?;
+    payload.set_stderr(TextSource::Inline("stderr".to_string()))?;
+    payload.raw_mut().insert_null("raw_key".to_string());
+    let built = payload.build()?;
+    assert_eq!(
+        built.pointer("/stdout_snippet").and_then(Value::as_str),
+        Some("hello")
+    );
+    assert_eq!(
+        built.pointer("/stderr_snippet").and_then(Value::as_str),
+        Some("stderr")
+    );
+    assert!(
+        built
+            .pointer("/raw/raw_key")
+            .map(|v| v.is_null())
+            .unwrap_or(false)
+    );
+    Ok(())
+}
+
+// === fence-run workspace helpers ===
+
+#[test]
+fn resolve_probe_prefers_probes_dir() -> Result<()> {
+    let workspace = TempWorkspace::new();
+    let probes = workspace.root.join("probes");
+    fs::create_dir_all(&probes)?;
+    let script = probes.join("example.sh");
+    fs::write(&script, "#!/usr/bin/env bash\nexit 0\n")?;
+    make_executable(&script)?;
+    let resolved = resolve_probe(&workspace.root, "example")?;
+    assert!(resolved.path.ends_with("example.sh"));
+    Ok(())
+}
+
+#[test]
+fn workspace_override_skip_export() {
+    let plan = workspace_plan_from_override(WorkspaceOverride::SkipExport);
+    assert!(plan.export_value.is_none());
+}
+
+#[test]
+fn workspace_override_canonicalizes_path() -> Result<()> {
+    let workspace = TempWorkspace::new();
+    let plan = workspace_plan_from_override(WorkspaceOverride::UsePath(
+        workspace.root.join("probes").into_os_string(),
+    ));
+    assert!(
+        plan.export_value
+            .unwrap()
+            .to_string_lossy()
+            .contains("probes")
+    );
+    Ok(())
+}
+
+#[test]
+fn workspace_tmpdir_prefers_workspace_tree() -> Result<()> {
+    let workspace = TempWorkspace::new();
+    let canonical_root = canonicalize_path(&workspace.root);
+    let plan = workspace_plan_from_override(WorkspaceOverride::UsePath(
+        canonical_root.clone().into_os_string(),
+    ));
+    let tmpdir_plan = workspace_tmpdir_plan(&plan, &canonical_root);
+    let tmpdir = tmpdir_plan.path.expect("tmpdir");
+    assert!(tmpdir.starts_with(&canonical_root));
+    assert!(tmpdir.ends_with("tmp"));
+    assert!(tmpdir.is_dir());
+    Ok(())
+}
+
+#[test]
+fn workspace_tmpdir_uses_override_when_present() -> Result<()> {
+    let workspace = TempWorkspace::new();
+    let override_root = workspace.root.join("custom_workspace");
+    fs::create_dir_all(&override_root)?;
+    let plan = workspace_plan_from_override(WorkspaceOverride::UsePath(
+        override_root.clone().into_os_string(),
+    ));
+    let tmpdir_plan = workspace_tmpdir_plan(&plan, &workspace.root);
+    let tmpdir = tmpdir_plan.path.expect("tmpdir");
+    let override_canonical = canonicalize_path(&override_root);
+    assert!(tmpdir.starts_with(&override_canonical));
+    Ok(())
+}
+
+#[test]
+fn workspace_tmpdir_records_error_when_all_candidates_fail() -> Result<()> {
+    let workspace = TempWorkspace::new();
+    let override_file = workspace.root.join("override_marker");
+    fs::write(&override_file, "marker")?;
+    let plan = workspace_plan_from_override(WorkspaceOverride::UsePath(
+        override_file.into_os_string(),
+    ));
+    let tmpdir_plan = workspace_tmpdir_plan(&plan, &workspace.root);
+    assert!(tmpdir_plan.path.is_none());
+    let (attempted, message) = tmpdir_plan.last_error.expect("missing error");
+    assert!(!message.is_empty());
+    assert!(attempted.ends_with("tmp"));
+    Ok(())
+}
+
+#[test]
+fn resolve_probe_metadata_prefers_script_values() -> Result<()> {
+    let workspace = TempWorkspace::new();
+    let probes = workspace.root.join("probes");
+    fs::create_dir_all(&probes)?;
+    let script = probes.join("meta.sh");
+    fs::write(
+        &script,
+        r#"#!/usr/bin/env bash
+probe_name="custom_probe"
+probe_version="2"
+primary_capability_id="cap_fs_read_workspace_tree"
+        "#,
+    )?;
+    make_executable(&script)?;
+    let parsed = ProbeMetadata::from_script(&script)?;
+    let probe = Probe {
+        id: "meta".to_string(),
+        path: fs::canonicalize(&script)?,
+    };
+    let resolved = resolve_probe_metadata(&probe, parsed)?;
+    assert_eq!(resolved.id, "custom_probe");
+    assert_eq!(resolved.version, "2");
+    assert_eq!(resolved.primary_capability.0, "cap_fs_read_workspace_tree");
+    Ok(())
+}
+
+#[test]
+fn classify_preflight_recognizes_permission_denied() {
+    let (status, errno, message) = classify_preflight_error("mktemp: Operation not permitted\n");
+    assert_eq!(status, "denied");
+    assert_eq!(errno, Some("EPERM"));
+    assert!(message.contains("preflight"));
+}
+
+#[test]
+fn classify_preflight_defaults_to_error() {
+    let (status, errno, _) = classify_preflight_error("unexpected failure");
+    assert_eq!(status, "error");
+    assert!(errno.is_none());
+}
+
+// === CLI helper smoke tests (former bin_smoke) ===
+
+#[test]
+fn codex_fence_prefers_repo_helper() -> Result<()> {
+    let repo_root = repo_root();
+    let temp_repo = TempDir::new().context("failed to allocate temp repo")?;
+    let repo = temp_repo.path();
+    let bin_dir = repo.join("bin");
+    fs::create_dir_all(&bin_dir)?;
+    fs::write(bin_dir.join(".gitkeep"), "")?;
+    fs::write(repo.join("Makefile"), "all:\n\t@true\n")?;
+
+    let marker = repo.join("helper_invoked");
+    let helper_path = bin_dir.join("fence-bang");
+    fs::write(
+        &helper_path,
+        "#!/bin/sh\n[ -n \"$MARK_FILE\" ] && echo invoked > \"$MARK_FILE\"\n",
+    )?;
+    make_executable(&helper_path)?;
+
+    let codex_fence = helper_binary(&repo_root, "codex-fence");
+    let output = Command::new(codex_fence)
+        .arg("--bang")
+        .env("CODEX_FENCE_ROOT", repo)
+        .env("PATH", "")
+        .env("MARK_FILE", &marker)
+        .output()
+        .context("failed to run codex-fence stub")?;
+
+    assert!(output.status.success());
+    assert!(marker.is_file());
+    Ok(())
+}
+
+#[test]
+fn codex_fence_falls_back_to_path() -> Result<()> {
+    let repo_root = repo_root();
+    let temp = TempDir::new().context("failed to allocate temp dir")?;
+    let helper_dir = temp.path();
+    let marker = helper_dir.join("path_helper_invoked");
+    let helper_path = helper_dir.join("fence-listen");
+    fs::write(
+        &helper_path,
+        "#!/bin/sh\n[ -n \"$MARK_FILE\" ] && echo listen > \"$MARK_FILE\"\n",
+    )?;
+    make_executable(&helper_path)?;
+
+    let source = helper_binary(&repo_root, "codex-fence");
+    let runner = helper_dir.join("codex-fence");
+    fs::copy(&source, &runner)?;
+    make_executable(&runner)?;
+
+    let output = Command::new(&runner)
+        .arg("--listen")
+        .env("PATH", helper_dir)
+        .env_remove("CODEX_FENCE_ROOT")
+        .env("MARK_FILE", &marker)
+        .current_dir(helper_dir)
+        .output()
+        .context("failed to run codex-fence path test")?;
+
+    assert!(output.status.success());
+    assert!(marker.is_file());
+    Ok(())
+}
+
+#[test]
+fn detect_stack_reports_expected_sandbox_modes() -> Result<()> {
+    let repo_root = repo_root();
+    let detect_stack = helper_binary(&repo_root, "detect-stack");
+
+    let mut baseline_cmd = Command::new(&detect_stack);
+    baseline_cmd.arg("baseline");
+    let baseline = run_command(baseline_cmd)?;
+    let baseline_json: Value = serde_json::from_slice(&baseline.stdout)?;
+    assert!(
+        baseline_json
+            .get("sandbox_mode")
+            .map(|v| v.is_null())
+            .unwrap_or(true)
+    );
+
+    let mut sandbox_cmd = Command::new(&detect_stack);
+    sandbox_cmd.arg("codex-sandbox");
+    let sandbox = run_command(sandbox_cmd)?;
+    let sandbox_json: Value = serde_json::from_slice(&sandbox.stdout)?;
+    assert_eq!(
+        sandbox_json
+            .get("sandbox_mode")
+            .and_then(|v| v.as_str())
+            .unwrap_or_default(),
+        "workspace-write"
+    );
+
+    let override_val = "custom-mode";
+    let mut full_cmd = Command::new(&detect_stack);
+    full_cmd.arg("codex-full").env("FENCE_SANDBOX_MODE", override_val);
+    let full = run_command(full_cmd)?;
+    let full_json: Value = serde_json::from_slice(&full.stdout)?;
+    assert_eq!(
+        full_json
+            .get("sandbox_mode")
+            .and_then(|v| v.as_str())
+            .unwrap_or_default(),
+        override_val
+    );
+    Ok(())
+}
+
+#[test]
+fn json_extract_applies_default_value() -> Result<()> {
+    let repo_root = repo_root();
+    let helper = helper_binary(&repo_root, "json-extract");
+    let temp = TempDir::new().context("failed to allocate json fixture dir")?;
+    let json_path = temp.path().join("input.json");
+    fs::write(&json_path, br#"{"present":true}"#)?;
+
+    let mut cmd = Command::new(helper);
+    cmd.arg("--file")
+        .arg(&json_path)
+        .arg("--pointer")
+        .arg("/missing")
+        .arg("--type")
+        .arg("bool")
+        .arg("--default")
+        .arg("false");
+    let output = run_command(cmd)?;
+    let value: Value = serde_json::from_slice(&output.stdout)?;
+    assert_eq!(value, Value::Bool(false));
+    Ok(())
+}
+
+#[test]
+fn json_extract_rejects_unknown_type() -> Result<()> {
+    let repo_root = repo_root();
+    let helper = helper_binary(&repo_root, "json-extract");
+    let output = Command::new(helper)
+        .arg("--stdin")
+        .arg("--type")
+        .arg("unknown")
+        .stdin(std::process::Stdio::piped())
+        .output()
+        .context("failed to spawn json-extract for error case")?;
+    assert!(!output.status.success());
+    Ok(())
+}
+
+#[test]
+fn portable_path_relpath_matches_basics() -> Result<()> {
+    let repo_root = repo_root();
+    let helper = helper_binary(&repo_root, "portable-path");
+    let temp = TempDir::new().context("failed to allocate temp dir")?;
+    let base = temp.path().join("base");
+    let target = base.join("nested/child");
+    fs::create_dir_all(&target)?;
+
+    let mut cmd = Command::new(helper);
+    cmd.arg("relpath").arg(&target).arg(&base);
+    let output = run_command(cmd)?;
+    let relpath = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    assert_eq!(relpath, "nested/child");
+    Ok(())
+}
+
+#[test]
+fn portable_path_relpath_handles_parent() -> Result<()> {
+    let repo_root = repo_root();
+    let helper = helper_binary(&repo_root, "portable-path");
+    let temp = TempDir::new().context("failed to allocate temp dir")?;
+    let base = temp.path().join("base/child");
+    let target = temp.path().join("base/sibling/file.txt");
+    fs::create_dir_all(target.parent().unwrap())?;
+    fs::create_dir_all(&base)?;
+    fs::write(&target, "content")?;
+
+    let mut cmd = Command::new(helper);
+    cmd.arg("relpath").arg(&target).arg(&base);
+    let output = run_command(cmd)?;
+    let relpath = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    assert_eq!(relpath, "../sibling/file.txt");
+    Ok(())
+}
+
+#[test]
+fn portable_path_relpath_identical_path() -> Result<()> {
+    let repo_root = repo_root();
+    let helper = helper_binary(&repo_root, "portable-path");
+    let temp = TempDir::new().context("failed to allocate temp dir")?;
+    let base = temp.path().join("base");
+    fs::create_dir_all(&base)?;
+
+    let mut cmd = Command::new(helper);
+    cmd.arg("relpath").arg(&base).arg(&base);
+    let output = run_command(cmd)?;
+    let relpath = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    assert_eq!(relpath, ".");
+    Ok(())
+}
+
 // Helper for installing temporary probe mocks under probes/ and cleaning them
 // up after each test.
 struct FixtureProbe {
@@ -793,4 +1488,159 @@ fn relative_to_repo(path: &Path, repo_root: &Path) -> String {
     path.strip_prefix(repo_root)
         .map(|p| p.display().to_string())
         .unwrap_or_else(|_| path.display().to_string())
+}
+
+struct TempRepo {
+    root: PathBuf,
+}
+
+impl TempRepo {
+    fn new() -> Self {
+        static COUNTER: AtomicUsize = AtomicUsize::new(0);
+        let mut dir = env::temp_dir();
+        dir.push(format!(
+            "codex-fence-helper-test-{}-{}",
+            std::process::id(),
+            COUNTER.fetch_add(1, Ordering::SeqCst)
+        ));
+        fs::create_dir_all(&dir).expect("failed to create temp repo");
+        Self { root: dir }
+    }
+}
+
+impl Drop for TempRepo {
+    fn drop(&mut self) {
+        let _ = fs::remove_dir_all(&self.root);
+    }
+}
+
+struct TempWorkspace {
+    root: PathBuf,
+}
+
+impl TempWorkspace {
+    fn new() -> Self {
+        static COUNTER: AtomicUsize = AtomicUsize::new(0);
+        let mut base = env::temp_dir();
+        let unique = COUNTER.fetch_add(1, Ordering::SeqCst);
+        base.push(format!("codex-fence-test-{}-{}", std::process::id(), unique));
+        fs::create_dir_all(&base).expect("failed to create temp workspace");
+        Self { root: base }
+    }
+}
+
+impl Drop for TempWorkspace {
+    fn drop(&mut self) {
+        let _ = fs::remove_dir_all(&self.root);
+    }
+}
+
+struct PathGuard {
+    original: Option<OsString>,
+}
+
+impl PathGuard {
+    fn set(value: &Path) -> Self {
+        let original = env::var_os("PATH");
+        unsafe {
+            env::set_var("PATH", value);
+        }
+        Self { original }
+    }
+}
+
+impl Drop for PathGuard {
+    fn drop(&mut self) {
+        unsafe {
+            match self.original.take() {
+                Some(val) => env::set_var("PATH", val),
+                None => env::remove_var("PATH"),
+            }
+        }
+    }
+}
+
+fn sample_capability_index(entries: &[(&str, &str, &str)]) -> Result<CapabilityIndex> {
+    let mut file = NamedTempFile::new()?;
+    let capabilities: Vec<Value> = entries
+        .iter()
+        .map(|(id, category, layer)| {
+            json!({
+                "id": id,
+                "category": category,
+                "layer": layer,
+                "description": format!("cap {id}"),
+                "operations": {"allow": [], "deny": []}
+            })
+        })
+        .collect();
+    serde_json::to_writer(
+        &mut file,
+        &json!({
+            "schema_version": "macOS_codex_v1",
+            "scope": {"description": "test", "policy_layers": [], "categories": {}},
+            "docs": {},
+            "capabilities": capabilities
+        }),
+    )?;
+    CapabilityIndex::load(file.path())
+        .with_context(|| "failed to load sample capability index".to_string())
+}
+
+fn catalog_path() -> PathBuf {
+    repo_root().join("schema").join("capabilities.json")
+}
+
+fn empty_json_object() -> Value {
+    Value::Object(Default::default())
+}
+
+fn sample_boundary_object() -> BoundaryObject {
+    BoundaryObject {
+        schema_version: "cfbo-v1".to_string(),
+        capabilities_schema_version: None,
+        stack: StackInfo {
+            codex_cli_version: Some("1.0".to_string()),
+            codex_profile: None,
+            sandbox_mode: Some("workspace-write".to_string()),
+            os: "Darwin".to_string(),
+        },
+        probe: ProbeInfo {
+            id: "probe".to_string(),
+            version: "1".to_string(),
+            primary_capability_id: CapabilityId("cap_id".to_string()),
+            secondary_capability_ids: vec![],
+        },
+        run: RunInfo {
+            mode: "baseline".to_string(),
+            workspace_root: Some("/tmp".to_string()),
+            command: "echo test".to_string(),
+        },
+        operation: OperationInfo {
+            category: "fs".to_string(),
+            verb: "read".to_string(),
+            target: "/dev/null".to_string(),
+            args: empty_json_object(),
+        },
+        result: ResultInfo {
+            observed_result: "success".to_string(),
+            raw_exit_code: Some(0),
+            errno: None,
+            message: None,
+            error_detail: None,
+        },
+        payload: Payload {
+            stdout_snippet: None,
+            stderr_snippet: None,
+            raw: empty_json_object(),
+        },
+        capability_context: CapabilityContext {
+            primary: CapabilitySnapshot {
+                id: CapabilityId("cap_id".to_string()),
+                category: CapabilityCategory::Other("cat".to_string()),
+                layer: CapabilityLayer::Other("layer".to_string()),
+            },
+            secondary: Vec::new(),
+        },
+    }
 }

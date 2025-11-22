@@ -6,7 +6,12 @@
 //! - wrap Codex sandbox/full invocations when requested
 //! - honor workspace overrides without silently falling back to host defaults
 
-use anyhow::{Context, Result, anyhow, bail};
+use anyhow::{Context, Result, bail};
+use codex_fence::fence_run_support::{
+    ResolvedProbeMetadata, WorkspaceOverride, WorkspacePlan, canonicalize_path,
+    classify_preflight_error, resolve_probe_metadata, workspace_plan_from_override,
+    workspace_tmpdir_plan,
+};
 use codex_fence::{ProbeMetadata, codex_present, find_repo_root, resolve_probe};
 use serde_json::json;
 use std::env;
@@ -83,18 +88,6 @@ struct CliArgs {
     workspace_override: Option<WorkspaceOverride>,
     run_mode: String,
     probe_name: String,
-}
-
-#[derive(Clone)]
-/// How the workspace root should be exported to the probe.
-enum WorkspaceOverride {
-    UsePath(OsString),
-    SkipExport,
-}
-
-/// Finalized workspace export plan after considering CLI/env overrides.
-struct WorkspacePlan {
-    export_value: Option<OsString>,
 }
 
 /// Program and arguments used to execute the probe for a given mode.
@@ -189,15 +182,6 @@ fn determine_workspace_plan(
     })
 }
 
-fn workspace_plan_from_override(value: WorkspaceOverride) -> WorkspacePlan {
-    match value {
-        WorkspaceOverride::SkipExport => WorkspacePlan { export_value: None },
-        WorkspaceOverride::UsePath(path) => WorkspacePlan {
-            export_value: Some(canonicalize_os_string(&path)),
-        },
-    }
-}
-
 /// Pick the working directory for probe execution. Prefer the exported workspace
 /// root so codex sandbox profiles align with the trusted tree, otherwise fall
 /// back to the repository root.
@@ -206,54 +190,6 @@ fn command_cwd_for(plan: &WorkspacePlan, default_root: &Path) -> PathBuf {
         return PathBuf::from(value);
     }
     env::current_dir().unwrap_or_else(|_| default_root.to_path_buf())
-}
-
-fn canonicalize_path(path: &Path) -> PathBuf {
-    fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf())
-}
-
-fn canonicalize_os_string(value: &OsString) -> OsString {
-    let candidate = PathBuf::from(value);
-    fs::canonicalize(&candidate)
-        .unwrap_or(candidate)
-        .into_os_string()
-}
-
-/// Plan for the tmpdir export used by probes and codex preflight.
-struct TmpdirPlan {
-    path: Option<PathBuf>,
-    last_error: Option<(PathBuf, String)>,
-}
-
-/// Prefer a workspace-scoped tmp dir so probes land temp files inside the
-/// allowed tree even when system defaults are blocked. Falls back to the repo
-/// tmp when no workspace override is set.
-fn workspace_tmpdir_plan(workspace_plan: &WorkspacePlan, repo_root: &Path) -> TmpdirPlan {
-    let mut candidates = Vec::new();
-    if let Some(value) = workspace_plan.export_value.as_ref() {
-        candidates.push(PathBuf::from(value).join("tmp"));
-    }
-    if workspace_plan.export_value.is_none() {
-        candidates.push(repo_root.join("tmp"));
-    }
-
-    let mut last_error = None;
-    for candidate in candidates {
-        match fs::create_dir_all(&candidate) {
-            Ok(()) => {
-                return TmpdirPlan {
-                    path: Some(canonicalize_path(&candidate)),
-                    last_error: None,
-                };
-            }
-            Err(err) => last_error = Some((candidate, err.to_string())),
-        }
-    }
-
-    TmpdirPlan {
-        path: None,
-        last_error,
-    }
 }
 
 fn ensure_probe_executable(path: &Path) -> Result<()> {
@@ -399,25 +335,6 @@ fn run_command(
         }
     }
     Ok(())
-}
-
-fn classify_preflight_error(stderr: &str) -> (&'static str, Option<&'static str>, String) {
-    let lower = stderr.to_ascii_lowercase();
-    if lower.contains("operation not permitted") {
-        (
-            "denied",
-            Some("EPERM"),
-            "codex sandbox preflight denied (operation not permitted)".to_string(),
-        )
-    } else if lower.contains("permission denied") {
-        (
-            "denied",
-            Some("EACCES"),
-            "codex sandbox preflight denied (permission denied)".to_string(),
-        )
-    } else {
-        ("error", None, "codex sandbox preflight failed".to_string())
-    }
 }
 
 fn write_temp_payload(value: &serde_json::Value) -> Result<PathBuf> {
@@ -566,190 +483,4 @@ fn run_codex_preflight(
         &command_str,
     )?;
     Ok(true)
-}
-
-struct ResolvedProbeMetadata {
-    id: String,
-    version: String,
-    primary_capability: codex_fence::CapabilityId,
-}
-
-fn resolve_probe_metadata(
-    probe: &codex_fence::Probe,
-    parsed: ProbeMetadata,
-) -> Result<ResolvedProbeMetadata> {
-    let primary_capability = parsed.primary_capability.ok_or_else(|| {
-        anyhow!(
-            "probe {} is missing primary_capability_id",
-            probe.path.display()
-        )
-    })?;
-    Ok(ResolvedProbeMetadata {
-        id: parsed.probe_name.unwrap_or_else(|| probe.id.clone()),
-        version: parsed.probe_version.unwrap_or_else(|| "1".to_string()),
-        primary_capability,
-    })
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use std::sync::atomic::{AtomicUsize, Ordering};
-
-    #[test]
-    fn resolve_probe_prefers_probes_dir() {
-        let workspace = TempWorkspace::new();
-        let probes = workspace.root.join("probes");
-        fs::create_dir_all(&probes).unwrap();
-        let script = probes.join("example.sh");
-        fs::write(&script, "#!/usr/bin/env bash\nexit 0\n").unwrap();
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            let mut perms = fs::metadata(&script).unwrap().permissions();
-            perms.set_mode(0o755);
-            fs::set_permissions(&script, perms).unwrap();
-        }
-        let resolved = resolve_probe(&workspace.root, "example").unwrap();
-        assert!(resolved.path.ends_with("example.sh"));
-    }
-
-    #[test]
-    fn workspace_override_skip_export() {
-        let plan = workspace_plan_from_override(WorkspaceOverride::SkipExport);
-        assert!(plan.export_value.is_none());
-    }
-
-    #[test]
-    fn workspace_override_canonicalizes_path() {
-        let workspace = TempWorkspace::new();
-        let plan = workspace_plan_from_override(WorkspaceOverride::UsePath(
-            workspace.root.join("probes").into_os_string(),
-        ));
-        assert!(
-            plan.export_value
-                .unwrap()
-                .to_string_lossy()
-                .contains("probes")
-        );
-    }
-
-    #[test]
-    fn workspace_tmpdir_prefers_workspace_tree() {
-        let workspace = TempWorkspace::new();
-        let canonical_root = canonicalize_path(&workspace.root);
-        let plan = workspace_plan_from_override(WorkspaceOverride::UsePath(
-            canonical_root.clone().into_os_string(),
-        ));
-        let tmpdir_plan = workspace_tmpdir_plan(&plan, &canonical_root);
-        let tmpdir = tmpdir_plan.path.expect("tmpdir");
-        assert!(tmpdir.starts_with(&canonical_root));
-        assert!(tmpdir.ends_with("tmp"));
-        assert!(tmpdir.is_dir());
-    }
-
-    #[test]
-    fn workspace_tmpdir_uses_override_when_present() {
-        let workspace = TempWorkspace::new();
-        let override_root = workspace.root.join("custom_workspace");
-        fs::create_dir_all(&override_root).unwrap();
-        let plan = workspace_plan_from_override(WorkspaceOverride::UsePath(
-            override_root.clone().into_os_string(),
-        ));
-        let tmpdir_plan = workspace_tmpdir_plan(&plan, &workspace.root);
-        let tmpdir = tmpdir_plan.path.expect("tmpdir");
-        let override_canonical = canonicalize_path(&override_root);
-        assert!(tmpdir.starts_with(&override_canonical));
-    }
-
-    #[test]
-    fn workspace_tmpdir_records_error_when_all_candidates_fail() {
-        let workspace = TempWorkspace::new();
-        let override_file = workspace.root.join("override_marker");
-        fs::write(&override_file, "marker").unwrap();
-        let plan = workspace_plan_from_override(WorkspaceOverride::UsePath(
-            override_file.into_os_string(),
-        ));
-        let tmpdir_plan = workspace_tmpdir_plan(&plan, &workspace.root);
-        assert!(tmpdir_plan.path.is_none());
-        let (attempted, message) = tmpdir_plan.last_error.expect("expected an error recorded");
-        assert!(!message.is_empty());
-        // Attempted tmpdir should reflect the override path.
-        assert!(attempted.ends_with("tmp"));
-    }
-
-    #[test]
-    fn resolve_probe_metadata_prefers_script_values() {
-        let workspace = TempWorkspace::new();
-        let probes = workspace.root.join("probes");
-        fs::create_dir_all(&probes).unwrap();
-        let script = probes.join("meta.sh");
-        fs::write(
-            &script,
-            r#"#!/usr/bin/env bash
-probe_name="custom_probe"
-probe_version="2"
-primary_capability_id="cap_fs_read_workspace_tree"
-        "#,
-        )
-        .unwrap();
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            let mut perms = fs::metadata(&script).unwrap().permissions();
-            perms.set_mode(0o755);
-            fs::set_permissions(&script, perms).unwrap();
-        }
-
-        let parsed = ProbeMetadata::from_script(&script).unwrap();
-        let probe = codex_fence::Probe {
-            id: "meta".to_string(),
-            path: fs::canonicalize(&script).unwrap(),
-        };
-        let resolved = resolve_probe_metadata(&probe, parsed).unwrap();
-        assert_eq!(resolved.id, "custom_probe");
-        assert_eq!(resolved.version, "2");
-        assert_eq!(resolved.primary_capability.0, "cap_fs_read_workspace_tree");
-    }
-
-    #[test]
-    fn classify_preflight_recognizes_permission_denied() {
-        let (status, errno, message) =
-            classify_preflight_error("mktemp: Operation not permitted\n");
-        assert_eq!(status, "denied");
-        assert_eq!(errno, Some("EPERM"));
-        assert!(message.contains("preflight"));
-    }
-
-    #[test]
-    fn classify_preflight_defaults_to_error() {
-        let (status, errno, _) = classify_preflight_error("unexpected failure");
-        assert_eq!(status, "error");
-        assert!(errno.is_none());
-    }
-
-    struct TempWorkspace {
-        root: PathBuf,
-    }
-
-    impl TempWorkspace {
-        fn new() -> Self {
-            static COUNTER: AtomicUsize = AtomicUsize::new(0);
-            let mut base = env::temp_dir();
-            let unique = COUNTER.fetch_add(1, Ordering::SeqCst);
-            base.push(format!(
-                "codex-fence-test-{}-{}",
-                std::process::id(),
-                unique
-            ));
-            fs::create_dir_all(&base).unwrap();
-            Self { root: base }
-        }
-    }
-
-    impl Drop for TempWorkspace {
-        fn drop(&mut self) {
-            let _ = fs::remove_dir_all(&self.root);
-        }
-    }
 }

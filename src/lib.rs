@@ -19,6 +19,8 @@ pub mod catalog;
 pub mod coverage;
 pub mod metadata_validation;
 pub mod probe_metadata;
+pub mod emit_support;
+pub mod fence_run_support;
 
 pub use boundary::{
     BoundaryObject, CapabilityContext, OperationInfo, Payload, ProbeInfo, ResultInfo, RunInfo,
@@ -316,133 +318,5 @@ fn helper_is_executable(path: &Path) -> bool {
     #[cfg(not(unix))]
     {
         true
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use std::ffi::OsString;
-    use std::sync::atomic::{AtomicUsize, Ordering};
-
-    #[test]
-    fn resolve_helper_prefers_release() {
-        let temp = TempRepo::new();
-        let release_dir = temp.root.join("target/release");
-        fs::create_dir_all(&release_dir).unwrap();
-        let helper = release_dir.join("fence-run");
-        fs::write(&helper, "#!/bin/sh\n").unwrap();
-        make_executable(&helper);
-        let resolved = resolve_helper_binary(&temp.root, "fence-run").unwrap();
-        assert_eq!(resolved, helper);
-    }
-
-    #[test]
-    fn resolve_helper_falls_back_to_bin() {
-        let temp = TempRepo::new();
-        let bin_dir = temp.root.join("bin");
-        fs::create_dir_all(&bin_dir).unwrap();
-        let helper = bin_dir.join("emit-record");
-        fs::write(&helper, "#!/bin/sh\n").unwrap();
-        make_executable(&helper);
-        let resolved = resolve_helper_binary(&temp.root, "emit-record").unwrap();
-        assert_eq!(resolved, helper);
-    }
-
-    #[test]
-    #[cfg(unix)]
-    fn codex_present_requires_executable() {
-        let temp = TempRepo::new();
-        let codex = temp.root.join("codex");
-        fs::write(&codex, "#!/bin/sh\nexit 0\n").unwrap();
-
-        let _guard = PathGuard::set(&temp.root);
-
-        // No execute bit → should not be considered present.
-        assert!(!codex_present());
-
-        make_executable(&codex);
-        assert!(codex_present());
-    }
-
-    #[test]
-    fn list_and_resolve_probes_share_semantics() {
-        let temp = TempRepo::new();
-        let probes_dir = temp.root.join("probes");
-        fs::create_dir_all(&probes_dir).unwrap();
-        let script = probes_dir.join("example.sh");
-        fs::write(&script, "#!/usr/bin/env bash\nexit 0\n").unwrap();
-        make_executable(&script);
-
-        let probes = list_probes(&temp.root).unwrap();
-        assert_eq!(probes.len(), 1);
-        assert_eq!(probes[0].id, "example");
-
-        let resolved = resolve_probe(&temp.root, "example").unwrap();
-        assert_eq!(resolved.path, fs::canonicalize(&script).unwrap());
-
-        let resolved_with_ext = resolve_probe(&temp.root, "example.sh").unwrap();
-        assert_eq!(resolved_with_ext.path, resolved.path);
-    }
-
-    struct TempRepo {
-        root: PathBuf,
-    }
-
-    impl TempRepo {
-        fn new() -> Self {
-            static COUNTER: AtomicUsize = AtomicUsize::new(0);
-            let mut dir = env::temp_dir();
-            dir.push(format!(
-                "codex-fence-helper-test-{}-{}",
-                std::process::id(),
-                COUNTER.fetch_add(1, Ordering::SeqCst)
-            ));
-            fs::create_dir_all(&dir).unwrap();
-            Self { root: dir }
-        }
-    }
-
-    impl Drop for TempRepo {
-        fn drop(&mut self) {
-            let _ = fs::remove_dir_all(&self.root);
-        }
-    }
-
-    #[cfg(unix)]
-    fn make_executable(path: &Path) {
-        use std::os::unix::fs::PermissionsExt;
-        let mut perms = fs::metadata(path).unwrap().permissions();
-        perms.set_mode(0o755);
-        fs::set_permissions(path, perms).unwrap();
-    }
-
-    #[cfg(not(unix))]
-    fn make_executable(_path: &Path) {}
-
-    struct PathGuard {
-        original: Option<OsString>,
-    }
-
-    impl PathGuard {
-        fn set(value: &Path) -> Self {
-            let original = env::var_os("PATH");
-            // std::env mutation is marked unsafe on this toolchain.
-            unsafe {
-                env::set_var("PATH", value);
-            }
-            Self { original }
-        }
-    }
-
-    impl Drop for PathGuard {
-        fn drop(&mut self) {
-            unsafe {
-                match self.original.take() {
-                    Some(val) => env::set_var("PATH", val),
-                    None => env::remove_var("PATH"),
-                }
-            }
-        }
     }
 }

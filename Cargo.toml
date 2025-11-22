@@ -10,6 +10,9 @@ repository = "https://github.com/Protonk/codex-fence"
 default-run = "codex-fence"
 build = "build.rs"
 
+[lib]
+doctest = false
+
 [dependencies]
 anyhow = "1.0"
 serde = { version = "1.0", features = ["derive"] }
@@ -42,6 +45,7 @@ test = false
 [[bin]]
 name = "emit-record"
 path = "src/bin/emit_record.rs"
+test = false
 
 [[bin]]
 name = "detect-stack"
@@ -51,6 +55,7 @@ test = false
 [[bin]]
 name = "fence-run"
 path = "src/bin/fence_run.rs"
+test = false
 
 [[bin]]
 name = "codex-fence"

@@ -2,8 +2,8 @@ use anyhow::{Context, Result, bail};
 use codex_fence::find_repo_root;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
-use std::sync::{Mutex, OnceLock};
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Mutex, OnceLock};
 
 pub fn repo_root() -> PathBuf {
     find_repo_root().expect("tests require repository root")
@@ -27,8 +27,7 @@ pub fn helper_binary(repo_root: &Path, name: &str) -> PathBuf {
     );
 }
 
-pub fn run_command(cmd: Command) -> Result<Output> {
-    let mut cmd = cmd;
+pub fn run_command(mut cmd: Command) -> Result<Output> {
     let output = cmd
         .output()
         .with_context(|| format!("failed to run command: {:?}", cmd))?;
@@ -43,6 +42,17 @@ pub fn run_command(cmd: Command) -> Result<Output> {
             String::from_utf8_lossy(&output.stderr)
         )
     }
+}
+
+pub fn make_executable(path: &Path) -> Result<()> {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let mut perms = std::fs::metadata(path)?.permissions();
+        perms.set_mode(0o755);
+        std::fs::set_permissions(path, perms)?;
+    }
+    Ok(())
 }
 
 fn ensure_helpers_built(repo_root: &Path) -> Result<()> {

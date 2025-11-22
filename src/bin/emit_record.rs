@@ -6,12 +6,15 @@
 //! order, and prints a single JSON record to stdout.
 
 use anyhow::{Context, Result, anyhow, bail};
+use codex_fence::emit_support::{
+    JsonObjectBuilder, PayloadArgs, TextSource, normalize_secondary_ids, not_empty,
+    validate_capability_id, validate_status,
+};
 use codex_fence::{
     CapabilityId, CapabilityIndex, CapabilitySnapshot, find_repo_root, resolve_helper_binary,
     split_list,
 };
-use serde_json::{Map, Value, json};
-use std::collections::BTreeSet;
+use serde_json::{Value, json};
 use std::env;
 use std::ffi::OsString;
 use std::fmt::Write;
@@ -198,35 +201,37 @@ impl CliArgs {
                     let value = next_value(&mut args, "--payload-raw")?;
                     config
                         .payload
-                        .raw
+                        .raw_mut()
                         .merge_json_string(&value, "payload raw")?;
                 }
                 "--payload-raw-file" => {
                     let value = PathBuf::from(next_value(&mut args, "--payload-raw-file")?);
-                    config.payload.raw.merge_json_file(&value, "payload raw")?;
+                    config.payload
+                        .raw_mut()
+                        .merge_json_file(&value, "payload raw")?;
                 }
                 "--payload-raw-field" => {
                     let key = next_value(&mut args, "--payload-raw-field")?;
                     let value = next_value(&mut args, "--payload-raw-field")?;
-                    config.payload.raw.insert_string(key, value);
+                    config.payload.raw_mut().insert_string(key, value);
                 }
                 "--payload-raw-field-json" => {
                     let key = next_value(&mut args, "--payload-raw-field-json")?;
                     let value = next_value(&mut args, "--payload-raw-field-json")?;
                     config
                         .payload
-                        .raw
+                        .raw_mut()
                         .insert_json_value(key, value, "payload raw field")?;
                 }
                 "--payload-raw-null" => {
                     let key = next_value(&mut args, "--payload-raw-null")?;
-                    config.payload.raw.insert_null(key);
+                    config.payload.raw_mut().insert_null(key);
                 }
                 "--payload-raw-list" => {
                     let key = next_value(&mut args, "--payload-raw-list")?;
                     let value = next_value(&mut args, "--payload-raw-list")?;
                     let entries = split_list(&value);
-                    config.payload.raw.insert_list(key, entries);
+                    config.payload.raw_mut().insert_list(key, entries);
                 }
                 "--operation-args" => {
                     let value = next_value(&mut args, "--operation-args")?;
@@ -360,203 +365,6 @@ impl PartialArgs {
     }
 }
 
-#[derive(Default, Clone)]
-struct PayloadArgs {
-    payload_file: Option<PathBuf>,
-    stdout: Option<TextSource>,
-    stderr: Option<TextSource>,
-    raw: JsonObjectBuilder,
-}
-
-impl PayloadArgs {
-    fn set_payload_file(&mut self, path: PathBuf) -> Result<()> {
-        if self.payload_file.is_some() {
-            bail!("--payload-file provided multiple times");
-        }
-        self.payload_file = Some(path);
-        Ok(())
-    }
-
-    fn set_stdout(&mut self, source: TextSource) -> Result<()> {
-        if self.stdout.is_some() {
-            bail!("stdout snippet provided multiple times");
-        }
-        self.stdout = Some(source);
-        Ok(())
-    }
-
-    fn set_stderr(&mut self, source: TextSource) -> Result<()> {
-        if self.stderr.is_some() {
-            bail!("stderr snippet provided multiple times");
-        }
-        self.stderr = Some(source);
-        Ok(())
-    }
-
-    fn build(self) -> Result<Value> {
-        if let Some(ref path) = self.payload_file {
-            if self.has_inline_fields() {
-                bail!("--payload-file cannot be combined with inline payload flags");
-            }
-            if !path.is_file() {
-                bail!("Payload file not found: {}", path.display());
-            }
-            return read_json_file(&path);
-        }
-
-        let stdout_snippet = build_snippet_value(self.stdout)?;
-        let stderr_snippet = build_snippet_value(self.stderr)?;
-        let raw = self.raw.build("payload raw object")?;
-
-        Ok(json!({
-            "stdout_snippet": stdout_snippet,
-            "stderr_snippet": stderr_snippet,
-            "raw": raw,
-        }))
-    }
-
-    fn has_inline_fields(&self) -> bool {
-        self.stdout.is_some() || self.stderr.is_some() || !self.raw.is_empty()
-    }
-}
-
-#[derive(Default, Clone)]
-struct JsonObjectBuilder {
-    sources: Vec<JsonValueSource>,
-}
-
-impl JsonObjectBuilder {
-    fn merge_json_string(&mut self, raw: &str, label: &str) -> Result<()> {
-        let value: Value =
-            serde_json::from_str(raw).with_context(|| format!("Invalid JSON for {label}"))?;
-        self.push_object(value, label)
-    }
-
-    fn merge_json_file(&mut self, path: &Path, label: &str) -> Result<()> {
-        if !path.is_file() {
-            bail!("{label} file not found: {}", path.display());
-        }
-        let value = read_json_file(path)?;
-        self.push_object(value, label)
-    }
-
-    fn push_object(&mut self, value: Value, label: &str) -> Result<()> {
-        match value {
-            Value::Object(map) => {
-                self.sources.push(JsonValueSource::MergeObject(map));
-                Ok(())
-            }
-            _ => bail!("{label} must be a JSON object"),
-        }
-    }
-
-    fn insert_string(&mut self, key: String, value: String) {
-        self.sources.push(JsonValueSource::SetField {
-            key,
-            value: Value::String(value),
-        });
-    }
-
-    fn insert_json_value(&mut self, key: String, raw: String, label: &str) -> Result<()> {
-        let value: Value = serde_json::from_str(&raw)
-            .with_context(|| format!("Invalid JSON for {label} value {key}"))?;
-        self.sources.push(JsonValueSource::SetField { key, value });
-        Ok(())
-    }
-
-    fn insert_null(&mut self, key: String) {
-        self.sources.push(JsonValueSource::SetField {
-            key,
-            value: Value::Null,
-        });
-    }
-
-    fn insert_list(&mut self, key: String, values: Vec<String>) {
-        let arr = values.into_iter().map(Value::String).collect();
-        self.sources.push(JsonValueSource::SetField {
-            key,
-            value: Value::Array(arr),
-        });
-    }
-
-    fn build(&self, label: &str) -> Result<Value> {
-        let mut map: Map<String, Value> = Map::new();
-        for source in &self.sources {
-            match source {
-                JsonValueSource::MergeObject(obj) => merge_object(&mut map, obj),
-                JsonValueSource::SetField { key, value } => {
-                    map.insert(key.clone(), value.clone());
-                    Ok(())
-                }
-            }
-            .with_context(|| format!("while building {label}"))?;
-        }
-        Ok(Value::Object(map))
-    }
-
-    fn is_empty(&self) -> bool {
-        self.sources.is_empty()
-    }
-}
-
-#[derive(Clone)]
-enum JsonValueSource {
-    MergeObject(Map<String, Value>),
-    SetField { key: String, value: Value },
-}
-
-#[derive(Clone)]
-enum TextSource {
-    Inline(String),
-    File(PathBuf),
-}
-
-fn merge_object(target: &mut Map<String, Value>, source: &Map<String, Value>) -> Result<()> {
-    for (key, value) in source {
-        target.insert(key.clone(), value.clone());
-    }
-    Ok(())
-}
-
-fn build_snippet_value(source: Option<TextSource>) -> Result<Value> {
-    let Some(src) = source else {
-        return Ok(Value::Null);
-    };
-    let text = read_text_source(&src)?;
-    Ok(Value::String(truncate_snippet(&text)))
-}
-
-fn read_text_source(source: &TextSource) -> Result<String> {
-    let raw = match source {
-        TextSource::Inline(value) => value.clone(),
-        TextSource::File(path) => {
-            if !path.is_file() {
-                bail!("Snippet file not found: {}", path.display());
-            }
-            String::from_utf8_lossy(&fs::read(path)?).into_owned()
-        }
-    };
-    Ok(clean_text(&raw))
-}
-
-fn clean_text(raw: &str) -> String {
-    raw.replace('\0', "")
-}
-
-const SNIPPET_MAX_CHARS: usize = 400;
-const SNIPPET_ELLIPSIS: &str = "\u{2026}";
-
-fn truncate_snippet(text: &str) -> String {
-    let mut acc = String::new();
-    for (idx, ch) in text.chars().enumerate() {
-        if idx >= SNIPPET_MAX_CHARS {
-            acc.push_str(SNIPPET_ELLIPSIS);
-            return acc;
-        }
-        acc.push(ch);
-    }
-    acc
-}
 
 fn next_value(args: &mut impl Iterator<Item = OsString>, flag: &str) -> Result<String> {
     args.next()
@@ -599,49 +407,6 @@ fn escape_bytes(bytes: &[u8]) -> String {
         }
     }
     out
-}
-
-fn validate_status(status: &str) -> Result<()> {
-    match status {
-        "success" | "denied" | "partial" | "error" => Ok(()),
-        other => bail!("Unknown status: {other} (expected success|denied|partial|error)"),
-    }
-}
-
-fn normalize_secondary_ids(
-    capabilities: &CapabilityIndex,
-    raw: &[CapabilityId],
-) -> Result<Vec<CapabilityId>> {
-    let mut acc: BTreeSet<CapabilityId> = BTreeSet::new();
-    for value in raw {
-        let trimmed = value.0.trim();
-        if trimmed.is_empty() {
-            continue;
-        }
-        let normalized = CapabilityId(trimmed.to_string());
-        validate_capability_id(capabilities, &normalized, "secondary capability id")?;
-        acc.insert(normalized);
-    }
-    Ok(acc.into_iter().collect())
-}
-
-fn validate_capability_id(
-    capabilities: &CapabilityIndex,
-    value: &CapabilityId,
-    label: &str,
-) -> Result<()> {
-    if capabilities.capability(value).is_some() {
-        return Ok(());
-    }
-    bail!(
-        "Unknown {label}: {}. Expected one of the IDs in schema/capabilities.json.",
-        value.0
-    );
-}
-
-fn read_json_file(path: &Path) -> Result<Value> {
-    let data = fs::read_to_string(path)?;
-    serde_json::from_str(&data).context("File contained invalid JSON")
 }
 
 fn run_command_json(path: &Path, args: &[&str]) -> Result<Value> {
@@ -728,157 +493,4 @@ fn usage() -> &'static str {
     "Usage: emit-record --run-mode MODE --probe-name NAME --probe-version VERSION \
   --primary-capability-id CAP_ID --command COMMAND \
   --category CATEGORY --verb VERB --target TARGET --status STATUS [options]\n\nOptions:\n  --errno ERRNO\n  --message MESSAGE\n  --raw-exit-code CODE\n  --error-detail TEXT\n  --secondary-capability-id CAP_ID   # repeat for multiple entries\n  --payload-file PATH (JSON object)\n  --payload-stdout TEXT | --payload-stdout-file PATH\n  --payload-stderr TEXT | --payload-stderr-file PATH\n  --payload-raw JSON_OBJECT | --payload-raw-file PATH\n  --payload-raw-field KEY VALUE\n  --payload-raw-field-json KEY JSON_VALUE\n  --payload-raw-null KEY\n  --payload-raw-list KEY \"a,b,c\"\n  --operation-args JSON_OBJECT | --operation-args-file PATH\n  --operation-arg KEY VALUE\n  --operation-arg-json KEY JSON_VALUE\n  --operation-arg-null KEY\n  --operation-arg-list KEY \"a,b,c\"\n"
-}
-
-fn not_empty(value: &String) -> bool {
-    !value.is_empty()
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use tempfile::NamedTempFile;
-
-    #[test]
-    fn validate_status_allows_known_values() {
-        for value in ["success", "denied", "partial", "error"] {
-            validate_status(value).expect("status should pass");
-        }
-        assert!(validate_status("bogus").is_err());
-    }
-
-    #[test]
-    fn normalize_secondary_deduplicates_and_trims() {
-        let caps = sample_index(&[
-            ("cap_a", "filesystem", "os_sandbox"),
-            ("cap_b", "process", "agent_runtime"),
-        ]);
-        let input = vec![
-            CapabilityId(" cap_a ".to_string()),
-            CapabilityId("cap_b".to_string()),
-            CapabilityId("".to_string()),
-            CapabilityId("cap_a".to_string()),
-        ];
-        let normalized = normalize_secondary_ids(&caps, &input).expect("normalized");
-        assert_eq!(
-            normalized,
-            vec![
-                CapabilityId("cap_a".to_string()),
-                CapabilityId("cap_b".to_string())
-            ]
-        );
-    }
-
-    #[test]
-    fn normalize_secondary_rejects_unknown() {
-        let caps = sample_index(&[("cap_a", "filesystem", "os_sandbox")]);
-        let input = vec![
-            CapabilityId("cap_a".to_string()),
-            CapabilityId("cap_missing".to_string()),
-        ];
-        assert!(normalize_secondary_ids(&caps, &input).is_err());
-    }
-
-    #[test]
-    fn capability_index_enforces_schema_version() {
-        let mut file = NamedTempFile::new().unwrap();
-        serde_json::to_writer(
-            &mut file,
-            &json!({
-                "schema_version": "unexpected",
-                "scope": {
-                    "description": "test",
-                    "policy_layers": [],
-                    "categories": {}
-                },
-                "docs": {},
-                "capabilities": []
-            }),
-        )
-        .unwrap();
-        assert!(CapabilityIndex::load(file.path()).is_err());
-    }
-
-    #[test]
-    fn json_object_builder_overrides_fields() {
-        let mut builder = JsonObjectBuilder::default();
-        builder
-            .merge_json_string(r#"{"a":1,"b":2}"#, "object")
-            .expect("merge");
-        builder.insert_string("b".to_string(), "override".to_string());
-        builder.insert_list(
-            "c".to_string(),
-            vec!["first".to_string(), "second".to_string()],
-        );
-        builder
-            .insert_json_value("d".to_string(), "true".to_string(), "object")
-            .expect("json value");
-        let value = builder.build("test object").expect("build object");
-        let obj = value.as_object().expect("object shape");
-        assert_eq!(obj.get("a").and_then(Value::as_i64), Some(1));
-        assert_eq!(obj.get("b").and_then(Value::as_str), Some("override"));
-        assert_eq!(
-            obj.get("c").and_then(Value::as_array).map(|arr| arr.len()),
-            Some(2)
-        );
-        assert_eq!(obj.get("d").and_then(Value::as_bool), Some(true));
-    }
-
-    #[test]
-    fn payload_builder_accepts_inline_snippets() {
-        let mut payload = PayloadArgs::default();
-        payload
-            .set_stdout(TextSource::Inline("hello".to_string()))
-            .unwrap();
-        payload
-            .set_stderr(TextSource::Inline("stderr".to_string()))
-            .unwrap();
-        payload.raw.insert_null("raw_key".to_string());
-        let built = payload.build().expect("payload build");
-        assert_eq!(
-            built.pointer("/stdout_snippet").and_then(Value::as_str),
-            Some("hello")
-        );
-        assert_eq!(
-            built.pointer("/stderr_snippet").and_then(Value::as_str),
-            Some("stderr")
-        );
-        assert!(
-            built
-                .pointer("/raw/raw_key")
-                .map(|v| v.is_null())
-                .unwrap_or(false)
-        );
-    }
-
-    fn sample_index(entries: &[(&str, &str, &str)]) -> CapabilityIndex {
-        let mut file = NamedTempFile::new().unwrap();
-        let capabilities: Vec<Value> = entries
-            .iter()
-            .map(|(id, category, layer)| {
-                json!({
-                    "id": id,
-                    "category": category,
-                    "layer": layer,
-                    "description": format!("cap {id}"),
-                    "operations": {"allow": [], "deny": []}
-                })
-            })
-            .collect();
-        serde_json::to_writer(
-            &mut file,
-            &json!({
-                "schema_version": "macOS_codex_v1",
-                "scope": {
-                    "description": "test",
-                    "policy_layers": [],
-                    "categories": {}
-                },
-                "docs": {},
-                "capabilities": capabilities
-            }),
-        )
-        .unwrap();
-        CapabilityIndex::load(file.path()).expect("index loads")
-    }
 }
