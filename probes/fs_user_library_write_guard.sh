@@ -20,9 +20,8 @@ printf -v command_executed "printf %q >> %q" "${attempt_line}" "${target_file}"
 
 stdout_tmp=$(mktemp)
 stderr_tmp=$(mktemp)
-payload_tmp=$(mktemp)
 cleanup() {
-  rm -f "${stdout_tmp}" "${stderr_tmp}" "${payload_tmp}"
+  rm -f "${stdout_tmp}" "${stderr_tmp}"
 }
 trap cleanup EXIT
 
@@ -95,49 +94,11 @@ else
   fi
 fi
 
-truncate() {
-  local value="$1"
-  if [[ ${#value} -gt 400 ]]; then
-    printf '%s…' "${value:0:400}"
-  else
-    printf '%s' "${value}"
-  fi
-}
-
-stdout_snippet=$(truncate "${stdout_text:-}")
-stderr_snippet=$(truncate "${stderr_text:-}")
-
-raw_payload=$(jq -n \
-  --arg target_file "${target_file}" \
-  --arg target_dir "${target_dir}" \
-  --argjson existed_before "${existed_before:-false}" \
-  --argjson exists_after "${target_exists_after:-false}" \
-  --arg attempt_line "${attempt_line}" \
-  --arg stderr_lower "${lower_err:-}" \
-  '{target_file: $target_file,
-    target_dir: $target_dir,
-    existed_before: $existed_before,
-    exists_after: $exists_after,
-    attempt_line: $attempt_line,
-    denial_diagnostics: ($stderr_lower | if length > 0 then . else null end)}')
-
-jq -n \
-  --arg stdout_snippet "${stdout_snippet}" \
-  --arg stderr_snippet "${stderr_snippet}" \
-  --argjson raw "${raw_payload}" \
-  '{stdout_snippet: (if ($stdout_snippet | length) > 0 then $stdout_snippet else "" end),
-    stderr_snippet: (if ($stderr_snippet | length) > 0 then $stderr_snippet else "" end),
-    raw: $raw}' >"${payload_tmp}"
-
-operation_args=$(jq -n \
-  --arg target_file "${target_file}" \
-  --arg target_dir "${target_dir}" \
-  --arg write_mode "append" \
-  --argjson attempt_bytes "${attempt_bytes}" \
-  '{target_file: $target_file,
-    target_dir: $target_dir,
-    write_mode: $write_mode,
-    attempt_bytes: $attempt_bytes}')
+lower_err="${lower_err:-}"
+denial_flag=(--payload-raw-null "denial_diagnostics")
+if [[ -n "${lower_err}" ]]; then
+  denial_flag=(--payload-raw-field "denial_diagnostics" "${lower_err}")
+fi
 
 "${emit_record_bin}" \
   --run-mode "${run_mode}" \
@@ -153,5 +114,16 @@ operation_args=$(jq -n \
   --errno "${errno_value}" \
   --message "${message}" \
   --raw-exit-code "${raw_exit_code}" \
-  --payload-file "${payload_tmp}" \
-  --operation-args "${operation_args}"
+  --payload-stdout "${stdout_text:-}" \
+  --payload-stderr "${stderr_text:-}" \
+  --payload-raw-field "target_file" "${target_file}" \
+  --payload-raw-field "target_dir" "${target_dir}" \
+  --payload-raw-field-json "existed_before" "${existed_before:-false}" \
+  --payload-raw-field-json "exists_after" "${target_exists_after:-false}" \
+  --payload-raw-field "attempt_line" "${attempt_line}" \
+  --payload-raw-field-json "attempt_bytes" "${attempt_bytes}" \
+  "${denial_flag[@]}" \
+  --operation-arg "target_file" "${target_file}" \
+  --operation-arg "target_dir" "${target_dir}" \
+  --operation-arg "write_mode" "append" \
+  --operation-arg-json "attempt_bytes" "${attempt_bytes}"

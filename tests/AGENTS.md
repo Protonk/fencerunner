@@ -50,6 +50,8 @@ tests. Target a specific scenario with `cargo test --test suite <name>`.
 | `baseline_no_codex_smoke` | Temporarily hides the Codex CLI from `PATH` and asserts baseline runs still succeed while codex modes fail. | Make sure new smoke fixtures do not depend on `codex`. |
 | `workspace_root_fallback` | Executes the fixture probe with `FENCE_WORKSPACE_ROOT` cleared to confirm `bin/emit-record` falls back to `git rev-parse`/`pwd`. | Protects the documented workspace root fallback contract. |
 | `probe_resolution_guards` | Attempts to run `bin/fence-run` against paths/symlinks outside `probes/` and expects hard failures. | Use as a template for future negative guard-rail tests. |
+| `dynamic_probe_contract_accepts_fixture` | Runs `tools/validate_contract_gate.sh --probe …` (dynamic gate) against the fixture probe to keep the stub parser aligned with emit-record flags. | Keep in sync with contract gate behavior and emit patterns. |
+| `json_extract_enforces_pointer_and_type` | Validates `bin/json-extract` pointer/type/default semantics. | Extend when `json-extract` grows new flags. |
 
 Add any heavier “whole repo” validation here. Follow the same structure: short-
 circuit on missing prerequisites, and print `name: PASS/FAIL` summaries.
@@ -80,7 +82,9 @@ circuit on missing prerequisites, and print `name: PASS/FAIL` summaries.
   `bin/fence-run` or `bin/emit-record`. Run the failing script with `bash -x` to
   inspect the plumbing.
 - **Schema failures** will dump the offending JSON record; compare it with
-  `docs/boundary_object.md` and update the jq assertions in lock-step.
+  `docs/boundary_object.md` and update the schema/tests in lock-step. The Rust
+  guard rails enforce the JSON schema; the dynamic gate only verifies shape and
+  required flags.
 
 Keeping this structure light and documented lets agents diagnose a broken probe
 run quickly, even when the error surfaced far away from their changes.

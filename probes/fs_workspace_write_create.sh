@@ -13,8 +13,7 @@ printf -v command_executed "printf %q > %q" "${attempt_line}" "${target_path}"
 
 stdout_tmp=$(mktemp)
 stderr_tmp=$(mktemp)
-payload_tmp=$(mktemp)
-trap 'rm -f "${stdout_tmp}" "${stderr_tmp}" "${payload_tmp}" "${target_path}"' EXIT
+trap 'rm -f "${stdout_tmp}" "${stderr_tmp}" "${target_path}"' EXIT
 
 status="error"
 errno_value=""
@@ -63,33 +62,12 @@ if [[ "${target_path}" == "${repo_root}"* ]]; then
 fi
 written_bytes=${#attempt_line}
 
-raw_payload=$(jq -n \
-  --arg target_path "${target_path}" \
-  --arg relative_path "${relative_path}" \
-  --arg written_contents "${file_contents}" \
-  --argjson written_bytes "${written_bytes}" \
-  '{target_path: $target_path,
-    relative_path: (if ($relative_path | length) > 0 then $relative_path else null end),
-    written_bytes: $written_bytes,
-    written_contents: $written_contents}')
-
-jq -n \
-  --arg stdout_snippet "${stdout_text}" \
-  --arg stderr_snippet "${stderr_text}" \
-  --argjson raw "${raw_payload}" \
-  '{stdout_snippet: ($stdout_snippet | if length > 400 then (.[:400] + "…") else . end),
-    stderr_snippet: ($stderr_snippet | if length > 400 then (.[:400] + "…") else . end),
-    raw: $raw}' >"${payload_tmp}"
-
-operation_args=$(jq -n \
-  --arg write_mode "truncate" \
-  --arg target_path "${target_path}" \
-  --arg relative_path "${relative_path}" \
-  --argjson bytes "${written_bytes}" \
-  '{write_mode: $write_mode,
-    bytes: $bytes,
-    target_path: $target_path,
-    relative_path: (if ($relative_path | length) > 0 then $relative_path else null end)}')
+relative_payload_flags=(--payload-raw-null "relative_path")
+relative_operation_flags=(--operation-arg-null "relative_path")
+if [[ -n "${relative_path}" ]]; then
+  relative_payload_flags=(--payload-raw-field "relative_path" "${relative_path}")
+  relative_operation_flags=(--operation-arg "relative_path" "${relative_path}")
+fi
 
 "${emit_record_bin}" \
   --run-mode "${run_mode}" \
@@ -104,5 +82,13 @@ operation_args=$(jq -n \
   --errno "${errno_value}" \
   --message "${message}" \
   --raw-exit-code "${raw_exit_code}" \
-  --payload-file "${payload_tmp}" \
-  --operation-args "${operation_args}"
+  --payload-stdout "${stdout_text}" \
+  --payload-stderr "${stderr_text}" \
+  --payload-raw-field "target_path" "${target_path}" \
+  --payload-raw-field "written_contents" "${file_contents}" \
+  --payload-raw-field-json "written_bytes" "${written_bytes}" \
+  "${relative_payload_flags[@]}" \
+  --operation-arg "write_mode" "truncate" \
+  --operation-arg "target_path" "${target_path}" \
+  --operation-arg-json "bytes" "${written_bytes}" \
+  "${relative_operation_flags[@]}"

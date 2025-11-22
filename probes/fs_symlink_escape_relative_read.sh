@@ -27,9 +27,8 @@ printf -v command_executed "head -n 1 %q" "${symlink_path}"
 
 stdout_tmp=$(mktemp)
 stderr_tmp=$(mktemp)
-payload_tmp=$(mktemp)
 cleanup() {
-  rm -f "${stdout_tmp}" "${stderr_tmp}" "${payload_tmp}"
+  rm -f "${stdout_tmp}" "${stderr_tmp}"
   rm -rf "${probe_dir}"
 }
 trap cleanup EXIT
@@ -72,21 +71,6 @@ else
   fi
 fi
 
-jq -n \
-  --arg stdout_snippet "${stdout_text}" \
-  --arg stderr_snippet "${stderr_text}" \
-  --arg symlink_path "${symlink_path}" \
-  --arg real_target "${real_target}" \
-  --arg relative_target "${relative_target}" \
-  '{stdout_snippet: ($stdout_snippet | if length > 400 then (.[:400] + "…") else . end),
-    stderr_snippet: ($stderr_snippet | if length > 400 then (.[:400] + "…") else . end),
-    raw: {symlink_path: $symlink_path, real_target: $real_target, relative_target: $relative_target}}' >"${payload_tmp}"
-
-operation_args=$(jq -n \
-  --arg symlink_target "${real_target}" \
-  --arg relative_target "${relative_target}" \
-  '{symlink_target: $symlink_target, relative_target: $relative_target, attempt_via_symlink: true}')
-
 "${emit_record_bin}" \
   --run-mode "${run_mode}" \
   --probe-name "${probe_name}" \
@@ -100,5 +84,11 @@ operation_args=$(jq -n \
   --errno "${errno_value}" \
   --message "${message}" \
   --raw-exit-code "${raw_exit_code}" \
-  --payload-file "${payload_tmp}" \
-  --operation-args "${operation_args}"
+  --payload-stdout "${stdout_text}" \
+  --payload-stderr "${stderr_text}" \
+  --payload-raw-field "symlink_path" "${symlink_path}" \
+  --payload-raw-field "real_target" "${real_target}" \
+  --payload-raw-field "relative_target" "${relative_target}" \
+  --operation-arg "symlink_target" "${real_target}" \
+  --operation-arg "relative_target" "${relative_target}" \
+  --operation-arg-json "attempt_via_symlink" "true"

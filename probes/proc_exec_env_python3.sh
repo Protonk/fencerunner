@@ -3,6 +3,7 @@ set -euo pipefail
 
 repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." >/dev/null 2>&1 && pwd)
 emit_record_bin="${repo_root}/bin/emit-record"
+json_extract_bin="${repo_root}/bin/json-extract"
 
 run_mode="${FENCE_RUN_MODE:-baseline}"
 probe_name="proc_exec_env_python3"
@@ -29,8 +30,7 @@ printf -v command_executed "%q %q %q %q" "${env_bin}" "python3" "-c" "${python_c
 
 stdout_tmp=$(mktemp)
 stderr_tmp=$(mktemp)
-payload_tmp=$(mktemp)
-trap 'rm -f "${stdout_tmp}" "${stderr_tmp}" "${payload_tmp}"' EXIT
+trap 'rm -f "${stdout_tmp}" "${stderr_tmp}"' EXIT
 
 status="error"
 errno_value=""
@@ -46,8 +46,14 @@ stdout_text=$(tr -d '\0' <"${stdout_tmp}")
 stderr_text=$(tr -d '\0' <"${stderr_tmp}")
 
 raw_json='{}'
-if [[ -s "${stdout_tmp}" ]] && jq -e . "${stdout_tmp}" >/dev/null 2>&1; then
-  raw_json=$(jq -c '.' "${stdout_tmp}")
+python_executable_json="null"
+python_version_json="null"
+if [[ -x "${json_extract_bin}" && -s "${stdout_tmp}" ]]; then
+  if parsed=$("${json_extract_bin}" --file "${stdout_tmp}" --type object --default "{}" 2>/dev/null); then
+    raw_json="${parsed}"
+    python_executable_json=$("${json_extract_bin}" --file "${stdout_tmp}" --pointer "/sys_executable" --type string --default "null" 2>/dev/null || printf 'null')
+    python_version_json=$("${json_extract_bin}" --file "${stdout_tmp}" --pointer "/sys_version" --type string --default "null" 2>/dev/null || printf 'null')
+  fi
 fi
 
 if [[ ${exit_code} -eq 0 ]]; then
@@ -73,22 +79,6 @@ else
   fi
 fi
 
-jq -n \
-  --arg stdout_snippet "${stdout_text}" \
-  --arg stderr_snippet "${stderr_text}" \
-  --argjson raw "${raw_json}" \
-  '{stdout_snippet: ($stdout_snippet | if length > 400 then (.[:400] + "…") else . end),
-    stderr_snippet: ($stderr_snippet | if length > 400 then (.[:400] + "…") else . end),
-    raw: $raw}' >"${payload_tmp}"
-
-operation_args=$(jq -n \
-  --arg env_bin "${env_bin}" \
-  --arg python_code "${python_code}" \
-  --argjson python_info "${raw_json}" \
-  '{argv: [$env_bin, "python3", "-c", $python_code],
-    interpreter_reported: (if $python_info == {} then null else $python_info.sys_executable end),
-    reported_version: (if $python_info == {} then null else $python_info.sys_version end)}')
-
 "${emit_record_bin}" \
   --run-mode "${run_mode}" \
   --probe-name "${probe_name}" \
@@ -102,5 +92,11 @@ operation_args=$(jq -n \
   --errno "${errno_value}" \
   --message "${message}" \
   --raw-exit-code "${raw_exit_code}" \
-  --payload-file "${payload_tmp}" \
-  --operation-args "${operation_args}"
+  --payload-stdout "${stdout_text}" \
+  --payload-stderr "${stderr_text}" \
+  --payload-raw "${raw_json}" \
+  --operation-arg "argv" "${env_bin} python3 -c <inline>" \
+  --operation-arg "env_bin" "${env_bin}" \
+  --operation-arg "python_code" "${python_code}" \
+  --operation-arg-json "interpreter_reported" "${python_executable_json}" \
+  --operation-arg-json "reported_version" "${python_version_json}"

@@ -13,9 +13,8 @@ printf -v command_executed "log show --last %s --style compact --predicate %q" "
 
 stdout_tmp=$(mktemp)
 stderr_tmp=$(mktemp)
-payload_tmp=$(mktemp)
 trigger_err_tmp=$(mktemp)
-trap 'rm -f "${stdout_tmp}" "${stderr_tmp}" "${payload_tmp}" "${trigger_err_tmp}"' EXIT
+trap 'rm -f "${stdout_tmp}" "${stderr_tmp}" "${trigger_err_tmp}"' EXIT
 
 trigger_exit_code=""
 trigger_stderr=""
@@ -70,30 +69,6 @@ else
   fi
 fi
 
-raw_payload=$(jq -n \
-  --arg log_window "${log_window}" \
-  --arg log_predicate "${log_predicate}" \
-  --arg trigger_exit_code "${trigger_exit_code}" \
-  --arg trigger_stderr "${trigger_stderr}" \
-  --argjson sandbox_line_count "${sandbox_line_count}" \
-  '{log_window: $log_window, log_predicate: $log_predicate,
-    trigger_exit_code: $trigger_exit_code,
-    trigger_stderr: $trigger_stderr,
-    sandbox_line_count: $sandbox_line_count}')
-
-jq -n \
-  --arg stdout_snippet "${stdout_text}" \
-  --arg stderr_snippet "${stderr_text}" \
-  --argjson raw "${raw_payload}" \
-  '{stdout_snippet: ($stdout_snippet | if length > 400 then (.[:400] + "…") else . end),
-    stderr_snippet: ($stderr_snippet | if length > 400 then (.[:400] + "…") else . end),
-    raw: $raw}' >"${payload_tmp}"
-
-operation_args=$(jq -n \
-  --arg log_window "${log_window}" \
-  --arg log_predicate "${log_predicate}" \
-  '{log_window: $log_window, log_predicate: $log_predicate}')
-
 "${emit_record_bin}" \
   --run-mode "${run_mode}" \
   --probe-name "${probe_name}" \
@@ -107,5 +82,12 @@ operation_args=$(jq -n \
   --errno "${errno_value}" \
   --message "${message}" \
   --raw-exit-code "${raw_exit_code}" \
-  --payload-file "${payload_tmp}" \
-  --operation-args "${operation_args}"
+  --payload-stdout "${stdout_text}" \
+  --payload-stderr "${stderr_text}" \
+  --payload-raw-field "log_window" "${log_window}" \
+  --payload-raw-field "log_predicate" "${log_predicate}" \
+  --payload-raw-field "trigger_exit_code" "${trigger_exit_code}" \
+  --payload-raw-field "trigger_stderr" "${trigger_stderr}" \
+  --payload-raw-field-json "sandbox_line_count" "${sandbox_line_count}" \
+  --operation-arg "log_window" "${log_window}" \
+  --operation-arg "log_predicate" "${log_predicate}"

@@ -7,15 +7,6 @@ primary_capability_id="cap_agent_default_sandboxing"
 
 repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." >/dev/null 2>&1 && pwd)
 emit_record_bin="${repo_root}/bin/emit-record"
-mkdir -p "${repo_root}/tmp"
-
-payload_tmp=""
-cleanup_payload() {
-  if [[ -n "${payload_tmp}" && -f "${payload_tmp}" ]]; then
-    rm -f "${payload_tmp}"
-  fi
-}
-trap cleanup_payload EXIT
 
 candidate_vars=(
   "CODEX_SANDBOX"
@@ -76,57 +67,6 @@ else
   fi
 fi
 
-candidate_json=$(printf '%s\n' "${candidate_vars[@]}" | jq -R . | jq -s .)
-raw_payload=$(jq -n \
-  --arg detected_var "${detected_var}" \
-  --arg detected_value "${detected_value}" \
-  --arg stdout "${stdout_text}" \
-  --arg stderr "${stderr_text}" \
-  --argjson candidate_vars "${candidate_json}" \
-  '{detected_var: ($detected_var | if length > 0 then . else null end),
-    detected_value: ($detected_value | if length > 0 then . else null end),
-    candidate_vars: $candidate_vars,
-    stdout: $stdout,
-    stderr: $stderr}')
-
-payload_json=$(jq -n \
-  --arg stdout_snippet "${stdout_text}" \
-  --arg stderr_snippet "${stderr_text}" \
-  --argjson raw "${raw_payload}" \
-  '{stdout_snippet: ($stdout_snippet | if length > 400 then (.[:400] + "…") else . end),
-    stderr_snippet: ($stderr_snippet | if length > 400 then (.[:400] + "…") else . end),
-    raw: $raw}')
-
-operation_args=$(jq -n \
-  --arg regex "${regex}" \
-  --argjson candidate_vars "${candidate_json}" \
-  '{grep_pattern: $regex, candidate_vars: $candidate_vars}')
-
-payload_file_args=()
-set +e
-mktemp_output=$(mktemp "${repo_root}/tmp/${probe_name}.payload.XXXXXX" 2>&1)
-mktemp_status=$?
-set -e
-if [[ ${mktemp_status} -eq 0 ]]; then
-  payload_tmp="${mktemp_output//$'\n'/}"
-  printf '%s' "${payload_json}" >"${payload_tmp}"
-  payload_file_args=(--payload-file "${payload_tmp}")
-else
-  mktemp_error=$(printf '%s' "${mktemp_output}" | tr -d '\n')
-  if [[ -z "${errno_value}" ]]; then
-    if [[ "${mktemp_error}" == *"Operation not permitted"* ]]; then
-      errno_value="EPERM"
-    elif [[ "${mktemp_error}" == *"Permission denied"* ]]; then
-      errno_value="EACCES"
-    fi
-  fi
-  status="denied"
-  if [[ -n "${message}" ]]; then
-    message+="; "
-  fi
-  message+="Sandbox denied payload scratch file: ${mktemp_error}"
-fi
-
 emit_cmd=(
   "${emit_record_bin}"
   --run-mode "${run_mode}"
@@ -141,11 +81,25 @@ emit_cmd=(
   --errno "${errno_value}"
   --message "${message}"
   --raw-exit-code "${raw_exit_code}"
-  --operation-args "${operation_args}"
+  --operation-arg "grep_pattern" "${regex}"
+  --operation-arg-list "candidate_vars" "${candidate_vars[*]}"
+  --payload-stdout "${stdout_text}"
+  --payload-stderr "${stderr_text}"
+  --payload-raw-list "candidate_vars" "${candidate_vars[*]}"
+  --payload-raw-field "stdout" "${stdout_text}"
+  --payload-raw-field "stderr" "${stderr_text}"
 )
 
-if [[ ${#payload_file_args[@]} -gt 0 ]]; then
-  emit_cmd+=("${payload_file_args[@]}")
+if [[ -n "${detected_var}" ]]; then
+  emit_cmd+=(--payload-raw-field "detected_var" "${detected_var}")
+else
+  emit_cmd+=(--payload-raw-null "detected_var")
+fi
+
+if [[ -n "${detected_value}" ]]; then
+  emit_cmd+=(--payload-raw-field "detected_value" "${detected_value}")
+else
+  emit_cmd+=(--payload-raw-null "detected_value")
 fi
 
 "${emit_cmd[@]}"

@@ -19,6 +19,7 @@ CARGO_BINARIES=(
   fence-run
   fence-test
   portable-path
+  json-extract
 )
 
 CARGO=${CARGO:-cargo}

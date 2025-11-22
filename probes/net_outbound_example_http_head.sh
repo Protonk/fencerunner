@@ -16,8 +16,7 @@ printf -v command_executed "curl -sS -I --connect-timeout %q --max-time %q %q" \
 
 stdout_tmp=$(mktemp)
 stderr_tmp=$(mktemp)
-payload_tmp=$(mktemp)
-trap 'rm -f "${stdout_tmp}" "${stderr_tmp}" "${payload_tmp}"' EXIT
+trap 'rm -f "${stdout_tmp}" "${stderr_tmp}"' EXIT
 
 status="error"
 errno_value=""
@@ -72,40 +71,22 @@ else
   fi
 fi
 
-raw_payload=$(jq -n \
-  --arg stdout "${stdout_text}" \
-  --arg stderr "${stderr_text}" \
-  --arg status_line "${status_line}" \
-  --arg http_status "${http_status}" \
-  --arg target_url "${target_url}" \
-  --arg method "${method}" \
-  --arg network_disabled "${network_disabled_env}" \
-  '{stdout: $stdout,
-    stderr: $stderr,
-    status_line: (if ($status_line | length) > 0 then $status_line else null end),
-    http_status: (if ($http_status | length) > 0 then $http_status else null end),
-    target_url: $target_url,
-    method: $method,
-    network_disabled_env: (if ($network_disabled | length) > 0 then $network_disabled else null end)}')
+network_disabled_field=(--payload-raw-null "network_disabled_env")
+if [[ -n "${network_disabled_env}" ]]; then
+  network_disabled_field=(--payload-raw-field "network_disabled_env" "${network_disabled_env}")
+fi
 
-jq -n \
-  --arg stdout_snippet "${stdout_text}" \
-  --arg stderr_snippet "${stderr_text}" \
-  --argjson raw "${raw_payload}" \
-  '{stdout_snippet: ($stdout_snippet | if length > 400 then (.[:400] + "…") else . end),
-    stderr_snippet: ($stderr_snippet | if length > 400 then (.[:400] + "…") else . end),
-    raw: $raw}' >"${payload_tmp}"
+status_line_field=(--payload-raw-null "status_line")
+if [[ -n "${status_line}" ]]; then
+  status_line_field=(--payload-raw-field "status_line" "${status_line}")
+fi
 
-operation_args=$(jq -n \
-  --arg url "${target_url}" \
-  --arg method "${method}" \
-  --argjson connect_timeout "${connect_timeout}" \
-  --argjson max_time "${max_time}" \
-  '{url: $url,
-    method: $method,
-    connect_timeout: ($connect_timeout | tonumber),
-    max_time: ($max_time | tonumber),
-    tool: "curl"}')
+http_status_field=(--payload-raw-null "http_status")
+if [[ -n "${http_status}" ]]; then
+  http_status_field=(--payload-raw-field "http_status" "${http_status}")
+fi
+connect_timeout_json="${connect_timeout}"
+max_time_json="${max_time}"
 
 "${emit_record_bin}" \
   --run-mode "${run_mode}" \
@@ -120,5 +101,17 @@ operation_args=$(jq -n \
   --errno "${errno_value}" \
   --message "${message}" \
   --raw-exit-code "${raw_exit_code}" \
-  --payload-file "${payload_tmp}" \
-  --operation-args "${operation_args}"
+  --payload-stdout "${stdout_text}" \
+  --payload-stderr "${stderr_text}" \
+  --payload-raw-field "stdout" "${stdout_text}" \
+  --payload-raw-field "stderr" "${stderr_text}" \
+  "${status_line_field[@]}" \
+  "${http_status_field[@]}" \
+  --payload-raw-field "target_url" "${target_url}" \
+  --payload-raw-field "method" "${method}" \
+  "${network_disabled_field[@]}" \
+  --operation-arg "url" "${target_url}" \
+  --operation-arg "method" "${method}" \
+  --operation-arg-json "connect_timeout" "${connect_timeout_json}" \
+  --operation-arg-json "max_time" "${max_time_json}" \
+  --operation-arg "tool" "curl"

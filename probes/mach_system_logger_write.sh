@@ -13,8 +13,7 @@ printf -v command_executed "logger -s -p %q -- %q" "${log_facility}" "${log_mess
 
 stdout_tmp=$(mktemp)
 stderr_tmp=$(mktemp)
-payload_tmp=$(mktemp)
-trap 'rm -f "${stdout_tmp}" "${stderr_tmp}" "${payload_tmp}"' EXIT
+trap 'rm -f "${stdout_tmp}" "${stderr_tmp}"' EXIT
 
 status="error"
 errno_value=""
@@ -48,17 +47,6 @@ else
   fi
 fi
 
-jq -n \
-  --arg stdout_snippet "${stdout_text}" \
-  --arg stderr_snippet "${stderr_text}" \
-  --arg log_message "${log_message}" \
-  --arg facility "${log_facility}" \
-  '{stdout_snippet: ($stdout_snippet | if length > 400 then (.[:400] + "…") else . end),
-    stderr_snippet: ($stderr_snippet | if length > 400 then (.[:400] + "…") else . end),
-    raw: {message: $log_message, facility: $facility}}' >"${payload_tmp}"
-
-operation_args=$(jq -n --arg facility "${log_facility}" --arg message "${log_message}" '{facility: $facility, message: $message}')
-
 "${emit_record_bin}" \
   --run-mode "${run_mode}" \
   --probe-name "${probe_name}" \
@@ -72,5 +60,9 @@ operation_args=$(jq -n --arg facility "${log_facility}" --arg message "${log_mes
   --errno "${errno_value}" \
   --message "${message}" \
   --raw-exit-code "${raw_exit_code}" \
-  --payload-file "${payload_tmp}" \
-  --operation-args "${operation_args}"
+  --payload-stdout "${stdout_text}" \
+  --payload-stderr "${stderr_text}" \
+  --payload-raw-field "message" "${log_message}" \
+  --payload-raw-field "facility" "${log_facility}" \
+  --operation-arg "facility" "${log_facility}" \
+  --operation-arg "message" "${log_message}"

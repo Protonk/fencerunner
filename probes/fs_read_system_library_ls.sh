@@ -13,8 +13,7 @@ printf -v command_executed "ls -ld %q" "${target_dir}"
 
 stdout_tmp=$(mktemp)
 stderr_tmp=$(mktemp)
-payload_tmp=$(mktemp)
-trap 'rm -f "${stdout_tmp}" "${stderr_tmp}" "${payload_tmp}"' EXIT
+trap 'rm -f "${stdout_tmp}" "${stderr_tmp}"' EXIT
 
 status="error"
 errno_value=""
@@ -54,26 +53,6 @@ else
   fi
 fi
 
-raw_payload=$(jq -n \
-  --arg target "${target_dir}" \
-  --arg stdout "${stdout_text}" \
-  --arg stderr "${stderr_text}" \
-  --argjson exit_code "${exit_code}" \
-  '{target: $target, stdout: $stdout, stderr: $stderr, exit_code: $exit_code}')
-
-jq -n \
-  --arg stdout_snippet "${stdout_text}" \
-  --arg stderr_snippet "${stderr_text}" \
-  --argjson raw "${raw_payload}" \
-  '{stdout_snippet: ($stdout_snippet | if length > 400 then (.[:400] + "…") else . end),
-    stderr_snippet: ($stderr_snippet | if length > 400 then (.[:400] + "…") else . end),
-    raw: $raw}' >"${payload_tmp}"
-
-operation_args=$(jq -n \
-  --arg path_type "directory" \
-  --arg read_mode "metadata" \
-  '{path_type: $path_type, read_mode: $read_mode}')
-
 "${emit_record_bin}" \
   --run-mode "${run_mode}" \
   --probe-name "${probe_name}" \
@@ -87,5 +66,11 @@ operation_args=$(jq -n \
   --errno "${errno_value}" \
   --message "${message}" \
   --raw-exit-code "${raw_exit_code}" \
-  --payload-file "${payload_tmp}" \
-  --operation-args "${operation_args}"
+  --payload-stdout "${stdout_text}" \
+  --payload-stderr "${stderr_text}" \
+  --payload-raw-field "target" "${target_dir}" \
+  --payload-raw-field "stdout" "${stdout_text}" \
+  --payload-raw-field "stderr" "${stderr_text}" \
+  --payload-raw-field-json "exit_code" "${exit_code}" \
+  --operation-arg "path_type" "directory" \
+  --operation-arg "read_mode" "metadata"

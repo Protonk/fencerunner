@@ -72,8 +72,7 @@ printf -v command_executed "python3 -c %q" "${python_code}"
 
 stdout_tmp=$(mktemp)
 stderr_tmp=$(mktemp)
-payload_tmp=$(mktemp)
-trap 'rm -f "${stdout_tmp}" "${stderr_tmp}" "${payload_tmp}"' EXIT
+trap 'rm -f "${stdout_tmp}" "${stderr_tmp}"' EXIT
 
 status="error"
 errno_value=""
@@ -111,22 +110,8 @@ fi
 
 raw_json='{}'
 if [[ -s "${stdout_tmp}" ]]; then
-  if jq -e . "${stdout_tmp}" >/dev/null 2>&1; then
-    raw_json=$(jq -c '.' "${stdout_tmp}")
-  else
-    raw_json=$(jq -n --arg output "${stdout_text}" '{python_stdout: $output}')
-  fi
+  raw_json=$(cat "${stdout_tmp}")
 fi
-
-jq -n \
-  --arg stdout_snippet "${stdout_text}" \
-  --arg stderr_snippet "${stderr_text}" \
-  --argjson raw "${raw_json}" \
-  '{stdout_snippet: ($stdout_snippet | if length > 400 then (.[:400] + "…") else . end),
-    stderr_snippet: ($stderr_snippet | if length > 400 then (.[:400] + "…") else . end),
-    raw: $raw}' >"${payload_tmp}"
-
-operation_args=$(jq -n '{protocol: "udp", host: "127.0.0.1", round_trip: true}')
 
 "${emit_record_bin}" \
   --run-mode "${run_mode}" \
@@ -141,5 +126,9 @@ operation_args=$(jq -n '{protocol: "udp", host: "127.0.0.1", round_trip: true}')
   --errno "${errno_value}" \
   --message "${message}" \
   --raw-exit-code "${raw_exit_code}" \
-  --payload-file "${payload_tmp}" \
-  --operation-args "${operation_args}"
+  --payload-stdout "${stdout_text}" \
+  --payload-stderr "${stderr_text}" \
+  --payload-raw "${raw_json}" \
+  --operation-arg "protocol" "udp" \
+  --operation-arg "host" "127.0.0.1" \
+  --operation-arg-json "round_trip" "true"

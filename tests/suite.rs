@@ -22,7 +22,7 @@ use tempfile::{NamedTempFile, TempDir};
 #[test]
 fn boundary_object_schema() -> Result<()> {
     let repo_root = repo_root();
-    let emit_record = repo_root.join("bin/emit-record");
+    let emit_record = helper_binary(&repo_root, "emit-record");
     let payload = json!({
         "stdout_snippet": "fixture-stdout",
         "stderr_snippet": "fixture-stderr",
@@ -60,6 +60,7 @@ fn boundary_object_schema() -> Result<()> {
         .arg("{\"fixture\":true}")
         .arg("--payload-file")
         .arg(payload_file.path());
+    emit_cmd.env("CODEX_FENCE_PREFER_TARGET", "1");
     let output = run_command(emit_cmd)?;
 
     let (record, value) = parse_boundary_object(&output.stdout)?;
@@ -204,8 +205,11 @@ fn harness_smoke_probe_fixture() -> Result<()> {
     let _guard = repo_guard();
     let fixture = FixtureProbe::install(&repo_root, "tests_fixture_probe")?;
 
-    let mut baseline_cmd = Command::new(repo_root.join("bin/fence-run"));
-    baseline_cmd.arg("baseline").arg(fixture.probe_id());
+    let mut baseline_cmd = Command::new(helper_binary(&repo_root, "fence-run"));
+    baseline_cmd
+        .env("CODEX_FENCE_PREFER_TARGET", "1")
+        .arg("baseline")
+        .arg(fixture.probe_id());
     let output = run_command(baseline_cmd)?;
 
     let (record, value) = parse_boundary_object(&output.stdout)?;
@@ -233,19 +237,13 @@ fn baseline_no_codex_smoke() -> Result<()> {
     let _guard = repo_guard();
     let fixture = FixtureProbe::install(&repo_root, "tests_fixture_probe")?;
 
-    let jq_path = find_in_path("jq").context("jq must be available on PATH")?;
-    let temp_bin = TempDir::new().context("failed to allocate temp bin path")?;
-    let jq_dest = temp_bin.path().join("jq");
-    if symlink(&jq_path, &jq_dest).is_err() {
-        fs::copy(&jq_path, &jq_dest)?;
-    }
+    let sanitized_path = sanitized_path_without_codex()?;
 
-    let sanitized_path = sanitized_path_without_codex(temp_bin.path())?;
-
-    let fence_run = repo_root.join("bin/fence-run");
+    let fence_run = helper_binary(&repo_root, "fence-run");
     let mut baseline_cmd = Command::new(&fence_run);
     baseline_cmd
         .env("PATH", &sanitized_path)
+        .env("CODEX_FENCE_PREFER_TARGET", "1")
         .arg("baseline")
         .arg(fixture.probe_id());
     let baseline_output = run_command(baseline_cmd)?;
@@ -255,6 +253,7 @@ fn baseline_no_codex_smoke() -> Result<()> {
 
     let sandbox_result = Command::new(&fence_run)
         .env("PATH", &sanitized_path)
+        .env("CODEX_FENCE_PREFER_TARGET", "1")
         .arg("codex-sandbox")
         .arg(fixture.probe_id())
         .output()
@@ -278,10 +277,11 @@ fn workspace_root_fallback() -> Result<()> {
     let fixture = FixtureProbe::install(&repo_root, "tests_fixture_probe")?;
     let temp_run_dir = TempDir::new()?;
 
-    let mut fallback_cmd = Command::new(repo_root.join("bin/fence-run"));
+    let mut fallback_cmd = Command::new(helper_binary(&repo_root, "fence-run"));
     fallback_cmd
         .current_dir(temp_run_dir.path())
         .env("FENCE_WORKSPACE_ROOT", "")
+        .env("CODEX_FENCE_PREFER_TARGET", "1")
         .arg("baseline")
         .arg(fixture.probe_id());
     let output = run_command(fallback_cmd)?;
@@ -315,8 +315,9 @@ fn probe_resolution_guards() -> Result<()> {
     perms.set_mode(0o755);
     fs::set_permissions(&outside_script, perms)?;
 
-    let abs_result = Command::new(repo_root.join("bin/fence-run"))
+    let abs_result = Command::new(helper_binary(&repo_root, "fence-run"))
         .arg("baseline")
+        .env("CODEX_FENCE_PREFER_TARGET", "1")
         .arg(&outside_script)
         .output()
         .context("failed to execute fence-run outside script")?;
@@ -339,8 +340,9 @@ fn probe_resolution_guards() -> Result<()> {
         path: symlink_path.clone(),
     };
 
-    let symlink_result = Command::new(repo_root.join("bin/fence-run"))
+    let symlink_result = Command::new(helper_binary(&repo_root, "fence-run"))
         .arg("baseline")
+        .env("CODEX_FENCE_PREFER_TARGET", "1")
         .arg("tests_probe_resolution_symlink")
         .output()
         .context("failed to execute fence-run via symlink")?;
@@ -349,6 +351,55 @@ fn probe_resolution_guards() -> Result<()> {
         "fence-run followed a symlink that escapes probes/ (stdout: {}, stderr: {})",
         String::from_utf8_lossy(&symlink_result.stdout),
         String::from_utf8_lossy(&symlink_result.stderr)
+    );
+
+    Ok(())
+}
+
+// Ensures fence-bang surfaces malformed probe output without blocking the
+// remaining probes from running.
+#[test]
+fn fence_bang_continues_after_malformed_probe() -> Result<()> {
+    let repo_root = repo_root();
+    let _guard = repo_guard();
+    let good = FixtureProbe::install(&repo_root, "tests_fixture_probe")?;
+    let broken_contents = r#"#!/usr/bin/env bash
+set -euo pipefail
+echo not-json
+exit 0
+"#;
+    let broken =
+        FixtureProbe::install_from_contents(&repo_root, "tests_malformed_probe", broken_contents)?;
+
+    let mut cmd = Command::new(helper_binary(&repo_root, "fence-bang"));
+    cmd.env(
+        "PROBES",
+        format!("{},{}", broken.probe_id(), good.probe_id()),
+    )
+    .env("MODES", "baseline")
+    .env("CODEX_FENCE_PREFER_TARGET", "1");
+    let output = cmd
+        .output()
+        .context("failed to execute fence-bang with malformed probe")?;
+
+    assert!(
+        !output.status.success(),
+        "fence-bang should fail when a probe emits invalid JSON"
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let lines: Vec<&str> = stdout.lines().collect();
+    assert_eq!(
+        lines.len(),
+        1,
+        "expected only the valid probe output to remain on stdout"
+    );
+    let (record, _) = parse_boundary_object(lines[0].as_bytes())?;
+    assert_eq!(record.probe.id, good.probe_id());
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains(broken.probe_id()),
+        "stderr should mention the malformed probe id; stderr was: {stderr}"
     );
 
     Ok(())
@@ -416,6 +467,94 @@ primary_capability_id="cap_fs_read_workspace_tree"
     assert!(
         stderr.contains("set -euo pipefail"),
         "expected strict-mode failure, stderr was: {stderr}"
+    );
+
+    Ok(())
+}
+
+// Exercises the dynamic probe contract gate to ensure the stub parser stays in
+// sync with emit-record flag usage.
+#[test]
+fn dynamic_probe_contract_accepts_fixture() -> Result<()> {
+    let repo_root = repo_root();
+    let _guard = repo_guard();
+    let fixture = FixtureProbe::install(&repo_root, "tests_fixture_probe")?;
+
+    let mut cmd = Command::new(repo_root.join("tools/validate_contract_gate.sh"));
+    cmd.arg("--probe")
+        .arg(fixture.probe_id())
+        .arg("--modes")
+        .arg("baseline")
+        .env("CODEX_FENCE_PREFER_TARGET", "1");
+    let output = cmd
+        .output()
+        .context("failed to execute dynamic probe contract")?;
+    assert!(
+        output.status.success(),
+        "dynamic contract gate failed: stdout={}, stderr={}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains("dynamic gate passed"),
+        "expected dynamic gate to report pass; stdout was: {stdout}"
+    );
+    Ok(())
+}
+
+// Validates json-extract helper semantics: pointer selection, type enforcement,
+// defaults, and failure on type mismatch.
+#[test]
+fn json_extract_enforces_pointer_and_type() -> Result<()> {
+    let repo_root = repo_root();
+    let helper = helper_binary(&repo_root, "json-extract");
+    let mut file = NamedTempFile::new().context("failed to create json fixture")?;
+    writeln!(file, "{}", r#"{"nested":{"flag":true},"number":7,"text":"hello"}"#)?;
+
+    // Happy path: extract nested flag as bool.
+    let mut ok_cmd = Command::new(&helper);
+    ok_cmd
+        .arg("--file")
+        .arg(file.path())
+        .arg("--pointer")
+        .arg("/nested/flag")
+        .arg("--type")
+        .arg("bool");
+    let output = run_command(ok_cmd)?;
+    let value: Value = serde_json::from_slice(&output.stdout)?;
+    assert_eq!(value, Value::Bool(true));
+
+    // Default applies when pointer missing.
+    let mut default_cmd = Command::new(&helper);
+    default_cmd
+        .arg("--file")
+        .arg(file.path())
+        .arg("--pointer")
+        .arg("/missing")
+        .arg("--type")
+        .arg("string")
+        .arg("--default")
+        .arg("\"fallback\"");
+    let default_output = run_command(default_cmd)?;
+    let default_value: Value = serde_json::from_slice(&default_output.stdout)?;
+    assert_eq!(default_value, Value::String("fallback".to_string()));
+
+    // Type mismatch should fail.
+    let mut bad_type = Command::new(&helper);
+    bad_type
+        .arg("--file")
+        .arg(file.path())
+        .arg("--pointer")
+        .arg("/number")
+        .arg("--type")
+        .arg("string");
+    let bad_output = bad_type
+        .output()
+        .context("failed to run json-extract bad type")?;
+    assert!(
+        !bad_output.status.success(),
+        "json-extract should fail on type mismatch"
     );
 
     Ok(())
@@ -604,10 +743,26 @@ fn run_command(cmd: Command) -> Result<Output> {
     }
 }
 
-fn sanitized_path_without_codex(temp_bin: &Path) -> Result<OsString> {
+fn helper_binary(repo_root: &Path, name: &str) -> PathBuf {
+    let candidates = [
+        repo_root.join("target").join("debug").join(name),
+        repo_root.join("target").join("release").join(name),
+        repo_root.join("bin").join(name),
+    ];
+    for candidate in candidates {
+        if candidate.is_file() {
+            return candidate;
+        }
+    }
+    panic!(
+        "unable to locate helper {} (checked target/debug, target/release, bin)",
+        name
+    );
+}
+
+fn sanitized_path_without_codex() -> Result<OsString> {
     let original = env::var_os("PATH").unwrap_or_default();
     let mut entries: Vec<PathBuf> = Vec::new();
-    entries.push(temp_bin.to_path_buf());
     let codex_dir = find_in_path("codex").and_then(|path| path.parent().map(PathBuf::from));
     for entry in env::split_paths(&original) {
         if let Some(dir) = &codex_dir {

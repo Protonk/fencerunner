@@ -31,9 +31,8 @@ chmod +x "${inner_script}"
 
 stdout_tmp=$(mktemp)
 stderr_tmp=$(mktemp)
-payload_tmp=$(mktemp)
 cleanup() {
-  rm -f "${stdout_tmp}" "${stderr_tmp}" "${payload_tmp}"
+  rm -f "${stdout_tmp}" "${stderr_tmp}"
   rm -rf "${nested_workspace}"
 }
 trap cleanup EXIT
@@ -81,41 +80,10 @@ else
   message="Nested sandbox failed with exit code ${exit_code}"
 fi
 
-raw_payload=$(jq -n \
-  --arg nested_workspace "${nested_workspace}" \
-  --arg marker_path "${marker_path}" \
-  --arg inner_script "${inner_script_name}" \
-  --arg attempt_line "${attempt_line}" \
-  --arg marker_contents "${marker_contents}" \
-  --arg stdout "${stdout_text}" \
-  --arg stderr "${stderr_text}" \
-  --argjson marker_exists "${marker_exists_json}" \
-  --argjson nested_exit "${exit_code}" \
-  '{nested_workspace: $nested_workspace,
-    marker_path: $marker_path,
-    inner_script: $inner_script,
-    attempt_line: $attempt_line,
-    marker_exists: $marker_exists,
-    marker_contents: ($marker_contents | if length > 400 then (.[:400] + "…") else . end),
-    nested_exit_code: $nested_exit,
-    nested_stdout: ($stdout | if length > 400 then (.[:400] + "…") else . end),
-    nested_stderr: ($stderr | if length > 400 then (.[:400] + "…") else . end)}')
-
-jq -n \
-  --arg stdout_snippet "${stdout_text}" \
-  --arg stderr_snippet "${stderr_text}" \
-  --argjson raw "${raw_payload}" \
-  '{stdout_snippet: ($stdout_snippet | if length > 400 then (.[:400] + "…") else . end),
-    stderr_snippet: ($stderr_snippet | if length > 400 then (.[:400] + "…") else . end),
-    raw: $raw}' >"${payload_tmp}"
-
-operation_args=$(jq -n \
-  --arg nested_workspace "${nested_workspace}" \
-  --arg marker_path "${marker_path}" \
-  --arg attempt_line "${attempt_line}" \
-  '{nested_workspace: $nested_workspace,
-    marker_path: $marker_path,
-    attempt_line: $attempt_line}')
+marker_exists_value="false"
+if [[ "${marker_exists_json}" == "true" ]]; then
+  marker_exists_value="true"
+fi
 
 "${emit_record_bin}" \
   --run-mode "${run_mode}" \
@@ -131,5 +99,16 @@ operation_args=$(jq -n \
   --errno "${errno_value}" \
   --message "${message}" \
   --raw-exit-code "${raw_exit_code}" \
-  --payload-file "${payload_tmp}" \
-  --operation-args "${operation_args}"
+  --payload-stdout "${stdout_text}" \
+  --payload-stderr "${stderr_text}" \
+  --payload-raw-field "nested_workspace" "${nested_workspace}" \
+  --payload-raw-field "marker_path" "${marker_path}" \
+  --payload-raw-field "inner_script" "${inner_script_name}" \
+  --payload-raw-field "attempt_line" "${attempt_line}" \
+  --payload-raw-field-json "marker_exists" "${marker_exists_value}" \
+  --payload-raw-field "marker_contents" "${marker_contents:0:400}" \
+  --payload-raw-field "nested_stdout" "${stdout_text:0:400}" \
+  --payload-raw-field "nested_stderr" "${stderr_text:0:400}" \
+  --operation-arg "nested_workspace" "${nested_workspace}" \
+  --operation-arg "marker_path" "${marker_path}" \
+  --operation-arg "attempt_line" "${attempt_line}"

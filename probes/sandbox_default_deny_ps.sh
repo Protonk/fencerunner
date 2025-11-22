@@ -12,8 +12,7 @@ printf -v command_executed "/bin/ps -p %d -o pid,comm" "$$"
 
 stdout_tmp=$(mktemp)
 stderr_tmp=$(mktemp)
-payload_tmp=$(mktemp)
-trap 'rm -f "${stdout_tmp}" "${stderr_tmp}" "${payload_tmp}"' EXIT
+trap 'rm -f "${stdout_tmp}" "${stderr_tmp}"' EXIT
 
 status="error"
 errno_value=""
@@ -47,15 +46,7 @@ else
   fi
 fi
 
-jq -n \
-  --arg stdout_snippet "${stdout_text}" \
-  --arg stderr_snippet "${stderr_text}" \
-  --argjson ps_flags "$(printf '%s\n' "${ps_flags[@]}" | jq -R . | jq -s .)" \
-  '{stdout_snippet: ($stdout_snippet | if length > 400 then (.[:400] + "…") else . end),
-    stderr_snippet: ($stderr_snippet | if length > 400 then (.[:400] + "…") else . end),
-    raw: {ps_flags: $ps_flags}}' >"${payload_tmp}"
-
-operation_args=$(jq -n --argjson ps_flags "$(printf '%s\n' "${ps_flags[@]}" | jq -R . | jq -s .)" '{ps_flags: $ps_flags}')
+ps_flags_json=$(printf '%s\n' "${ps_flags[@]}" | python3 -c 'import sys, json; flags=[line.strip() for line in sys.stdin if line.strip()]; print(json.dumps(flags))')
 
 "${emit_record_bin}" \
   --run-mode "${run_mode}" \
@@ -70,5 +61,7 @@ operation_args=$(jq -n --argjson ps_flags "$(printf '%s\n' "${ps_flags[@]}" | jq
   --errno "${errno_value}" \
   --message "${message}" \
   --raw-exit-code "${raw_exit_code}" \
-  --payload-file "${payload_tmp}" \
-  --operation-args "${operation_args}"
+  --payload-stdout "${stdout_text}" \
+  --payload-stderr "${stderr_text}" \
+  --payload-raw-field-json "ps_flags" "${ps_flags_json}" \
+  --operation-arg-json "ps_flags" "${ps_flags_json}"

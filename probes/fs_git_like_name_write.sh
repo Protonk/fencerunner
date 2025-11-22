@@ -65,10 +65,9 @@ attempt_bytes=$(( ${#attempt_line} + 1 ))
 
 stdout_tmp=$(safe_tmp_file "stdout")
 stderr_tmp=$(safe_tmp_file "stderr")
-payload_tmp=$(safe_tmp_file "payload")
 mktemp_error_tmp=$(safe_tmp_file "mktemp_error")
 cleanup() {
-  for candidate in "${stdout_tmp}" "${stderr_tmp}" "${payload_tmp}" "${mktemp_error_tmp}"; do
+  for candidate in "${stdout_tmp}" "${stderr_tmp}" "${mktemp_error_tmp}"; do
     if [[ -n "${candidate}" && -f "${candidate}" ]]; then
       rm -f "${candidate}" || true
     fi
@@ -219,60 +218,6 @@ if [[ "${workspace_setup_ok}" != "true" ]]; then
   workspace_error_text="${stderr_text}"
 fi
 
-raw_payload=$(jq -n \
-  --arg target_file "${target_file}" \
-  --arg target_realpath "${target_realpath}" \
-  --arg git_like_component "${git_like_component}" \
-  --arg project_segment "${project_segment}" \
-  --arg git_dir "${git_dir_realpath}" \
-  --arg target_size "${target_size}" \
-  --arg workspace_root "${workspace_fake_root}" \
-  --arg workspace_template "${workspace_fake_root_template}" \
-  --arg workspace_error "${workspace_error_text}" \
-  --argjson workspace_created "${workspace_created_json}" \
-  '{
-    target_file: $target_file,
-    target_realpath: $target_realpath,
-    git_like_component: $git_like_component,
-    project_segment: $project_segment,
-    git_dir_realpath: (if ($git_dir | length) > 0 then $git_dir else null end),
-    resulting_size: (if ($target_size | length) > 0 then ($target_size | tonumber) else null end),
-    workspace_created: $workspace_created,
-    workspace_root: (if $workspace_created then $workspace_root else null end),
-    workspace_root_template: $workspace_template,
-    workspace_error: (if ($workspace_error | length) > 0 then $workspace_error else null end)
-  }')
-
-payload_file_path=""
-if [[ -n "${payload_tmp}" ]]; then
-  jq -n \
-    --arg stdout_snippet "${stdout_snippet}" \
-    --arg stderr_snippet "${stderr_snippet}" \
-    --argjson raw "${raw_payload}" \
-    '{stdout_snippet: (if ($stdout_snippet | length) > 0 then $stdout_snippet else "" end),
-      stderr_snippet: (if ($stderr_snippet | length) > 0 then $stderr_snippet else "" end),
-      raw: $raw}' >"${payload_tmp}"
-  if [[ -f "${payload_tmp}" ]]; then
-    payload_file_path="${payload_tmp}"
-  fi
-fi
-
-operation_args=$(jq -n \
-  --arg target_path "${target_file}" \
-  --arg git_like_component "${git_like_component}" \
-  --arg project_segment "${project_segment}" \
-  --argjson attempt_bytes "${attempt_bytes}" \
-  --argjson workspace_created "${workspace_created_json}" \
-  '{
-    target_path: $target_path,
-    git_like_component: $git_like_component,
-    sibling_project_segment: $project_segment,
-    attempt_bytes: $attempt_bytes,
-    write_mode: "append",
-    looks_like_git: true,
-    workspace_created: $workspace_created
-  }')
-
 emit_args=(
   --run-mode "${run_mode}"
   --probe-name "${probe_name}"
@@ -286,11 +231,45 @@ emit_args=(
   --errno "${errno_value}"
   --message "${message}"
   --raw-exit-code "${raw_exit_code}"
-  --operation-args "${operation_args}"
+  --payload-stdout "${stdout_text}"
+  --payload-stderr "${stderr_text}"
+  --payload-raw-field "target_file" "${target_file}"
+  --payload-raw-field "target_realpath" "${target_realpath}"
+  --payload-raw-field "git_like_component" "${git_like_component}"
+  --payload-raw-field "project_segment" "${project_segment}"
+  --payload-raw-field "workspace_root_template" "${workspace_fake_root_template}"
+  --payload-raw-field-json "workspace_created" "${workspace_created_json}"
+  --operation-arg "target_path" "${target_file}"
+  --operation-arg "git_like_component" "${git_like_component}"
+  --operation-arg "sibling_project_segment" "${project_segment}"
+  --operation-arg-json "attempt_bytes" "${attempt_bytes}"
+  --operation-arg "write_mode" "append"
+  --operation-arg-json "looks_like_git" "true"
+  --operation-arg-json "workspace_created" "${workspace_created_json}"
 )
 
-if [[ -n "${payload_file_path}" ]]; then
-  emit_args+=(--payload-file "${payload_file_path}")
+if [[ -n "${git_dir_realpath}" ]]; then
+  emit_args+=(--payload-raw-field "git_dir_realpath" "${git_dir_realpath}")
+else
+  emit_args+=(--payload-raw-null "git_dir_realpath")
+fi
+
+if [[ -n "${target_size}" ]]; then
+  emit_args+=(--payload-raw-field-json "resulting_size" "${target_size}")
+else
+  emit_args+=(--payload-raw-null "resulting_size")
+fi
+
+if [[ "${workspace_created_json}" == "true" ]]; then
+  emit_args+=(--payload-raw-field "workspace_root" "${workspace_fake_root}")
+else
+  emit_args+=(--payload-raw-null "workspace_root")
+fi
+
+if [[ -n "${workspace_error_text}" ]]; then
+  emit_args+=(--payload-raw-field "workspace_error" "${workspace_error_text}")
+else
+  emit_args+=(--payload-raw-null "workspace_error")
 fi
 
 "${emit_record_bin}" "${emit_args[@]}"

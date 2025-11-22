@@ -16,8 +16,7 @@ printf -v command_executed "curl -sS --fail --show-error --connect-timeout %q --
 
 stdout_tmp=$(mktemp)
 stderr_tmp=$(mktemp)
-payload_tmp=$(mktemp)
-trap 'rm -f "${stdout_tmp}" "${stderr_tmp}" "${payload_tmp}"' EXIT
+trap 'rm -f "${stdout_tmp}" "${stderr_tmp}"' EXIT
 
 status="error"
 errno_value=""
@@ -67,22 +66,6 @@ else
   fi
 fi
 
-jq -n \
-  --arg stdout_snippet "${stdout_text}" \
-  --arg stderr_snippet "${stderr_text}" \
-  --arg target_url "${target_url}" \
-  --arg network_disabled "${network_disabled_env}" \
-  '{stdout_snippet: ($stdout_snippet | if length > 400 then (.[:400] + "…") else . end),
-    stderr_snippet: ($stderr_snippet | if length > 400 then (.[:400] + "…") else . end),
-    raw: {target_url: $target_url,
-          network_disabled_env: (if ($network_disabled | length) > 0 then $network_disabled else null end)}}' >"${payload_tmp}"
-
-operation_args=$(jq -n \
-  --arg url "${target_url}" \
-  --arg method "GET" \
-  --arg timeout_seconds "${max_time}" \
-  '{url: $url, method: $method, timeout_seconds: ($timeout_seconds | tonumber), tool: "curl"}')
-
 "${emit_record_bin}" \
   --run-mode "${run_mode}" \
   --probe-name "${probe_name}" \
@@ -96,5 +79,11 @@ operation_args=$(jq -n \
   --errno "${errno_value}" \
   --message "${message}" \
   --raw-exit-code "${raw_exit_code}" \
-  --payload-file "${payload_tmp}" \
-  --operation-args "${operation_args}"
+  --payload-stdout "${stdout_text}" \
+  --payload-stderr "${stderr_text}" \
+  --payload-raw-field "target_url" "${target_url}" \
+  --payload-raw-field "network_disabled_env" "${network_disabled_env}" \
+  --operation-arg "url" "${target_url}" \
+  --operation-arg "method" "GET" \
+  --operation-arg-json "timeout_seconds" "${max_time}" \
+  --operation-arg "tool" "curl"

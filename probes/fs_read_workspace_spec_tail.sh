@@ -17,8 +17,7 @@ printf -v command_executed "tail -n %q %q" "${lines_to_read}" "${target_path}"
 
 stdout_tmp=$(mktemp)
 stderr_tmp=$(mktemp)
-payload_tmp=$(mktemp)
-trap 'rm -f "${stdout_tmp}" "${stderr_tmp}" "${payload_tmp}"' EXIT
+trap 'rm -f "${stdout_tmp}" "${stderr_tmp}"' EXIT
 
 status="error"
 errno_value=""
@@ -58,26 +57,6 @@ else
   fi
 fi
 
-raw_json=$(jq -n \
-  --arg target_path "${target_path}" \
-  --argjson lines "${lines_to_read}" \
-  --argjson stdout_length "${#stdout_text}" \
-  --argjson stderr_length "${#stderr_text}" \
-  '{target_path: $target_path, lines_requested: $lines, stdout_length: $stdout_length, stderr_length: $stderr_length}')
-
-jq -n \
-  --arg stdout_snippet "${stdout_text}" \
-  --arg stderr_snippet "${stderr_text}" \
-  --argjson raw "${raw_json}" \
-  '{stdout_snippet: ($stdout_snippet | if length > 400 then (.[:400] + "…") else . end),
-    stderr_snippet: ($stderr_snippet | if length > 400 then (.[:400] + "…") else . end),
-    raw: $raw}' >"${payload_tmp}"
-
-operation_args=$(jq -n \
-  --arg read_mode "tail" \
-  --argjson lines "${lines_to_read}" \
-  '{read_mode: $read_mode, lines: $lines}')
-
 "${emit_record_bin}" \
   --run-mode "${run_mode}" \
   --probe-name "${probe_name}" \
@@ -91,5 +70,11 @@ operation_args=$(jq -n \
   --errno "${errno_value}" \
   --message "${message}" \
   --raw-exit-code "${raw_exit_code}" \
-  --payload-file "${payload_tmp}" \
-  --operation-args "${operation_args}"
+  --payload-stdout "${stdout_text}" \
+  --payload-stderr "${stderr_text}" \
+  --payload-raw-field "target_path" "${target_path}" \
+  --payload-raw-field-json "lines_requested" "${lines_to_read}" \
+  --payload-raw-field-json "stdout_length" "${#stdout_text}" \
+  --payload-raw-field-json "stderr_length" "${#stderr_text}" \
+  --operation-arg "read_mode" "tail" \
+  --operation-arg-json "lines" "${lines_to_read}"

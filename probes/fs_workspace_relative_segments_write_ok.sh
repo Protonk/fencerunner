@@ -28,9 +28,8 @@ printf -v command_executed "printf %q > %q" "${payload_content}" "${attempt_path
 
 stdout_tmp=$(mktemp)
 stderr_tmp=$(mktemp)
-payload_tmp=$(mktemp)
 cleanup() {
-  rm -f "${stdout_tmp}" "${stderr_tmp}" "${payload_tmp}"
+  rm -f "${stdout_tmp}" "${stderr_tmp}"
   rm -rf "${relative_root}"
 }
 trap cleanup EXIT
@@ -93,41 +92,6 @@ fi
 relative_display="${relative_path}"
 data_length=${#payload_content}
 
-raw_payload=$(jq -n \
-  --arg relative_path "${relative_display}" \
-  --arg absolute_path "${attempt_path}" \
-  --arg canonical_path "${canonical_path}" \
-  --arg data_written "${payload_content}" \
-  --arg data_read "${read_back}" \
-  '{relative_path: $relative_path,
-    absolute_path: $absolute_path,
-    canonical_path: $canonical_path,
-    data_written: $data_written,
-    data_read: $data_read,
-    contents_match: ($data_written == $data_read)}')
-
-jq -n \
-  --arg stdout_snippet "${stdout_text}" \
-  --arg stderr_snippet "${stderr_text}" \
-  --argjson raw "${raw_payload}" \
-  '{stdout_snippet: ($stdout_snippet | if length > 400 then (.[:400] + "…") else . end),
-    stderr_snippet: ($stderr_snippet | if length > 400 then (.[:400] + "…") else . end),
-    raw: $raw}' >"${payload_tmp}"
-
-match_bool="false"
-if [[ "${content_match}" == "true" ]]; then
-  match_bool="true"
-fi
-operation_args=$(jq -n \
-  --arg relative_path "${relative_display}" \
-  --arg canonical_path "${canonical_path}" \
-  --argjson write_bytes "${data_length}" \
-  --argjson match "${match_bool}" \
-  '{relative_path_used: $relative_path,
-    canonical_path: $canonical_path,
-    write_then_read_bytes: $write_bytes,
-    verified_match: $match}')
-
 "${emit_record_bin}" \
   --run-mode "${run_mode}" \
   --probe-name "${probe_name}" \
@@ -141,5 +105,15 @@ operation_args=$(jq -n \
   --errno "${errno_value}" \
   --message "${message}" \
   --raw-exit-code "${raw_exit_code}" \
-  --payload-file "${payload_tmp}" \
-  --operation-args "${operation_args}"
+  --payload-stdout "${stdout_text}" \
+  --payload-stderr "${stderr_text}" \
+  --payload-raw-field "relative_path" "${relative_display}" \
+  --payload-raw-field "absolute_path" "${attempt_path}" \
+  --payload-raw-field "canonical_path" "${canonical_path}" \
+  --payload-raw-field "data_written" "${payload_content}" \
+  --payload-raw-field "data_read" "${read_back}" \
+  --payload-raw-field-json "contents_match" "${content_match}" \
+  --operation-arg "relative_path_used" "${relative_display}" \
+  --operation-arg "canonical_path" "${canonical_path}" \
+  --operation-arg-json "write_then_read_bytes" "${data_length}" \
+  --operation-arg-json "verified_match" "${content_match}"

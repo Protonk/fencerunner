@@ -13,43 +13,6 @@ printf -v command_executed "printenv %s" "${marker_var}"
 tmp_stage_dir="${repo_root}/tmp/${probe_name}"
 mkdir -p "${tmp_stage_dir}" 2>/dev/null || true
 
-payload_file=""
-
-cleanup() {
-  if [[ -n "${payload_file}" ]]; then
-    rm -f "${payload_file}" || true
-  fi
-}
-trap cleanup EXIT
-
-persist_payload_json() {
-  local json_payload="$1"
-  local candidates=()
-
-  if [[ -d "${tmp_stage_dir}" && -w "${tmp_stage_dir}" ]]; then
-    candidates+=("${tmp_stage_dir}/payload.XXXXXX")
-  fi
-  if [[ -n "${TMPDIR:-}" ]]; then
-    candidates+=("${TMPDIR%/}/agent_sandbox_env_marker_payload.XXXXXX")
-  fi
-  candidates+=("/tmp/agent_sandbox_env_marker_payload.XXXXXX")
-
-  local template=""
-  for template in "${candidates[@]}"; do
-    local tmp_path=""
-    if tmp_path=$(mktemp "${template}" 2>/dev/null); then
-      if printf '%s\n' "${json_payload}" >"${tmp_path}"; then
-        printf '%s' "${tmp_path}"
-        return 0
-      fi
-      rm -f "${tmp_path}" || true
-    fi
-  done
-
-  printf ''
-  return 1
-}
-
 detect_errno_from_text() {
   local text="$1"
   if [[ "${text}" == *"Operation not permitted"* ]]; then
@@ -60,8 +23,6 @@ detect_errno_from_text() {
     printf ''
   fi
 }
-
-operation_args=$(jq -n --arg marker_var "${marker_var}" '{marker_var: $marker_var}')
 
 stdout_text=""
 stderr_text=""
@@ -104,31 +65,6 @@ else
   message="printenv exited with ${exit_code}"
 fi
 
-raw_payload=$(jq -n \
-  --arg marker_var "${marker_var}" \
-  --arg marker_value "${marker_value}" \
-  --arg fallback_marker "${fallback_marker}" \
-  --arg stdout "${stdout_text}" \
-  --arg stderr "${stderr_text}" \
-  '{marker_var: $marker_var,
-    marker_value: ($marker_value | if length > 0 then . else null end),
-    fallback_marker: ($fallback_marker | if length > 0 then . else null end),
-    stdout: $stdout,
-    stderr: $stderr}')
-
-payload_json=$(jq -n \
-  --arg stdout_snippet "${stdout_text}" \
-  --arg stderr_snippet "${stderr_text}" \
-  --argjson raw "${raw_payload}" \
-  '{stdout_snippet: ($stdout_snippet | if length > 400 then (.[:400] + "…") else . end),
-    stderr_snippet: ($stderr_snippet | if length > 400 then (.[:400] + "…") else . end),
-    raw: $raw}')
-
-payload_candidate=""
-if payload_candidate=$(persist_payload_json "${payload_json}"); then
-  payload_file="${payload_candidate}"
-fi
-
 emit_args=(
   --run-mode "${run_mode}"
   --probe-name "${probe_name}"
@@ -142,11 +78,24 @@ emit_args=(
   --errno "${errno_value}"
   --message "${message}"
   --raw-exit-code "${raw_exit_code}"
-  --operation-args "${operation_args}"
+  --operation-arg "marker_var" "${marker_var}"
+  --payload-stdout "${stdout_text}"
+  --payload-stderr "${stderr_text}"
+  --payload-raw-field "marker_var" "${marker_var}"
+  --payload-raw-field "stdout" "${stdout_text}"
+  --payload-raw-field "stderr" "${stderr_text}"
 )
 
-if [[ -n "${payload_file}" ]]; then
-  emit_args+=(--payload-file "${payload_file}")
+if [[ -n "${marker_value}" ]]; then
+  emit_args+=(--payload-raw-field "marker_value" "${marker_value}")
+else
+  emit_args+=(--payload-raw-null "marker_value")
+fi
+
+if [[ -n "${fallback_marker}" ]]; then
+  emit_args+=(--payload-raw-field "fallback_marker" "${fallback_marker}")
+else
+  emit_args+=(--payload-raw-null "fallback_marker")
 fi
 
 "${emit_record_bin}" "${emit_args[@]}"

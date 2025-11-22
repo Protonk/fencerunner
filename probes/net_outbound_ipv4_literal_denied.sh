@@ -22,9 +22,8 @@ printf -v command_executed "%q -I --max-time %s --connect-timeout %s -sS %q" \
 
 stdout_tmp=$(mktemp)
 stderr_tmp=$(mktemp)
-payload_tmp=$(mktemp)
 cleanup() {
-  rm -f "${stdout_tmp}" "${stderr_tmp}" "${payload_tmp}"
+  rm -f "${stdout_tmp}" "${stderr_tmp}"
 }
 trap cleanup EXIT
 
@@ -86,42 +85,6 @@ truncate() {
 stdout_snippet=$(truncate "${stdout_text:-}")
 stderr_snippet=$(truncate "${stderr_text:-}")
 
-raw_payload=$(jq -n \
-  --arg target_url "${target_url}" \
-  --arg stdout "${stdout_text:-}" \
-  --arg stderr "${stderr_text:-}" \
-  --arg curl_bin "${curl_bin}" \
-  --arg marker "${network_disabled_marker}" \
-  --argjson exit_code "${raw_exit_code:-0}" \
-  '{target_url: $target_url,
-    curl_bin: $curl_bin,
-    network_disabled_marker: ($marker | if length > 0 then $marker else null end),
-    stdout: (if ($stdout | length) > 0 then $stdout else null end),
-    stderr: (if ($stderr | length) > 0 then $stderr else null end),
-    exit_code: $exit_code}')
-
-jq -n \
-  --arg stdout_snippet "${stdout_snippet}" \
-  --arg stderr_snippet "${stderr_snippet}" \
-  --argjson raw "${raw_payload}" \
-  '{stdout_snippet: (if ($stdout_snippet | length) > 0 then $stdout_snippet else "" end),
-    stderr_snippet: (if ($stderr_snippet | length) > 0 then $stderr_snippet else "" end),
-    raw: $raw}' >"${payload_tmp}"
-
-operation_args=$(jq -n \
-  --arg target_url "${target_url}" \
-  --arg method "HTTP_HEAD" \
-  --arg literal_ip "true" \
-  --argjson max_time "${max_time}" \
-  --argjson connect_timeout "${connect_timeout}" \
-  --arg marker "${network_disabled_marker}" \
-  '{target_url: $target_url,
-    method: $method,
-    literal_ip: ($literal_ip == "true"),
-    max_time_seconds: $max_time,
-    connect_timeout_seconds: $connect_timeout,
-    network_disabled_marker: ($marker | if length > 0 then $marker else null end)}')
-
 "${emit_record_bin}" \
   --run-mode "${run_mode}" \
   --probe-name "${probe_name}" \
@@ -136,5 +99,15 @@ operation_args=$(jq -n \
   --errno "${errno_value}" \
   --message "${message}" \
   --raw-exit-code "${raw_exit_code}" \
-  --payload-file "${payload_tmp}" \
-  --operation-args "${operation_args}"
+  --payload-stdout "${stdout_text:-}" \
+  --payload-stderr "${stderr_text:-}" \
+  --payload-raw-field "target_url" "${target_url}" \
+  --payload-raw-field "curl_bin" "${curl_bin}" \
+  --payload-raw-field "network_disabled_marker" "${network_disabled_marker}" \
+  --payload-raw-field-json "exit_code" "${raw_exit_code:-0}" \
+  --operation-arg "target_url" "${target_url}" \
+  --operation-arg "method" "HTTP_HEAD" \
+  --operation-arg-json "literal_ip" "true" \
+  --operation-arg-json "max_time_seconds" "${max_time}" \
+  --operation-arg-json "connect_timeout_seconds" "${connect_timeout}" \
+  --operation-arg "network_disabled_marker" "${network_disabled_marker}"

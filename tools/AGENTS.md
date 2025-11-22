@@ -1,6 +1,6 @@
 # Tools Playbook for Agents
 
-This directory hosts helpers for automated agents developing in the repo. 
+This directory hosts helpers for automated agents developing in the repo.
 
 ## Available tooling
 
@@ -15,9 +15,9 @@ This directory hosts helpers for automated agents developing in the repo.
 Before changing or adding tooling:
 - Mirror the existing safety posture: every script sets `set -euo pipefail`,
   resolves `repo_root`, and fails fast if prerequisites are absent.
-- Ship hermetic behaviors. Store helper jq/awk/sed snippets inline (as the
-  adapter does) so contributors can audit the script without hunting external
-  files.
+- Ship hermetic behaviors. Keep awk/sed snippets inline (as the adapter does)
+  so contributors can audit the script without hunting external files. jq is
+  only used by the contract gate; probes themselves should not depend on it.
 - Validate inputs early and emit actionable errors (include file paths the way
    the current tools do).
 - Document your intent at the top of the script with a guard-rail summary so

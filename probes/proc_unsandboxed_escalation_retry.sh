@@ -13,8 +13,7 @@ printf -v command_executed "printf %q >> %q" "${attempt_line}" "${target_path}"
 
 stdout_tmp=$(mktemp)
 stderr_tmp=$(mktemp)
-payload_tmp=$(mktemp)
-trap 'rm -f "${stdout_tmp}" "${stderr_tmp}" "${payload_tmp}"' EXIT
+trap 'rm -f "${stdout_tmp}" "${stderr_tmp}"' EXIT
 
 status="error"
 errno_value=""
@@ -64,27 +63,6 @@ if [[ -n "${lower_err}" ]]; then
   denial_reason="${lower_err}"
 fi
 
-raw_json=$(jq -n \
-  --arg sandbox_mode "${sandbox_mode}" \
-  --arg escalation_marker "${escalation_marker}" \
-  --arg stderr_lower "${denial_reason}" \
-  '{sandbox_mode: ($sandbox_mode | if length > 0 then . else null end),
-    escalation_marker: ($escalation_marker | if length > 0 then . else null end),
-    denial_diagnostics: ($stderr_lower | if length > 0 then . else null end)}')
-
-jq -n \
-  --arg stdout_snippet "${stdout_text}" \
-  --arg stderr_snippet "${stderr_text}" \
-  --argjson raw "${raw_json}" \
-  '{stdout_snippet: ($stdout_snippet | if length > 400 then (.[:400] + "…") else . end),
-    stderr_snippet: ($stderr_snippet | if length > 400 then (.[:400] + "…") else . end),
-    raw: $raw}' >"${payload_tmp}"
-
-operation_args=$(jq -n \
-  --arg write_mode "append" \
-  --argjson attempt_bytes "${#attempt_line}" \
-  '{write_mode: $write_mode, attempt_bytes: $attempt_bytes}')
-
 "${emit_record_bin}" \
   --run-mode "${run_mode}" \
   --probe-name "${probe_name}" \
@@ -98,5 +76,10 @@ operation_args=$(jq -n \
   --errno "${errno_value}" \
   --message "${message}" \
   --raw-exit-code "${raw_exit_code}" \
-  --payload-file "${payload_tmp}" \
-  --operation-args "${operation_args}"
+  --payload-stdout "${stdout_text}" \
+  --payload-stderr "${stderr_text}" \
+  --payload-raw-field "sandbox_mode" "${sandbox_mode}" \
+  --payload-raw-field "escalation_marker" "${escalation_marker}" \
+  --payload-raw-field "denial_diagnostics" "${denial_reason}" \
+  --operation-arg "write_mode" "append" \
+  --operation-arg-json "attempt_bytes" "${#attempt_line}"

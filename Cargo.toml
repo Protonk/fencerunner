@@ -44,3 +44,7 @@ path = "src/bin/fence_run.rs"
 [[bin]]
 name = "codex-fence"
 path = "src/bin/codex_fence.rs"
+
+[[bin]]
+name = "json-extract"
+path = "src/bin/json_extract.rs"

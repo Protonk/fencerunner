@@ -108,19 +108,31 @@ pub fn find_repo_root() -> Result<PathBuf> {
 /// then falls back to Cargo build outputs. This keeps shell entry points on the
 /// compiled helpers rather than stale scripts.
 pub fn resolve_helper_binary(repo_root: &Path, name: &str) -> Result<PathBuf> {
-    let synced = repo_root.join(SYNCED_BIN_DIR).join(name);
-    if helper_is_executable(&synced) {
-        return Ok(synced);
-    }
+    let prefer_target = env::var("CODEX_FENCE_PREFER_TARGET")
+        .ok()
+        .map(|v| !v.trim().is_empty() && v != "0")
+        .unwrap_or(false);
 
     let target_release = repo_root.join("target").join("release").join(name);
-    if helper_is_executable(&target_release) {
-        return Ok(target_release);
-    }
-
     let target_debug = repo_root.join("target").join("debug").join(name);
-    if helper_is_executable(&target_debug) {
-        return Ok(target_debug);
+    let synced = repo_root.join(SYNCED_BIN_DIR).join(name);
+
+    let mut candidates: Vec<PathBuf> = if prefer_target {
+        vec![target_release.clone(), target_debug.clone(), synced.clone()]
+    } else {
+        vec![synced.clone(), target_release.clone(), target_debug.clone()]
+    };
+
+    // Always include the remaining fallbacks to avoid missing an executable when
+    // env-based ordering changes.
+    candidates.push(target_release);
+    candidates.push(target_debug);
+    candidates.push(synced);
+
+    for candidate in candidates {
+        if helper_is_executable(&candidate) {
+            return Ok(candidate);
+        }
     }
 
     bail!(

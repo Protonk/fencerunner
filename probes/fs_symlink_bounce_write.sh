@@ -49,9 +49,8 @@ printf -v command_executed "printf %q >> %q" "${attempt_line}" "${attempt_path}"
 
 stdout_tmp=$(mktemp)
 stderr_tmp=$(mktemp)
-payload_tmp=$(mktemp)
 cleanup() {
-  rm -f "${stdout_tmp}" "${stderr_tmp}" "${payload_tmp}"
+  rm -f "${stdout_tmp}" "${stderr_tmp}"
   rm -rf "${workspace_chain_root}" "${external_dir}"
 }
 trap cleanup EXIT
@@ -112,50 +111,6 @@ stdout_snippet=$(truncate_field "${stdout_text}")
 stderr_snippet=$(truncate_field "${stderr_text}")
 tail_snippet=$(truncate_field "${tail_snippet}")
 
-raw_payload=$(jq -n \
-  --arg attempt_path "${attempt_path}" \
-  --arg real_attempt_path "${real_attempt_path}" \
-  --arg link_out "${link_out}" \
-  --arg link_out_target "${external_dir}" \
-  --arg return_middle "${return_middle}" \
-  --arg return_middle_target "${middle_dir}" \
-  --arg second_hop "${second_hop}" \
-  --arg second_hop_target "${external_dir}" \
-  --arg return_final "${return_final}" \
-  --arg return_final_target "${target_file}" \
-  --arg tail_snippet "${tail_snippet}" \
-  '{
-    attempt_path: $attempt_path,
-    resolved_path: $real_attempt_path,
-    symlink_chain: [
-      {link: $link_out, target: $link_out_target},
-      {link: $return_middle, target: $return_middle_target},
-      {link: $second_hop, target: $second_hop_target},
-      {link: $return_final, target: $return_final_target}
-    ],
-    target_tail: (if ($tail_snippet | length) > 0 then $tail_snippet else null end)
-  }')
-
-jq -n \
-  --arg stdout_snippet "${stdout_snippet}" \
-  --arg stderr_snippet "${stderr_snippet}" \
-  --argjson raw "${raw_payload}" \
-  '{stdout_snippet: (if ($stdout_snippet | length) > 0 then $stdout_snippet else "" end),
-    stderr_snippet: (if ($stderr_snippet | length) > 0 then $stderr_snippet else "" end),
-    raw: $raw}' >"${payload_tmp}"
-
-operation_args=$(jq -n \
-  --arg attempt_path "${attempt_path}" \
-  --arg target_file "${target_file}" \
-  --argjson attempt_bytes "${attempt_bytes}" \
-  '{
-    attempt_path: $attempt_path,
-    target_file: $target_file,
-    attempt_bytes: $attempt_bytes,
-    hops: 4,
-    writes_via_symlink_chain: true
-  }')
-
 "${emit_record_bin}" \
   --run-mode "${run_mode}" \
   --probe-name "${probe_name}" \
@@ -170,5 +125,15 @@ operation_args=$(jq -n \
   --errno "${errno_value}" \
   --message "${message}" \
   --raw-exit-code "${raw_exit_code}" \
-  --payload-file "${payload_tmp}" \
-  --operation-args "${operation_args}"
+  --payload-stdout "${stdout_text}" \
+  --payload-stderr "${stderr_text}" \
+  --payload-raw-field "attempt_path" "${attempt_path}" \
+  --payload-raw-field "resolved_path" "${real_attempt_path}" \
+  --payload-raw-field "target_file" "${target_file}" \
+  --payload-raw-field-json "symlink_chain" "[{\"link\":\"${link_out}\",\"target\":\"${external_dir}\"},{\"link\":\"${return_middle}\",\"target\":\"${middle_dir}\"},{\"link\":\"${second_hop}\",\"target\":\"${external_dir}\"},{\"link\":\"${return_final}\",\"target\":\"${target_file}\"}]" \
+  --payload-raw-field "target_tail" "${tail_snippet}" \
+  --operation-arg "attempt_path" "${attempt_path}" \
+  --operation-arg "target_file" "${target_file}" \
+  --operation-arg-json "attempt_bytes" "${attempt_bytes}" \
+  --operation-arg-json "hops" "4" \
+  --operation-arg-json "writes_via_symlink_chain" "true"

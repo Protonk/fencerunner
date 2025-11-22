@@ -83,6 +83,16 @@ update these helpers together.
   - Keep the CLI (`portable-path <realpath|relpath> …`) stable.
   - Ensure outputs remain deterministic across macOS and Linux.
 
+### `json-extract`
+- **Purpose:** Minimal JSON pointer extractor for probes that need to read
+  structured fields from helper output.
+- **Expectations:**
+  - Keep the CLI small and predictable (`--file/--stdin`, `--pointer`, `--type`,
+    `--default`), returning compact JSON on stdout and actionable errors on
+    stderr.
+  - Favor deterministic failures over silent fallbacks; add tests when expanding
+    semantics.
+
 ### `resolve_helper_binary`
 - **Purpose:** Central helper (exposed from `lib.rs`) that prefers the synced
   binaries under `bin/` before falling back to Cargo build outputs.
@@ -96,4 +106,4 @@ update these helpers together.
 - Keep new policies reflected in docs/tests (README, `docs/*.md`, harness
   scripts) so shell callers stay in sync with the Rust behavior.
 - Maintain portability: everything must run on macOS `/bin/bash 3.2` and inside
-  the `codex-universal` container with only the shipped Rust binaries plus `jq`.
+  the `codex-universal` container with only the shipped Rust binaries.

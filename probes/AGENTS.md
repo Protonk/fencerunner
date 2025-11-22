@@ -12,13 +12,18 @@ As the Probe Author, you:
   `docs/boundary_object.md` to understand every field the probe must provide.
 - Review existing probes under `probes/` to see which behaviors already have
   coverage and how outcomes are classified.
-- Keep a tight edit/test loop. While iterating on a script, run the contract gate (`bin/probe-contract-gate probes/<id>.sh`). This is a quick-fail static and dynamic probe tester designed for rapid use.
+- Keep a tight edit/test loop. While iterating on a script, run the contract
+  gate (`bin/probe-contract-gate probes/<id>.sh`). This is a quick-fail static
+  and dynamic probe tester designed for rapid use.
 
 Keep each probe:
 - Small and single-purpose. When you need reusable helpers (path
-  canonicalization, metadata extraction, JSON parsing), source the helpers in
-  `lib/` or shell out to the compiled utilities in `bin/`. For paths, rely on
-  `bin/portable-path realpath|relpath` instead of rolling your own detection.
+  canonicalization, metadata extraction, JSON parsing), shell out to the
+  compiled utilities in `bin/` (for example `bin/portable-path` for realpath/
+  relpath, `bin/json-extract` when you must parse JSON). Build payloads and
+  operation args with `bin/emit-record` flags (`--payload-stdout/-stderr`,
+  `--payload-raw-field[-json|-list|-null]`, `--operation-arg[...]`) instead of
+  constructing JSON manually.
 - Clearly labeled with `primary_capability_id`. Choose the best match from the
   catalog and optionally list related capabilities in
   `secondary_capability_ids`. `bin/emit-record` enforces these IDs.
@@ -26,12 +31,14 @@ Keep each probe:
 Never:
 - Print anything besides the JSON boundary object to stdout. Use stderr for
   debugging only when necessary.
+- Branch behavior based on interpreter availability. If a
+  required tool is missing, fail explicitly.
 
 ## Probe layout
 
 All probes live directly under the `probes/` directory with filenames that match
 their `probe.id` (for example, `probes/fs_outside_workspace.sh`). This flat
-layout eliminates role- and category-specific subdirectories—every script is
+layout explicitly decides against role- and category-specific subdirectories—every script is
 just a probe. Keep capability metadata accurate so downstream tooling can reason
 about coverage without depending on directory names.
 
@@ -52,9 +59,9 @@ A probe:
    payload. Normalize probe outcomes into: `success`, `denied`, `partial`, or
    `error`. Treat sandbox denials (`EACCES`, `EPERM`, network blocked, etc.) as
    `denied`.
-4. Calls `bin/emit-record` once with the correct flags and payload file. Pass
-   `--run-mode "$FENCE_RUN_MODE"` (exported by `bin/fence-run`) so the emitted
-   record matches the current mode.
+4. Calls `bin/emit-record` once with the correct flags (payload/operation args
+   built inline). Pass `--run-mode "$FENCE_RUN_MODE"` (exported by
+   `bin/fence-run`) so the emitted record matches the current mode.
 5. Exits with status `0` after emitting JSON. `bin/fence-run` relies on this
    behavior to stream records to disk via `make matrix`.
 

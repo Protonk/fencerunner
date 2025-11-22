@@ -162,8 +162,7 @@ printf -v command_executed "python3 -c %q" "${python_code}"
 
 stdout_tmp=$(mktemp)
 stderr_tmp=$(mktemp)
-payload_tmp=$(mktemp)
-trap 'rm -f "${stdout_tmp}" "${stderr_tmp}" "${payload_tmp}"' EXIT
+trap 'rm -f "${stdout_tmp}" "${stderr_tmp}"' EXIT
 
 status="error"
 errno_value=""
@@ -179,17 +178,17 @@ stdout_text=$(tr -d '\0' <"${stdout_tmp}")
 stderr_text=$(tr -d '\0' <"${stderr_tmp}")
 
 raw_json='{}'
-if [[ -s "${stdout_tmp}" ]] && jq -e . "${stdout_tmp}" >/dev/null 2>&1; then
-  raw_json=$(jq -c '.' "${stdout_tmp}")
+if [[ -s "${stdout_tmp}" ]]; then
+  raw_json=$(cat "${stdout_tmp}")
 fi
 
 ipv4_ok="false"
 ipv6_ok="false"
 port_value=""
-if [[ "${raw_json}" != "{}" ]]; then
-  ipv4_ok=$(printf '%s' "${raw_json}" | jq -r 'if has("requests") then (.requests.ipv4.ok // false) else false end' 2>/dev/null || echo "false")
-  ipv6_ok=$(printf '%s' "${raw_json}" | jq -r 'if has("requests") then (.requests.ipv6.ok // false) else false end' 2>/dev/null || echo "false")
-  port_value=$(printf '%s' "${raw_json}" | jq -r '(.port // "")' 2>/dev/null || echo "")
+if [[ -s "${stdout_tmp}" ]]; then
+  ipv4_ok=$("${repo_root}/bin/json-extract" --stdin --pointer "/requests/ipv4/ok" --type bool --default "false" <"${stdout_tmp}" 2>/dev/null || echo "false")
+  ipv6_ok=$("${repo_root}/bin/json-extract" --stdin --pointer "/requests/ipv6/ok" --type bool --default "false" <"${stdout_tmp}" 2>/dev/null || echo "false")
+  port_value=$("${repo_root}/bin/json-extract" --stdin --pointer "/port" --type number --default "null" <"${stdout_tmp}" 2>/dev/null || echo "")
 fi
 
 lower_all=$(printf '%s\n%s' "${stdout_text}" "${stderr_text}" | tr 'A-Z' 'a-z')
@@ -219,26 +218,19 @@ if [[ -n "${port_value}" ]]; then
   target_label="127.0.0.1:${port_value},[::1]:${port_value}"
 fi
 
-jq -n \
-  --arg stdout_snippet "${stdout_text}" \
-  --arg stderr_snippet "${stderr_text}" \
-  --argjson raw "${raw_json}" \
-  '{stdout_snippet: ($stdout_snippet | if length > 400 then (.[:400] + "…") else . end),
-    stderr_snippet: ($stderr_snippet | if length > 400 then (.[:400] + "…") else . end),
-    raw: $raw}' >"${payload_tmp}"
+ipv4_payload="null"
+ipv6_payload="null"
+summary_payload="null"
+if [[ -s "${stdout_tmp}" ]]; then
+  ipv4_payload=$("${repo_root}/bin/json-extract" --stdin --pointer "/requests/ipv4" --type object --default "null" <"${stdout_tmp}" 2>/dev/null || echo "null")
+  ipv6_payload=$("${repo_root}/bin/json-extract" --stdin --pointer "/requests/ipv6" --type object --default "null" <"${stdout_tmp}" 2>/dev/null || echo "null")
+  summary_payload=$("${repo_root}/bin/json-extract" --stdin --pointer "/summary" --type object --default "null" <"${stdout_tmp}" 2>/dev/null || echo "null")
+fi
 
-operation_args=$(jq -n \
-  --argjson raw "${raw_json}" \
-  --arg marker "${network_disabled_marker}" \
-  'if $raw == {} then {port: null, ipv4: null, ipv6: null, summary: null, network_disabled_marker: (if ($marker | length) > 0 then $marker else null end)}
-   else {
-     port: $raw.port,
-     ipv4: $raw.requests.ipv4,
-     ipv6: $raw.requests.ipv6,
-     summary: $raw.summary,
-     network_disabled_marker: (if ($marker | length) > 0 then $marker else null end)
-   }
-  end')
+payload_marker="null"
+if [[ -n "${network_disabled_marker}" ]]; then
+  payload_marker=$(printf '"%s"' "${network_disabled_marker}")
+fi
 
 "${emit_record_bin}" \
   --run-mode "${run_mode}" \
@@ -253,5 +245,11 @@ operation_args=$(jq -n \
   --errno "${errno_value}" \
   --message "${message}" \
   --raw-exit-code "${raw_exit_code}" \
-  --payload-file "${payload_tmp}" \
-  --operation-args "${operation_args}"
+  --payload-stdout "${stdout_text}" \
+  --payload-stderr "${stderr_text}" \
+  --payload-raw "${raw_json}" \
+  --operation-arg-json "port" "${port_value:-null}" \
+  --operation-arg-json "ipv4" "${ipv4_payload}" \
+  --operation-arg-json "ipv6" "${ipv6_payload}" \
+  --operation-arg-json "summary" "${summary_payload}" \
+  --operation-arg-json "network_disabled_marker" "${payload_marker}"
