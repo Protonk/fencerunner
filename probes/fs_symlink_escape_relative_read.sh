@@ -18,7 +18,8 @@ run_mode="${FENCE_RUN_MODE:-baseline}"
 probe_name="fs_symlink_escape_relative_read"
 primary_capability_id="cap_fs_follow_symlinks_out_of_workspace"
 real_target="/etc/hosts"
-probe_dir=$(mktemp -d "${repo_root}/tmp_symlink_escape_rel.XXXXXX")
+mkdir -p "${repo_root}/tmp"
+probe_dir=$(mktemp -d "${repo_root}/tmp/symlink_escape_rel.XXXXXX")
 inner_dir="${probe_dir}/inner"
 mkdir -p "${inner_dir}"
 symlink_path="${inner_dir}/hosts_relative"

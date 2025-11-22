@@ -9,7 +9,8 @@ run_mode="${FENCE_RUN_MODE:-baseline}"
 probe_name="fs_symlink_escape_read"
 primary_capability_id="cap_fs_follow_symlinks_out_of_workspace"
 real_target="/etc/hosts"
-probe_dir=$(mktemp -d "${repo_root}/tmp_symlink_escape.XXXXXX")
+mkdir -p "${repo_root}/tmp"
+probe_dir=$(mktemp -d "${repo_root}/tmp/symlink_escape.XXXXXX")
 symlink_path="${probe_dir}/hosts_via_symlink"
 printf -v command_executed "head -n 1 %q" "${symlink_path}"
 

@@ -14,7 +14,8 @@ target_dir="${FENCE_USER_DESKTOP_PATH:-${HOME}/Desktop}"
 
 stdout_tmp=$(mktemp)
 stderr_tmp=$(mktemp)
-probe_dir=$(mktemp -d "${repo_root}/tmp_desktop_symlink.XXXXXX")
+mkdir -p "${repo_root}/tmp"
+probe_dir=$(mktemp -d "${repo_root}/tmp/desktop_symlink.XXXXXX")
 symlink_path="${probe_dir}/desktop_link"
 cleanup() {
   rm -f "${stdout_tmp}" "${stderr_tmp}"

@@ -21,7 +21,8 @@ probe_version="1"
 primary_capability_id="cap_fs_follow_symlinks_out_of_workspace"
 secondary_capability_id="cap_fs_write_workspace_tree"
 
-workspace_chain_root=$(mktemp -d "${repo_root}/tmp_symlink_bounce.XXXXXX")
+mkdir -p "${repo_root}/tmp"
+workspace_chain_root=$(mktemp -d "${repo_root}/tmp/symlink_bounce.XXXXXX")
 middle_dir="${workspace_chain_root}/middle_hop"
 target_dir="${workspace_chain_root}/final_destination"
 mkdir -p "${middle_dir}" "${target_dir}"
