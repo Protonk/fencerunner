@@ -206,7 +206,8 @@ impl CliArgs {
                 }
                 "--payload-raw-file" => {
                     let value = PathBuf::from(next_value(&mut args, "--payload-raw-file")?);
-                    config.payload
+                    config
+                        .payload
                         .raw_mut()
                         .merge_json_file(&value, "payload raw")?;
                 }
@@ -364,7 +365,6 @@ impl PartialArgs {
         value.ok_or_else(|| anyhow!("Missing required flag: {flag}"))
     }
 }
-
 
 fn next_value(args: &mut impl Iterator<Item = OsString>, flag: &str) -> Result<String> {
     args.next()

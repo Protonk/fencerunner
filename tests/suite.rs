@@ -5,12 +5,6 @@
 mod support;
 
 use anyhow::{Context, Result, bail};
-use codex_fence::{
-    self, BoundaryObject, CapabilityCategory, CapabilityContext, CapabilityId, CapabilityIndex,
-    CapabilityLayer, CapabilitySnapshot, CatalogKey, CatalogRepository, OperationInfo, Payload,
-    Probe, ProbeInfo, ProbeMetadata, ResultInfo, RunInfo, StackInfo, codex_present,
-    list_probes, load_catalog_from_path, resolve_helper_binary, resolve_probe,
-};
 use codex_fence::emit_support::{
     JsonObjectBuilder, PayloadArgs, TextSource, normalize_secondary_ids, validate_status,
 };
@@ -18,7 +12,12 @@ use codex_fence::fence_run_support::{
     WorkspaceOverride, canonicalize_path, classify_preflight_error, resolve_probe_metadata,
     workspace_plan_from_override, workspace_tmpdir_plan,
 };
-use support::{helper_binary, make_executable, repo_root, run_command};
+use codex_fence::{
+    self, BoundaryObject, CapabilityCategory, CapabilityContext, CapabilityId, CapabilityIndex,
+    CapabilityLayer, CapabilitySnapshot, CatalogKey, CatalogRepository, OperationInfo, Payload,
+    Probe, ProbeInfo, ProbeMetadata, ResultInfo, RunInfo, StackInfo, codex_present, list_probes,
+    load_catalog_from_path, resolve_helper_binary, resolve_probe,
+};
 use jsonschema::JSONSchema;
 use serde_json::{Value, json};
 use std::env;
@@ -30,6 +29,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Mutex, MutexGuard, OnceLock};
+use support::{helper_binary, make_executable, repo_root, run_command};
 use tempfile::{NamedTempFile, TempDir};
 
 // Ensures boundary objects emitted via emit-record satisfy the cfbo-v1 schema and
@@ -139,12 +139,7 @@ fn boundary_object_schema() -> Result<()> {
         "success" | "denied" | "partial" | "error"
     ));
     let result_obj = value.get("result").expect("result present");
-    for key in [
-        "raw_exit_code",
-        "errno",
-        "message",
-        "error_detail",
-    ] {
+    for key in ["raw_exit_code", "errno", "message", "error_detail"] {
         assert!(result_obj.get(key).is_some(), "result missing {key}");
     }
     assert!(
@@ -877,7 +872,10 @@ fn snapshot_serde_matches_schema() -> Result<()> {
         json.get("category").and_then(|v| v.as_str()),
         Some("filesystem")
     );
-    assert_eq!(json.get("layer").and_then(|v| v.as_str()), Some("os_sandbox"));
+    assert_eq!(
+        json.get("layer").and_then(|v| v.as_str()),
+        Some("os_sandbox")
+    );
 
     let back: CapabilitySnapshot = serde_json::from_value(json)?;
     assert_eq!(back.id.0, "cap_example");
@@ -1116,9 +1114,8 @@ fn workspace_tmpdir_records_error_when_all_candidates_fail() -> Result<()> {
     let workspace = TempWorkspace::new();
     let override_file = workspace.root.join("override_marker");
     fs::write(&override_file, "marker")?;
-    let plan = workspace_plan_from_override(WorkspaceOverride::UsePath(
-        override_file.into_os_string(),
-    ));
+    let plan =
+        workspace_plan_from_override(WorkspaceOverride::UsePath(override_file.into_os_string()));
     let tmpdir_plan = workspace_tmpdir_plan(&plan, &workspace.root);
     assert!(tmpdir_plan.path.is_none());
     let (attempted, message) = tmpdir_plan.last_error.expect("missing error");
@@ -1265,7 +1262,9 @@ fn detect_stack_reports_expected_sandbox_modes() -> Result<()> {
 
     let override_val = "custom-mode";
     let mut full_cmd = Command::new(&detect_stack);
-    full_cmd.arg("codex-full").env("FENCE_SANDBOX_MODE", override_val);
+    full_cmd
+        .arg("codex-full")
+        .env("FENCE_SANDBOX_MODE", override_val);
     let full = run_command(full_cmd)?;
     let full_json: Value = serde_json::from_slice(&full.stdout)?;
     assert_eq!(
@@ -1523,7 +1522,11 @@ impl TempWorkspace {
         static COUNTER: AtomicUsize = AtomicUsize::new(0);
         let mut base = env::temp_dir();
         let unique = COUNTER.fetch_add(1, Ordering::SeqCst);
-        base.push(format!("codex-fence-test-{}-{}", std::process::id(), unique));
+        base.push(format!(
+            "codex-fence-test-{}-{}",
+            std::process::id(),
+            unique
+        ));
         fs::create_dir_all(&base).expect("failed to create temp workspace");
         Self { root: base }
     }

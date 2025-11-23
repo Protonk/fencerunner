@@ -261,12 +261,10 @@ fn build_command_spec(run_mode: &str, platform: &str, probe_path: &Path) -> Resu
                 ],
             })
         }
-        "codex-full" => {
-            Ok(CommandSpec {
-                program: probe_arg,
-                args: Vec::new(),
-            })
-        }
+        "codex-full" => Ok(CommandSpec {
+            program: probe_arg,
+            args: Vec::new(),
+        }),
         other => bail!("Unknown mode: {other}"),
     }
 }

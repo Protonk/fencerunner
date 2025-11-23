@@ -17,14 +17,14 @@ use std::{
 pub mod boundary;
 pub mod catalog;
 pub mod coverage;
-pub mod metadata_validation;
-pub mod probe_metadata;
 pub mod emit_support;
 pub mod fence_run_support;
+pub mod metadata_validation;
+pub mod probe_metadata;
 
 pub use boundary::{
-    BoundaryObject, CapabilityContext, OperationInfo, Payload, ProbeInfo, ResultInfo, RunInfo,
-    StackInfo,
+    BoundaryObject, BoundaryReadError, CapabilityContext, OperationInfo, Payload, ProbeInfo,
+    ResultInfo, RunInfo, StackInfo, read_boundary_objects,
 };
 pub use catalog::{
     Capability, CapabilityCatalog, CapabilityCategory, CapabilityId, CapabilityIndex,

@@ -8,6 +8,8 @@
 use crate::catalog::{Capability, CapabilityId, CapabilitySnapshot, CatalogKey, CatalogRepository};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use std::fmt;
+use std::io::BufRead;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 /// Full boundary object captured for a single probe execution.
@@ -119,6 +121,16 @@ pub struct CapabilityContext {
     pub secondary: Vec<CapabilitySnapshot>,
 }
 
+/// Errors that can occur while reading NDJSON boundary object streams.
+#[derive(Debug)]
+pub enum BoundaryReadError {
+    Io(std::io::Error),
+    Parse {
+        line: usize,
+        error: serde_json::Error,
+    },
+}
+
 impl BoundaryObject {
     /// Attach capability snapshots from the current catalog to the boundary
     /// object.
@@ -180,4 +192,113 @@ fn empty_object() -> Value {
     // The cfbo schema requires `args`/`raw` to be JSON objects; default to an
     // empty map so callers never emit `null`.
     Value::Object(Default::default())
+}
+
+impl fmt::Display for BoundaryReadError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            BoundaryReadError::Io(err) => write!(f, "failed to read NDJSON stream: {err}"),
+            BoundaryReadError::Parse { line, error } => {
+                write!(f, "line {line}: unable to parse boundary object ({error})")
+            }
+        }
+    }
+}
+
+impl std::error::Error for BoundaryReadError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            BoundaryReadError::Io(err) => Some(err),
+            BoundaryReadError::Parse { error, .. } => Some(error),
+        }
+    }
+}
+
+/// Read cfbo-v1 boundary objects from an NDJSON stream.
+///
+/// Lines containing only whitespace are skipped. Errors include the 1-based
+/// line number where parsing failed to simplify diagnostics for callers.
+pub fn read_boundary_objects<R: BufRead>(
+    reader: R,
+) -> Result<Vec<BoundaryObject>, BoundaryReadError> {
+    let mut records = Vec::new();
+    let mut line_buf = String::new();
+    let mut reader = reader;
+    let mut line_number = 0usize;
+
+    loop {
+        line_buf.clear();
+        let bytes = reader
+            .read_line(&mut line_buf)
+            .map_err(BoundaryReadError::Io)?;
+        if bytes == 0 {
+            break;
+        }
+        line_number += 1;
+        let trimmed = line_buf.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+        let record = serde_json::from_str::<BoundaryObject>(trimmed).map_err(|error| {
+            BoundaryReadError::Parse {
+                line: line_number,
+                error,
+            }
+        })?;
+        records.push(record);
+    }
+
+    Ok(records)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::{BufReader, Cursor};
+
+    const OUTPUT_EX: &str = include_str!("../../output-ex.json");
+
+    #[test]
+    fn parses_fixture_ndjson() {
+        let cursor = Cursor::new(OUTPUT_EX.as_bytes());
+        let records = read_boundary_objects(BufReader::new(cursor)).expect("fixture parses");
+        let expected_count = OUTPUT_EX
+            .lines()
+            .filter(|line| !line.trim().is_empty())
+            .count();
+        assert_eq!(records.len(), expected_count);
+        let first = records.first().expect("at least one record");
+        assert_eq!(first.probe.id, "agent_approvals_mode_env");
+        assert_eq!(first.run.mode, "baseline");
+        assert_eq!(first.result.observed_result, "partial");
+        assert_eq!(
+            first.capability_context.primary.id.0,
+            "cap_agent_approvals_mode"
+        );
+    }
+
+    #[test]
+    fn ignores_blank_lines() {
+        let mut lines = OUTPUT_EX.lines();
+        let first = lines.next().expect("fixture line");
+        let second = lines.next().expect("fixture line");
+        let ndjson = format!("{first}\n\n{second}\n");
+        let cursor = Cursor::new(ndjson.into_bytes());
+        let records = read_boundary_objects(BufReader::new(cursor)).expect("parses with blanks");
+        assert_eq!(records.len(), 2);
+        assert_eq!(records[0].probe.id, "agent_approvals_mode_env");
+        assert_eq!(records[1].probe.id, "agent_command_trust_file_read");
+    }
+
+    #[test]
+    fn reports_line_numbers_on_parse_error() {
+        let first = OUTPUT_EX.lines().next().expect("fixture line");
+        let ndjson = format!("{first}\n{first}\n{{ invalid json }}\n");
+        let cursor = Cursor::new(ndjson.into_bytes());
+        let err = read_boundary_objects(BufReader::new(cursor)).expect_err("should fail");
+        match err {
+            BoundaryReadError::Parse { line, .. } => assert_eq!(line, 3),
+            other => panic!("expected parse error, got {:?}", other),
+        }
+    }
 }

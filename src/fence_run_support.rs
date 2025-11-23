@@ -1,5 +1,5 @@
-use anyhow::{Result, anyhow};
 use crate::{CapabilityId, Probe, ProbeMetadata};
+use anyhow::{Result, anyhow};
 use std::ffi::OsString;
 use std::fs;
 use std::path::{Path, PathBuf};

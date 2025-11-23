@@ -4,7 +4,7 @@
 //! proxies its exit status so CI and local workflows can rely on a single Rust
 //! binary instead of the shell shim.
 
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result, anyhow};
 use codex_fence::find_repo_root;
 use std::env;
 use std::process::{Command, Stdio};
