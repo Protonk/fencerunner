@@ -1,44 +1,7 @@
-# General Contributions
+Thank you for taking the time to contribute. This project is open to small fixes and ambitious changes alike, and your effort is appreciated either way. By opening a pull request, you agree that your contributions will be distributed under the project’s existing LICENSE (Apache-2.0); if you are unsure what that means for your situation, read the LICENSE file before you start. 
 
-Thanks for improving codex-fence! This document covers repository-level work:
-tests, helper libraries, tooling, docs, and automation. For probe-specific
-expectations see the Probe Author contract in [probes/AGENTS.md](probes/AGENTS.md)--human and AI agents writing new probes should mainly concern themselves with that. 
+Almost everything here is wired through multiple, overlapping layers of protection: redundant tests and checks, hermetic behaviors that call only a small set of central helpers, type-checked contracts for how those helpers behave, and fairly dense documentation from comments to AGENTS files to schema narratives. This is deliberate. The structure is designed so that you can move quickly—add a probe, change a helper, tighten a schema—while the system itself catches inconsistencies and forces you to be explicit about what you meant to do. The intent is rapid development under constraints, not ceremony for its own sake.
 
-## Principles
+Within that structure, you are encouraged to work boldly as long as you keep a few basic ideas in mind. First, treat the contracts (capability catalog, boundary-object schema, AGENTS files, and the tests that enforce them) as real APIs, not suggestions; if you need to change them, change them deliberately and in the open, with matching updates to code and docs. Second, prefer small, explicit steps over clever rewrites: wire new work through existing helpers, reuse established patterns, and let the type system and validation tooling guide you. Third, do not commit into the dark; run the available checks locally, read the failures, and only push changes once the board is green. If you follow those habits, the repository is built to support significant refactors and new ideas, especially from someone arriving with fresh eyes.
 
-- **Portability first.** Probes must not introduce spurious signals due to inconsistencies between platforms. Organize and write helper functions to support consistent harness behavior on e.g. macOS or the `codex-universal` container.
-- **Single responsibility.** Helpers stay pure and composable; tooling avoids reaching into unrelated directories unless required.
-- **Document contracts.** When adding configuration fields, schema changes, or
-  helper functions, update the relevant documentation in the same change.
-- **Comment code.** Code comments are first class documentation objects, easing auditing and bug finding.
-
-## Helpers and tooling
-
-- The probe contract gate lives at `tools/validate_contract_gate.sh`.
-  Keep it lightweight so single-probe loops (`--probe <id>` or `make probe`)
-  remain instant.
-- `bin/emit-record`, `bin/fence-run`, and any new helpers must avoid
-  introducing runtime dependencies beyond Bash and the Rust standard
-  library—keep probe plumbing lightweight and portable.
-- After touching Rust helpers under `src/bin/`, run `make build-bin` (or
-  `tools/sync_bin_helpers.sh`) so the synced binaries in `bin/` match
-  your changes; probes, docs, and tests assume `bin/<helper>` resolves them
-  directly.
-
-## Tests
-
-- The Rust-based guard rails live in `tests/suite.rs` and run via
-  `cargo test --test suite` (`boundary_object_schema`, `harness_smoke_probe_fixture`, `baseline_no_codex_smoke`, etc.). When expanding coverage, keep these tests
-  hermetic and deterministic.
-- Place reusable mocks under `tests/mocks/` and keep them synced
-  with reality.
-- Add new guard rails to `tests/suite.rs` when the checks are global or
-  slow. Ensure they short-circuit quickly on missing prerequisites so macOS
-  authors can still iterate with `cargo test`.
-
-# Keep schema documentation in sync
-
-Updates to the capabilities catalog, located at `schema/capabilities.json`, or the boundary object schema (`schema/boundary_object.json`) require matching updates in their documentation:
-- `schema/capabilities.json` is documented in `docs/capabilities.md`
-- `schema/boundary_object.json` is documented in `docs/boundary_object.md`
-Ensure these files stay in sync.
+As you work, try to perpetuate and extend the patterns you find here. When you understand a corner of the system, leave it better documented than you found it: add a comment that explains a non-obvious decision, tighten an AGENTS instruction, or clarify a schema description. When you touch behavior, ask whether there is a test you can add or extend, even if the existing coverage would probably catch regressions already. If something is subtle, err on the side of explaining it twice in two different places. That kind of over-provisioning is a feature of this project, not a bug, and the more you lean into it, the more resilient codex-fence becomes for the next contributor—human or otherwise. Live long and prosper.
