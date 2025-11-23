@@ -80,30 +80,14 @@ make install PREFIX=~/.local   # optional: install codex-fence globally
 - Sweep modes: `codex-fence --bang` (override `MODES="baseline codex-sandbox"` to limit modes)
 - Stream + listen: `codex-fence --bang | codex-fence --listen`
 
-## Tests & guard rails
-
-Project tests:
-- `cargo test` exercises unit helpers plus CLI smokes; binaries are built
-  automatically for the integration suites. The suite invokes `fence-test`, so
-  contract-gate regressions now fail the default test run.
-- Rust guard rails: `cargo test --test suite` (schema validation, harness
-  smokes, dynamic gate coverage, json-extract semantics).
-
-Probe Authors have access to an interpreted probe contract validator for use in fast authoring loops. Run `tools/validate_contract_gate.sh --probe <id>` (or `make probe PROBE=<id>`) for static + dynamic contract checks on one probe.
-
 ## Repo map
 
-| Path | Role |
-| --- | --- |
-| `probes/` | Probe scripts + author contract. |
-| `src/bin/` | Rust helpers (`codex-fence`, `fence-run`, `emit-record`, `detect-stack`, `portable-path`, `json-extract`, `fence-bang/listen/test`). |
-| `bin/` | Synced release helpers from `make build-bin`. |
-| `schema/` | Capability catalog, cfbo schema. |
-| `docs/` | Guides to key concepts: capabilities, probes, and boundary objects. |
-| `tools/` | Authoring helpers (contract gate, adapters, path resolvers). |
-| `tests/` | Static contract + Rust guard rails. |
-| `tmp/` | Scratch space. |
-| `Makefile` | Convenience targets tying the harness together. |
+Think of the project tree in four vertical slices, each with a single job:
+
+- **Probes & contracts**: `probes/` contains the one-action Bash probes plus the author contract (`probes/AGENTS.md`). These scripts are the only things that ever touch the sandbox directly.
+- **Runtime helpers**: `src/bin/` houses the Rust CLIs (`codex-fence`, `fence-run`, `emit-record`, `detect-stack`, `portable-path`, `json-extract`, `fence-bang/listen/test`). Their compiled artifacts live in `bin/` after `make build-bin` and are what probes call on disk.
+- **Policy & explanation**: `schema/` is the machine contract (capability catalog + cfbo schema). `docs/` and the root `AGENTS.md` explain how to interpret that contract, keeping humans aligned with the JSON boundaries.
+- **Validation tooling**: `tools/` scripts wire up author workflows (contract gate, adapters, path resolvers), while `tests/` contains the Rust guard rails that enforce the same rules under `cargo test`. `tmp/` is an expendable scratchpad for runs, and the `Makefile` ties everything together with portable targets.
 
 ## Attitude
 
