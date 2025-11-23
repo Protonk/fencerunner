@@ -21,7 +21,7 @@ live in `tests/`.
 
 macOS Seatbelt is quirky, Linux setups vary, and the `codex` security surface
 will change faster than release notes can explain. You don’t want to discover a
-policy regression because a model deleted your notes. Running a pile of small,
+policy regression because a model exfiltrated your notes. Running a pile of small,
 paranoid probes gives you an empirical read on what the fence actually allows
 today—no speculation, no trust in host metadata.
 

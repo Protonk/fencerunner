@@ -1,6 +1,6 @@
 # Tools Playbook for Agents
 
-This directory hosts helpers for automated agents developing in the repo as well as audit scripts and reports in the `audits/` subdirectory.
+This directory hosts helpers for automated agents.
 
 ## Available tooling
 
@@ -23,9 +23,3 @@ Before changing or adding tooling:
   future agents understand the blast radius and know which invariants the tool
   defends.
 - The static probe contract must stay portable (`/bin/bash 3.2` on macOS), silent on success, and deterministic. The Rust guard rails inherit the same expectations even though they run through Cargo.
-
-## Audits
-
-Automated agents will usually only need to interest themselves with the `audits/` subdirectory if they are directed to engage in an audit. Those agents are usually directed to `tools/audits/INTERPRETERS.md` which has one or more audit personas. 
-
-Reports of audits are checked in to subdirectories of `audits/` as dated folders with an audit and remediation summary. 
