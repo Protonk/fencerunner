@@ -24,12 +24,10 @@ probe:
 	tools/validate_contract_gate.sh --probe "$(PROBE)"
 
 build-bin:
+# Refresh the repo-local helper binaries built from src/bin/.
 	tools/sync_bin_helpers.sh
 
 # Install the CLI + Rust helpers to $(BINDIR), building a release binary first.
 install: build-bin
 	install -d "$(BINDIR)"
 	install -m 755 bin/codex-fence "$(BINDIR)/codex-fence"
-	install -m 755 bin/fence-bang "$(BINDIR)/fence-bang"
-	install -m 755 bin/fence-listen "$(BINDIR)/fence-listen"
-	install -m 755 bin/fence-test "$(BINDIR)/fence-test"

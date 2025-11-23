@@ -71,7 +71,7 @@ failing the whole matrix.
 
 ```sh
 make build-bin          # compile helpers into bin/
-make install PREFIX=~/.local   # optional: install codex-fence/fence-*
+make install PREFIX=~/.local   # optional: install codex-fence globally
 ```
 
 ## Common workflows
@@ -99,7 +99,7 @@ Probe Authors have access to an interpreted probe contract validator for use in 
 | `src/bin/` | Rust helpers (`codex-fence`, `fence-run`, `emit-record`, `detect-stack`, `portable-path`, `json-extract`, `fence-bang/listen/test`). |
 | `bin/` | Synced release helpers from `make build-bin`. |
 | `schema/` | Capability catalog, cfbo schema. |
-| `docs/` | Human-readable explainers (capabilities, probes, boundary objects). |
+| `docs/` | Guides to key concepts: capabilities, probes, and boundary objects. |
 | `tools/` | Authoring helpers (contract gate, adapters, path resolvers). |
 | `tests/` | Static contract + Rust guard rails. |
 | `tmp/` | Scratch space. |
