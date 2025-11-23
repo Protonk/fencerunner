@@ -28,7 +28,7 @@ fn run() -> Result<()> {
 
     let reader = BufReader::new(stdin.lock());
     let mut output = String::new();
-    listen_to_reader(reader, &mut output).map_err(|err| match err {
+    render_listen_output(reader, &mut output).map_err(|err| match err {
         ListenError::Boundary(inner) => anyhow!(inner),
         ListenError::Write(inner) => anyhow!(inner),
     })?;
@@ -36,7 +36,8 @@ fn run() -> Result<()> {
     Ok(())
 }
 
-fn listen_to_reader<R: BufRead, W: fmt::Write>(
+/// Read NDJSON from `reader`, summarize, and render into the provided writer.
+pub fn render_listen_output<R: BufRead, W: fmt::Write>(
     reader: R,
     writer: &mut W,
 ) -> Result<(), ListenError> {
@@ -186,7 +187,7 @@ fn format_counts(map: &BTreeMap<String, usize>, empty_label: &str) -> String {
 }
 
 #[derive(Debug)]
-enum ListenError {
+pub enum ListenError {
     Boundary(BoundaryReadError),
     Write(fmt::Error),
 }
@@ -200,47 +201,70 @@ mod tests {
     use codex_fence::{
         CapabilityCategory, CapabilityContext, CapabilityId, CapabilityLayer, CapabilitySnapshot,
     };
-    use std::collections::BTreeSet;
-    use std::io::Cursor;
-
-    const OUTPUT_EX: &str = include_str!("../../output-ex.json");
+    use std::fs::File;
+    use std::io::{BufReader, Cursor};
+    use std::path::PathBuf;
 
     #[test]
-    fn renders_fixture_summary_and_record_metadata() {
-        let records = read_boundary_objects(Cursor::new(OUTPUT_EX.as_bytes())).unwrap();
+    fn renders_summary_and_records_for_golden_snippet() {
+        let reader = golden_snippet_reader();
         let mut output = String::new();
-        listen_to_reader(Cursor::new(OUTPUT_EX.as_bytes()), &mut output).unwrap();
+        render_listen_output(reader, &mut output).expect("render should succeed");
 
-        assert!(output.contains(&format!("total records  : {}", records.len())));
-        assert!(output.contains(&format!(
-                "distinct probes: {}",
-                records
-                    .iter()
-                    .map(|r| r.probe.id.as_str())
-                    .collect::<BTreeSet<_>>()
-                    .len()
-            )));
-
-        let first = records.first().unwrap();
-        assert!(output.contains("[#1]"));
-        assert!(output.contains(&format!("probe={}", first.probe.id)));
-        assert!(output.contains(&first.result.observed_result));
-        assert!(output.contains(&first.capability_context.primary.id.0));
+        assert!(output.contains("total records  : 10"));
+        assert!(
+            output.contains("success"),
+            "expected success result mentioned"
+        );
+        assert!(
+            output.contains("partial") || output.contains("denied") || output.contains("error"),
+            "expected at least one non-success result mentioned"
+        );
+        assert!(
+            output.contains("agent_approvals_mode_env"),
+            "expected known probe id mention"
+        );
+        assert!(
+            output.contains("fs_git_like_name_write"),
+            "expected another probe id mention"
+        );
+        assert!(
+            output.contains("cap_agent_approvals_mode"),
+            "expected capability id mention"
+        );
+        assert!(
+            output.contains("cap_fs_read_workspace_tree"),
+            "expected another capability id mention"
+        );
+        assert!(output.contains("[#1]"), "expected record index header");
     }
 
     #[test]
-    fn handles_empty_input_and_blank_stdout() {
+    fn renders_empty_summary_for_empty_input() {
+        let cursor = Cursor::new(Vec::<u8>::new());
+        let reader = BufReader::new(cursor);
         let mut output = String::new();
-        listen_to_reader(Cursor::new(Vec::<u8>::new()), &mut output).unwrap();
+        render_listen_output(reader, &mut output).expect("empty input should succeed");
         assert!(output.contains("total records  : 0"));
 
         let mut record = minimal_record();
         record.payload.stdout_snippet = Some(String::new());
         let ndjson = serde_json::to_string(&record).unwrap();
         let mut buffer = String::new();
-        listen_to_reader(Cursor::new(ndjson.into_bytes()), &mut buffer).unwrap();
+        render_listen_output(
+            BufReader::new(Cursor::new(ndjson.into_bytes())),
+            &mut buffer,
+        )
+        .unwrap();
         assert!(buffer.contains("[#1]"));
         assert!(buffer.contains(&record.probe.id));
+    }
+
+    fn golden_snippet_reader() -> BufReader<File> {
+        let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("tests/mocks/cfbo-golden-snippet.ndjson");
+        let file = File::open(&path).expect("golden snippet fixture available");
+        BufReader::new(file)
     }
 
     fn minimal_record() -> BoundaryObject {

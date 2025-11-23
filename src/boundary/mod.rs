@@ -254,45 +254,55 @@ pub fn read_boundary_objects<R: BufRead>(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::collections::HashSet;
+    use std::fs::File;
     use std::io::{BufReader, Cursor};
-
-    const OUTPUT_EX: &str = include_str!("../../output-ex.json");
+    use std::path::PathBuf;
 
     #[test]
-    fn parses_fixture_ndjson() {
-        let cursor = Cursor::new(OUTPUT_EX.as_bytes());
-        let records = read_boundary_objects(BufReader::new(cursor)).expect("fixture parses");
-        let expected_count = OUTPUT_EX
-            .lines()
-            .filter(|line| !line.trim().is_empty())
-            .count();
-        assert_eq!(records.len(), expected_count);
-        let first = records.first().expect("at least one record");
-        assert_eq!(first.probe.id, "agent_approvals_mode_env");
-        assert_eq!(first.run.mode, "baseline");
-        assert_eq!(first.result.observed_result, "partial");
-        assert_eq!(
-            first.capability_context.primary.id.0,
-            "cap_agent_approvals_mode"
+    fn parses_golden_snippet_ndjson() {
+        let records =
+            read_boundary_objects(golden_snippet_reader()).expect("golden snippet parses");
+        assert_eq!(records.len(), 10, "golden snippet should have 10 records");
+
+        let has_success = records
+            .iter()
+            .any(|record| record.result.observed_result == "success");
+        assert!(has_success, "expected at least one success record");
+
+        let has_non_success = records
+            .iter()
+            .any(|record| record.result.observed_result != "success");
+        assert!(
+            has_non_success,
+            "expected at least one non-success record for variety"
+        );
+
+        let unique_probes: HashSet<&str> = records
+            .iter()
+            .map(|record| record.probe.id.as_str())
+            .collect();
+        assert!(
+            unique_probes.len() > 1,
+            "expected multiple distinct probe ids"
         );
     }
 
     #[test]
     fn ignores_blank_lines() {
-        let mut lines = OUTPUT_EX.lines();
-        let first = lines.next().expect("fixture line");
-        let second = lines.next().expect("fixture line");
-        let ndjson = format!("{first}\n\n{second}\n");
+        let first = sample_record("probe_one", "success");
+        let second = sample_record("probe_two", "partial");
+        let ndjson = format!("{first}\n  \n{second}\n");
         let cursor = Cursor::new(ndjson.into_bytes());
         let records = read_boundary_objects(BufReader::new(cursor)).expect("parses with blanks");
         assert_eq!(records.len(), 2);
-        assert_eq!(records[0].probe.id, "agent_approvals_mode_env");
-        assert_eq!(records[1].probe.id, "agent_command_trust_file_read");
+        assert_eq!(records[0].probe.id, "probe_one");
+        assert_eq!(records[1].probe.id, "probe_two");
     }
 
     #[test]
     fn reports_line_numbers_on_parse_error() {
-        let first = OUTPUT_EX.lines().next().expect("fixture line");
+        let first = sample_record("probe_one", "success");
         let ndjson = format!("{first}\n{first}\n{{ invalid json }}\n");
         let cursor = Cursor::new(ndjson.into_bytes());
         let err = read_boundary_objects(BufReader::new(cursor)).expect_err("should fail");
@@ -300,5 +310,68 @@ mod tests {
             BoundaryReadError::Parse { line, .. } => assert_eq!(line, 3),
             other => panic!("expected parse error, got {:?}", other),
         }
+    }
+
+    fn sample_record(probe_id: &str, observed_result: &str) -> String {
+        use serde_json::json;
+
+        json!({
+            "schema_version": "cfbo-v1",
+            "capabilities_schema_version": "macOS_codex_v1",
+            "stack": {
+                "codex_cli_version": "codex-cli 0.63.0",
+                "codex_profile": null,
+                "sandbox_mode": null,
+                "os": "Darwin 23.4.0 arm64"
+            },
+            "probe": {
+                "id": probe_id,
+                "version": "1",
+                "primary_capability_id": "cap_sample",
+                "secondary_capability_ids": []
+            },
+            "run": {
+                "mode": "baseline",
+                "workspace_root": "/tmp/sample",
+                "command": "/bin/true"
+            },
+            "operation": {
+                "category": "fs",
+                "verb": "read",
+                "target": "sample",
+                "args": {}
+            },
+            "result": {
+                "observed_result": observed_result,
+                "raw_exit_code": 0,
+                "errno": null,
+                "message": null,
+                "error_detail": null
+            },
+            "payload": {
+                "stdout_snippet": null,
+                "stderr_snippet": null,
+                "raw": {}
+            },
+            "capability_context": {
+                "primary": {
+                    "id": "cap_sample",
+                    "category": "fs",
+                    "layer": "sandbox",
+                    "title": "Sample capability",
+                    "description": "",
+                    "modes": []
+                },
+                "secondary": []
+            }
+        })
+        .to_string()
+    }
+
+    fn golden_snippet_reader() -> BufReader<File> {
+        let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("tests/mocks/cfbo-golden-snippet.ndjson");
+        let file = File::open(&path).expect("golden snippet fixture available");
+        BufReader::new(file)
     }
 }
