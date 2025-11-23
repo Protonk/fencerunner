@@ -7,6 +7,10 @@ use std::path::{Path, PathBuf};
 use crate::{CapabilityId, CapabilityIndex};
 
 #[derive(Default, Clone)]
+/// Builder for probe payloads that enforces “single source of truth” rules.
+///
+/// The CLI is allowed to specify either a JSON file or inline snippets; mixing
+/// both is a contract violation because it makes emitted records ambiguous.
 pub struct PayloadArgs {
     payload_file: Option<PathBuf>,
     stdout: Option<TextSource>,
@@ -71,6 +75,7 @@ impl PayloadArgs {
 }
 
 #[derive(Default, Clone)]
+/// Merge-friendly JSON object builder used by payload/operation args.
 pub struct JsonObjectBuilder {
     sources: Vec<JsonValueSource>,
 }

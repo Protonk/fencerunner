@@ -4,7 +4,7 @@
 //! fans out across the requested modes, and shells out to `fence-bang` so the
 //! existing execution pipeline (fence-run → emit-record) remains untouched.
 
-use anyhow::{anyhow, bail, Context, Result};
+use anyhow::{Context, Result, anyhow, bail};
 use codex_fence::{
     CapabilityId, CapabilityIndex, Probe, ProbeMetadata, codex_present, find_repo_root,
     list_probes, resolve_helper_binary, resolve_probe,
@@ -107,10 +107,7 @@ fn resolve_modes(requested: &[String]) -> Result<Vec<String>> {
     let allowed: BTreeSet<&'static str> = ["baseline", "codex-sandbox", "codex-full"]
         .into_iter()
         .collect();
-    if let Some(invalid) = modes
-        .iter()
-        .find(|mode| !allowed.contains(mode.as_str()))
-    {
+    if let Some(invalid) = modes.iter().find(|mode| !allowed.contains(mode.as_str())) {
         bail!("unsupported mode requested: {invalid}");
     }
 
@@ -148,10 +145,7 @@ fn resolve_capability_selection(repo_root: &Path, id: &CapabilityId) -> Result<S
 
     let probes = probes_for_capability(repo_root, id)?;
     if probes.is_empty() {
-        bail!(
-            "capability '{}' has no probes in this workspace",
-            id.0
-        );
+        bail!("capability '{}' has no probes in this workspace", id.0);
     }
 
     Ok(SelectionPlan {

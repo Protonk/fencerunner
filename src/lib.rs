@@ -1,10 +1,9 @@
 //! Shared library for the codex-fence harness.
 //!
-//! The crate exposes common types (boundary objects, capability catalogs) and
-//! utilities used by the Rust helper binaries. Public functions here form the
-//! contract that the binaries depend on: repository discovery, helper binary
-//! resolution, probe lookup, and JSON parsing helpers that mirror the harness
-//! expectations documented in README.md and docs/boundary_object.md.
+//! This crate is intentionally small and repetitive to make visible 
+//! how the layers stack. Each public function exists because a binary 
+//! depends on it; treat them as contracts and
+//! keep behavior aligned with the narrative in README.md and docs/*.md.
 
 use anyhow::{Context, Result, bail};
 use serde_json::Value;
@@ -21,6 +20,7 @@ pub mod emit_support;
 pub mod fence_run_support;
 pub mod metadata_validation;
 pub mod probe_metadata;
+pub mod runtime;
 
 pub use boundary::{
     BoundaryObject, BoundaryReadError, CapabilityContext, OperationInfo, Payload, ProbeInfo,
@@ -34,8 +34,8 @@ pub use coverage::{CoverageEntry, build_probe_coverage_map, filter_coverage_prob
 pub use metadata_validation::{validate_boundary_objects, validate_probe_capabilities};
 pub use probe_metadata::{ProbeMetadata, collect_probe_scripts};
 
+// === Repository discovery and helper resolution ===
 const ROOT_SENTINEL: &str = "bin/.gitkeep";
-const SYNCED_BIN_DIR: &str = "bin";
 const MAKEFILE: &str = "Makefile";
 
 /// Returns true when `candidate` looks like the repository root.
@@ -74,10 +74,9 @@ fn search_upwards(start: &Path) -> Option<PathBuf> {
 
 /// Locate the repository root using the harness contract.
 ///
-/// Search order matches README expectations: honor `CODEX_FENCE_ROOT` if it
-/// points at a real repo, fall back to climbing up from the current executable,
-/// then use the build-time hint. Callers can treat failure as fatal because the
-/// binaries cannot run without the repo layout.
+/// Search order matches README expectations: explicit env hint, the current
+/// executable location, then the build-time hint. Callers can treat failure as
+/// fatal because binaries cannot run without the repo layout.
 pub fn find_repo_root() -> Result<PathBuf> {
     if let Ok(env_root) = env::var("CODEX_FENCE_ROOT") {
         if let Some(root) = repo_root_from_hint(&env_root) {
@@ -107,49 +106,30 @@ pub fn find_repo_root() -> Result<PathBuf> {
 /// Resolve another helper binary within the same repo.
 ///
 /// Prefers the synced `bin/` artifacts (kept up to date by `make build-bin`),
-/// then falls back to Cargo build outputs. This keeps shell entry points on the
-/// compiled helpers rather than stale scripts.
+/// then falls back to Cargo build outputs. Every binary should go through this
+/// helper so the search order stays consistent.
 pub fn resolve_helper_binary(repo_root: &Path, name: &str) -> Result<PathBuf> {
-    let prefer_target = env::var("CODEX_FENCE_PREFER_TARGET")
-        .ok()
-        .map(|v| !v.trim().is_empty() && v != "0")
-        .unwrap_or(false);
-
-    let target_release = repo_root.join("target").join("release").join(name);
-    let target_debug = repo_root.join("target").join("debug").join(name);
-    let synced = repo_root.join(SYNCED_BIN_DIR).join(name);
-
-    let mut candidates: Vec<PathBuf> = if prefer_target {
-        vec![target_release.clone(), target_debug.clone(), synced.clone()]
-    } else {
-        vec![synced.clone(), target_release.clone(), target_debug.clone()]
-    };
-
-    // Always include the remaining fallbacks to avoid missing an executable when
-    // env-based ordering changes.
-    candidates.push(target_release);
-    candidates.push(target_debug);
-    candidates.push(synced);
-
-    for candidate in candidates {
-        if helper_is_executable(&candidate) {
-            return Ok(candidate);
-        }
+    let prefer_target = runtime::prefer_target_builds();
+    if let Some(found) = runtime::resolve_repo_helper(repo_root, name, prefer_target) {
+        return Ok(found);
     }
 
     bail!(
         "Unable to locate helper '{name}' under {}. Run 'make build-bin' to sync the Rust binaries.",
         repo_root.display()
-    )
+    );
 }
 
 /// Returns true when an executable named `codex` exists somewhere on PATH.
 pub fn codex_present() -> bool {
     env::var_os("PATH")
-        .map(|paths| env::split_paths(&paths).any(|dir| helper_is_executable(&dir.join("codex"))))
+        .map(|paths| {
+            env::split_paths(&paths).any(|dir| runtime::helper_is_executable(&dir.join("codex")))
+        })
         .unwrap_or(false)
 }
 
+// === Small parsing helpers ===
 /// Split comma- or whitespace-delimited configuration lists into tokens.
 pub fn split_list(value: &str) -> Vec<String> {
     value
@@ -203,6 +183,7 @@ pub fn parse_json_stream(input: &str) -> Result<Vec<BoundaryObject>> {
     Ok(records)
 }
 
+// === Probe discovery (trusted tree only) ===
 #[derive(Debug, Clone)]
 pub struct Probe {
     pub id: String,
@@ -303,20 +284,83 @@ pub fn list_probes(repo_root: &Path) -> Result<Vec<Probe>> {
     Ok(results.into_values().collect())
 }
 
-fn helper_is_executable(path: &Path) -> bool {
-    if !path.is_file() {
-        return false;
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn parse_json_stream_accepts_ndjson_and_array() {
+        let record_json = sample_record_json();
+        let serialized = serde_json::to_string(&record_json).expect("serialize sample record");
+
+        let ndjson = format!("{0}\n{0}\n", serialized);
+        let nd_records = parse_json_stream(&ndjson).expect("ndjson parses");
+        assert_eq!(nd_records.len(), 2);
+        assert_eq!(nd_records[0].probe.id, "probe_id");
+
+        let array_input = format!("[{0},{0}]", serialized);
+        let array_records = parse_json_stream(&array_input).expect("array parses");
+        assert_eq!(array_records.len(), 2);
+        assert_eq!(array_records[1].run.mode, "baseline");
     }
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        if let Ok(meta) = fs::metadata(path) {
-            return meta.permissions().mode() & 0o111 != 0;
-        }
-        false
+
+    #[test]
+    fn parse_json_stream_rejects_non_objects() {
+        assert!(parse_json_stream("").is_err(), "empty input should fail");
+        assert!(
+            parse_json_stream("42").is_err(),
+            "non-object json should fail"
+        );
     }
-    #[cfg(not(unix))]
-    {
-        true
+
+    fn sample_record_json() -> serde_json::Value {
+        json!({
+            "schema_version": "cfbo-v1",
+            "capabilities_schema_version": "macOS_codex_v1",
+            "stack": {
+                "codex_cli_version": null,
+                "codex_profile": null,
+                "sandbox_mode": null,
+                "os": "Darwin"
+            },
+            "probe": {
+                "id": "probe_id",
+                "version": "1",
+                "primary_capability_id": "cap_fs_read_workspace_tree",
+                "secondary_capability_ids": []
+            },
+            "run": {
+                "mode": "baseline",
+                "workspace_root": "/tmp",
+                "command": "/bin/true"
+            },
+            "operation": {
+                "category": "fs",
+                "verb": "read",
+                "target": "/tmp",
+                "args": {}
+            },
+            "result": {
+                "observed_result": "success",
+                "raw_exit_code": 0,
+                "errno": null,
+                "message": null,
+                "error_detail": null
+            },
+            "payload": {
+                "stdout_snippet": null,
+                "stderr_snippet": null,
+                "raw": {}
+            },
+            "capability_context": {
+                "primary": {
+                    "id": "cap_fs_read_workspace_tree",
+                    "category": "filesystem",
+                    "layer": "os_sandbox"
+                },
+                "secondary": []
+            }
+        })
     }
 }

@@ -93,3 +93,72 @@ pub fn filter_coverage_probes(probes: &[ProbeMetadata]) -> Vec<ProbeMetadata> {
         })
         .collect()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::CapabilityId;
+    use serde_json::json;
+    use std::path::PathBuf;
+    use tempfile::NamedTempFile;
+
+    #[test]
+    fn build_probe_coverage_map_rejects_unknown_capability() {
+        let caps = sample_index().expect("load sample index");
+        let probe = ProbeMetadata {
+            script: PathBuf::from("probe.sh"),
+            probe_name: Some("probe".to_string()),
+            probe_version: Some("1".to_string()),
+            primary_capability: Some(CapabilityId("cap_missing".to_string())),
+            secondary_capabilities: Vec::new(),
+        };
+        let err = build_probe_coverage_map(&caps, &[probe]).expect_err("unknown cap should fail");
+        assert!(
+            err.to_string().contains("cap_missing"),
+            "error should mention missing capability"
+        );
+    }
+
+    #[test]
+    fn filter_coverage_probes_ignores_fixtures() {
+        let probes = vec![
+            ProbeMetadata {
+                script: PathBuf::from("probe.sh"),
+                probe_name: Some("tests_fixture_probe".to_string()),
+                probe_version: None,
+                primary_capability: None,
+                secondary_capabilities: Vec::new(),
+            },
+            ProbeMetadata {
+                script: PathBuf::from("probe2.sh"),
+                probe_name: Some("real_probe".to_string()),
+                probe_version: None,
+                primary_capability: None,
+                secondary_capabilities: Vec::new(),
+            },
+        ];
+        let filtered = filter_coverage_probes(&probes);
+        assert_eq!(filtered.len(), 1);
+        assert_eq!(filtered[0].probe_name.as_deref(), Some("real_probe"));
+    }
+
+    fn sample_index() -> Result<CapabilityIndex> {
+        let mut file = NamedTempFile::new()?;
+        serde_json::to_writer(
+            &mut file,
+            &json!({
+                "schema_version": "macOS_codex_v1",
+                "scope": {"description": "test", "policy_layers": [], "categories": {}},
+                "docs": {},
+                "capabilities": [{
+                    "id": "cap_fs_read_workspace_tree",
+                    "category": "filesystem",
+                    "layer": "os_sandbox",
+                    "description": "fixture",
+                    "operations": {"allow": [], "deny": []}
+                }]
+            }),
+        )?;
+        CapabilityIndex::load(file.path())
+    }
+}

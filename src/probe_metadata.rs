@@ -192,3 +192,46 @@ fn parse_token(raw: &str) -> Option<CapabilityId> {
     }
     Some(CapabilityId(trimmed.to_string()))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::TempDir;
+
+    #[test]
+    fn parse_secondary_capabilities_collects_arrays_and_flags() {
+        let contents = r#"
+secondary_capability_id=cap_a
+secondary_capability_ids=(cap_b "cap_c")
+some_command --secondary-capability-id cap_d --secondary-capability-id=cap_e
+        "#;
+        let parsed = parse_secondary_capabilities(contents);
+        assert_eq!(
+            parsed,
+            vec![
+                CapabilityId("cap_a".to_string()),
+                CapabilityId("cap_b".to_string()),
+                CapabilityId("cap_c".to_string()),
+                CapabilityId("cap_d".to_string()),
+                CapabilityId("cap_e".to_string())
+            ]
+        );
+    }
+
+    #[test]
+    fn collect_probe_scripts_recurse_into_nested_dirs() {
+        let temp = TempDir::new().expect("temp dir");
+        let root = temp.path();
+        let nested = root.join("nested");
+        std::fs::create_dir_all(&nested).unwrap();
+        let root_script = root.join("root.sh");
+        let nested_script = nested.join("nested.sh");
+        std::fs::write(&root_script, "#!/bin/sh\n").unwrap();
+        std::fs::write(&nested_script, "#!/bin/sh\n").unwrap();
+
+        let scripts = collect_probe_scripts(&[root.to_path_buf()]).expect("collect scripts");
+        assert_eq!(scripts.len(), 2);
+        assert!(scripts.contains(&root_script));
+        assert!(scripts.contains(&nested_script));
+    }
+}

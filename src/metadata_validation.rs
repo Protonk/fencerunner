@@ -152,3 +152,108 @@ fn extract_capability_ids(value: &Value) -> Vec<CapabilityId> {
 
     ids
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+    use std::path::PathBuf;
+    use tempfile::NamedTempFile;
+
+    #[test]
+    fn validate_probe_capabilities_flags_missing_ids() {
+        let index = sample_index().expect("sample index loads");
+        let probe = ProbeMetadata {
+            script: PathBuf::from("probe.sh"),
+            probe_name: Some("probe".to_string()),
+            probe_version: Some("1".to_string()),
+            primary_capability: Some(CapabilityId("cap_missing".to_string())),
+            secondary_capabilities: vec![CapabilityId("cap_fs_read_workspace_tree".to_string())],
+        };
+        let errors = validate_probe_capabilities(&index, &[probe]);
+        assert_eq!(errors.len(), 1);
+        assert!(errors[0].contains("cap_missing"));
+    }
+
+    #[test]
+    fn validate_boundary_objects_reports_unknown_capabilities() {
+        let index = sample_index().expect("sample index loads");
+        let dir = tempfile::tempdir().expect("temp dir");
+        let bo_path = dir.path().join("bo.json");
+        let record = json!({
+            "schema_version": "cfbo-v1",
+            "capabilities_schema_version": "macOS_codex_v1",
+            "stack": {"os": "Darwin"},
+            "probe": {
+                "id": "probe",
+                "version": "1",
+                "primary_capability_id": "cap_missing",
+                "secondary_capability_ids": []
+            },
+            "run": {"mode": "baseline", "workspace_root": "/tmp", "command": "true"},
+            "operation": {"category": "fs", "verb": "read", "target": "/tmp", "args": {}},
+            "result": {"observed_result": "success", "raw_exit_code": 0, "errno": null, "message": null, "error_detail": null},
+            "payload": {"stdout_snippet": null, "stderr_snippet": null, "raw": {}},
+            "capability_context": {"primary": {"id": "cap_missing", "category": "filesystem", "layer": "os_sandbox"}, "secondary": []}
+        });
+        std::fs::write(&bo_path, serde_json::to_string(&record).unwrap()).unwrap();
+
+        let errors = validate_boundary_objects(&index, &[dir.path().to_path_buf()])
+            .expect("validation should run");
+        assert_eq!(errors.len(), 1);
+        assert!(errors[0].contains("cap_missing"));
+    }
+
+    #[test]
+    fn validate_boundary_objects_recurses_nested_dirs() {
+        let index = sample_index().expect("sample index loads");
+        let root = tempfile::tempdir().expect("temp dir");
+        let nested = root.path().join("nested/inner");
+        std::fs::create_dir_all(&nested).unwrap();
+        let bo_path = nested.join("record.json");
+        let record = json!({
+            "schema_version": "cfbo-v1",
+            "capabilities_schema_version": "macOS_codex_v1",
+            "stack": {"os": "Darwin"},
+            "probe": {
+                "id": "probe",
+                "version": "1",
+                "primary_capability_id": "cap_fs_read_workspace_tree",
+                "secondary_capability_ids": []
+            },
+            "run": {"mode": "baseline", "workspace_root": "/tmp", "command": "true"},
+            "operation": {"category": "fs", "verb": "read", "target": "/tmp", "args": {}},
+            "result": {"observed_result": "success", "raw_exit_code": 0, "errno": null, "message": null, "error_detail": null},
+            "payload": {"stdout_snippet": null, "stderr_snippet": null, "raw": {}},
+            "capability_context": {"primary": {"id": "cap_fs_read_workspace_tree", "category": "filesystem", "layer": "os_sandbox"}, "secondary": []}
+        });
+        std::fs::write(&bo_path, serde_json::to_string(&record).unwrap()).unwrap();
+
+        let errors = validate_boundary_objects(&index, &[root.path().to_path_buf()])
+            .expect("validation should run");
+        assert!(
+            errors.is_empty(),
+            "expected no validation errors, got {errors:?}"
+        );
+    }
+
+    fn sample_index() -> Result<CapabilityIndex> {
+        let mut file = NamedTempFile::new()?;
+        serde_json::to_writer(
+            &mut file,
+            &json!({
+                "schema_version": "macOS_codex_v1",
+                "scope": {"description": "test", "policy_layers": [], "categories": {}},
+                "docs": {},
+                "capabilities": [{
+                    "id": "cap_fs_read_workspace_tree",
+                    "category": "filesystem",
+                    "layer": "os_sandbox",
+                    "description": "fixture",
+                    "operations": {"allow": [], "deny": []}
+                }]
+            }),
+        )?;
+        CapabilityIndex::load(file.path())
+    }
+}

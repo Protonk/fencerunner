@@ -4,6 +4,10 @@ use std::ffi::OsString;
 use std::fs;
 use std::path::{Path, PathBuf};
 
+// Helper utilities shared by fence-run/fence-bang: workspace planning,
+// preflight classification, and probe metadata resolution. Keeping these in one
+// place makes the defense-in-depth rules visible instead of buried in each CLI.
+
 #[derive(Clone)]
 pub enum WorkspaceOverride {
     UsePath(OsString),
@@ -14,6 +18,7 @@ pub struct WorkspacePlan {
     pub export_value: Option<OsString>,
 }
 
+/// Decide how the workspace root should be exported to probes.
 pub fn workspace_plan_from_override(value: WorkspaceOverride) -> WorkspacePlan {
     match value {
         WorkspaceOverride::SkipExport => WorkspacePlan { export_value: None },
@@ -39,6 +44,8 @@ pub struct TmpdirPlan {
     pub last_error: Option<(PathBuf, String)>,
 }
 
+/// Decide where TMPDIR should point for a run and capture the last failure so
+/// the caller can emit a descriptive preflight record.
 pub fn workspace_tmpdir_plan(workspace_plan: &WorkspacePlan, repo_root: &Path) -> TmpdirPlan {
     let mut candidates = Vec::new();
     if let Some(value) = workspace_plan.export_value.as_ref() {
@@ -77,6 +84,9 @@ pub fn resolve_probe_metadata(
     probe: &Probe,
     parsed: ProbeMetadata,
 ) -> Result<ResolvedProbeMetadata> {
+    // Keep resolution strict: probes must name a primary capability, and
+    // defaulting to implicit ids/versions is a last resort to preserve
+    // backward compatibility.
     let primary_capability = parsed.primary_capability.ok_or_else(|| {
         anyhow!(
             "probe {} is missing primary_capability_id",
@@ -91,6 +101,8 @@ pub fn resolve_probe_metadata(
 }
 
 pub fn classify_preflight_error(stderr: &str) -> (&'static str, Option<&'static str>, String) {
+    // Pattern-match common Codex sandbox errors to normalize cfbo result fields.
+    // This keeps preflight failures consistent with probe results.
     let lower = stderr.to_ascii_lowercase();
     if lower.contains("operation not permitted") {
         (

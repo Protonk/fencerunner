@@ -6,10 +6,12 @@
 //! locate probes and fixtures even when invoked from an installed location.
 
 use anyhow::{Context, Result, bail};
-use codex_fence::{find_repo_root, resolve_helper_binary};
+use codex_fence::{
+    find_repo_root, resolve_helper_binary,
+    runtime::{find_on_path, helper_is_executable},
+};
 use std::env;
 use std::ffi::OsString;
-use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
@@ -99,7 +101,7 @@ fn resolve_helper(name: &str, repo_root: Option<&Path>) -> Result<PathBuf> {
     if let Ok(current_exe) = env::current_exe() {
         if let Some(dir) = current_exe.parent() {
             let candidate = dir.join(name);
-            if is_executable(&candidate) {
+            if helper_is_executable(&candidate) {
                 return Ok(candidate);
             }
         }
@@ -139,33 +141,4 @@ fn run_helper(cli: &Cli, repo_root: Option<&Path>) -> Result<()> {
     }
 
     bail!("Helper terminated by signal")
-}
-
-fn find_on_path(name: &str) -> Option<PathBuf> {
-    let paths = env::var_os("PATH")?;
-    for dir in env::split_paths(&paths) {
-        let candidate = dir.join(name);
-        if is_executable(&candidate) {
-            return Some(candidate);
-        }
-    }
-    None
-}
-
-fn is_executable(path: &Path) -> bool {
-    if !path.is_file() {
-        return false;
-    }
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        if let Ok(metadata) = fs::metadata(path) {
-            return metadata.permissions().mode() & 0o111 != 0;
-        }
-        false
-    }
-    #[cfg(not(unix))]
-    {
-        true
-    }
 }

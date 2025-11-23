@@ -1,56 +1,40 @@
 # Agent Guidance for `src/`
 
-`src/` holds the shared Rust crate that all helpers link against plus the
-compiled CLI entry points under `src/bin/`. Follow the repo-level contracts in
-`README.md`, `CONTRIBUTING.md`, and the root `AGENTS.md` before touching code
-here.
+`src/` is the shared Rust crate every helper links against. It encodes the
+contracts promised in README/CONTRIBUTING/AGENTS and should make those layers
+obvious: discover the repo, load the catalog, resolve probes inside the trusted
+tree, emit/parse cfbo-v1, and share runtime helpers with the binaries under
+`src/bin/`.
 
-## Start here
-- Need CLI guidance? jump to `src/bin/AGENTS.md`; this file covers the shared
-  crate only.
-- Skim `docs/boundary_object.md` and `docs/capabilities.md` so schema updates
-  land alongside code.
-- Use `make build-bin` or `cargo test --test suite` whenever you change shared
-  logic; the guard rails exercise this crate.
+## Map of responsibilities
+- `lib.rs` — entry point and glue. Owns repo/root detection, helper resolution,
+  and the small helper APIs the binaries depend on. Keep public surface small
+  and documented here or in the target module.
+- `boundary/` — cfbo-v1 types and serde. Schema changes start in
+  `schema/boundary_object.json` and docs, then land here with tests.
+- `catalog/` — capability catalog parsing and indexing. Pure Rust; no shelling
+  out. Must stay aligned with `schema/capabilities.json`.
+- `emit_support.rs`, `probe_metadata.rs`, `metadata_validation.rs`,
+  `coverage.rs` — harness utilities (payload builders, static probe parsing,
+  catalog/probe/record cross-checks). Add focused unit tests when touching them.
+- `runtime.rs`, `fence_run_support.rs` — shared runtime mechanics (helper search
+  order, workspace planning, preflight classification). CLIs should reuse these
+  instead of re-implementing path/sandbox logic.
 
-## Layout cheat sheet
-- `lib.rs` wires the crate modules together and exports helper utility
-  functions (repo discovery, helper resolution, stream parsing). Keep new public
-  APIs minimal and documented here or in the relevant module.
-- `boundary/` defines the cfbo-v1 structs and serde glue. Any schema changes
-  must be versioned under `schema/` first.
-- `catalog/` loads and indexes the capability catalog JSON. Keep parsing pure
-  Rust—no shell outs.
-- `coverage.rs`, `probe_metadata.rs`, `metadata_validation.rs`, and
-  `emit_support.rs` are the harness utilities consumed by binaries; add focused
-  unit tests when mutating them.
-- `fence_run_support.rs` contains the shared sandbox/workspace mechanics used
-  by the run/bang helpers. Preserve workspace boundary enforcement and reuse
-  `portable-path` instead of rolling new path logic.
+## Patterns to preserve
+- One source of truth per concern: helper resolution lives in `runtime`, probe
+  lookup in `resolve_probe`, catalog parsing in `catalog::*`. Subscribe to these
+  instead of duplicating the logic.
+- Errors should be actionable and consistent; binaries surface them directly.
+- Portability is part of the contract: code must run on macOS 13-era hosts and
+  in `codex-universal` without extra runtime deps.
+- When behavior is subtle, add a comment and a test that explains why.
 
-## Rust-specific expectations
-- Stay on stable Rust with the editions/features already declared in
-  `Cargo.toml`; ask before adding new crates or enabling nightly gates.
-- Keep the crate dependency-light. Prefer std + existing dependencies; if a new
-  crate is indispensable, document why in `CONTRIBUTING.md` and add tests.
-- Maintain portability: code must run on macOS 13-era toolchains and the
-  `codex-universal` container. Avoid platform-specific syscalls unless guarded
-  and tested.
-- Favor explicit error paths using `anyhow` contexts so CLI binaries surface
-  actionable messages.
-- When exposing helpers for probes/tests, keep the API surface backward
-  compatible; if you must break it, update docs, schema, and the Rust callers in
-  the same change.
-
-## Testing & workflows
-- `cargo test` (and `cargo test --test suite`) is the fast feedback loop; keep
-  new helpers covered with unit tests near their modules.
-- Use `tools/validate_contract_gate.sh --probe <id>` or `make probe` after
-  modifying probe-facing logic to ensure harness parity.
-- Regenerate binaries via `make build-bin` before committing so `bin/`
-  artifacts stay in sync with `src/bin/`.
-
-Keep this file aligned with future module additions—new subdirectories need a
-brief blurb here so other agents know where to work. If deeper rules are
-required for a specific sub-area, add an `AGENTS.md` in that directory and link
-back to this overview.
+## Working loop
+- Run `cargo test` after changes; it exercises unit tests and the integration
+  suite in `tests/suite.rs`.
+- After changing binary behavior, run `make build-bin` to sync `bin/` artifacts
+  with `src/bin/`.
+- If you add a new module or responsibility, update this file so other agents
+  can navigate quickly. If a sub-area needs deeper rules, add an `AGENTS.md`
+  there and link back.

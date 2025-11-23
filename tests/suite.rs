@@ -440,7 +440,11 @@ fn fence_rattle_runs_single_probe() -> Result<()> {
         .map(str::trim)
         .filter(|line| !line.is_empty())
         .collect();
-    assert_eq!(lines.len(), 1, "expected exactly one record for a single probe+mode");
+    assert_eq!(
+        lines.len(),
+        1,
+        "expected exactly one record for a single probe+mode"
+    );
     let (record, _) = parse_boundary_object(lines[0].as_bytes())?;
     assert_eq!(record.probe.id, fixture.probe_id());
     assert_eq!(record.run.mode, "baseline");
@@ -471,7 +475,11 @@ fn fence_rattle_repeats_probe_runs() -> Result<()> {
         .map(str::trim)
         .filter(|line| !line.is_empty())
         .collect();
-    assert_eq!(lines.len(), 2, "--repeat 2 should emit two boundary objects");
+    assert_eq!(
+        lines.len(),
+        2,
+        "--repeat 2 should emit two boundary objects"
+    );
     for line in lines {
         let (record, _) = parse_boundary_object(line.as_bytes())?;
         assert_eq!(record.probe.id, fixture.probe_id());
@@ -1228,6 +1236,124 @@ fn capability_index_enforces_schema_version() -> Result<()> {
 }
 
 #[test]
+fn emit_record_requires_primary_capability() -> Result<()> {
+    let repo_root = repo_root();
+    let emit_record = helper_binary(&repo_root, "emit-record");
+    let output = Command::new(&emit_record)
+        .arg("--run-mode")
+        .arg("baseline")
+        .arg("--probe-name")
+        .arg("missing_cap")
+        .arg("--probe-version")
+        .arg("1")
+        .arg("--command")
+        .arg("true")
+        .arg("--category")
+        .arg("fs")
+        .arg("--verb")
+        .arg("read")
+        .arg("--target")
+        .arg("/tmp")
+        .arg("--status")
+        .arg("success")
+        .arg("--operation-args")
+        .arg("{}")
+        .output()
+        .context("failed to execute emit-record without primary capability")?;
+    assert!(
+        !output.status.success(),
+        "emit-record should fail when primary capability is missing"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("Missing required flag") || stderr.contains("primary capability"),
+        "stderr should mention missing primary capability; got {stderr}"
+    );
+    Ok(())
+}
+
+#[test]
+fn emit_record_rejects_unknown_capability() -> Result<()> {
+    let repo_root = repo_root();
+    let emit_record = helper_binary(&repo_root, "emit-record");
+
+    let output = Command::new(&emit_record)
+        .arg("--run-mode")
+        .arg("baseline")
+        .arg("--probe-name")
+        .arg("tests_unknown_cap")
+        .arg("--probe-version")
+        .arg("1")
+        .arg("--primary-capability-id")
+        .arg("cap_missing")
+        .arg("--command")
+        .arg("true")
+        .arg("--category")
+        .arg("fs")
+        .arg("--verb")
+        .arg("read")
+        .arg("--target")
+        .arg("/tmp")
+        .arg("--status")
+        .arg("success")
+        .arg("--operation-args")
+        .arg("{}")
+        .output()
+        .context("failed to execute emit-record with unknown capability")?;
+
+    assert!(
+        !output.status.success(),
+        "emit-record should fail when capability id is missing"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("primary capability id") && stderr.contains("cap_missing"),
+        "stderr should mention the missing capability; got: {stderr}"
+    );
+    Ok(())
+}
+
+#[test]
+fn emit_record_falls_back_to_pwd_for_workspace_root() -> Result<()> {
+    let repo_root = repo_root();
+    let emit_record = helper_binary(&repo_root, "emit-record");
+    let temp = TempDir::new().context("failed to allocate temp dir")?;
+    let pwd = fs::canonicalize(temp.path())?;
+
+    let output = Command::new(&emit_record)
+        .current_dir(&pwd)
+        .env("FENCE_WORKSPACE_ROOT", "")
+        .env("PWD", &pwd)
+        .arg("--run-mode")
+        .arg("baseline")
+        .arg("--probe-name")
+        .arg("tests_workspace_fallback")
+        .arg("--probe-version")
+        .arg("1")
+        .arg("--primary-capability-id")
+        .arg("cap_fs_read_workspace_tree")
+        .arg("--command")
+        .arg("true")
+        .arg("--category")
+        .arg("fs")
+        .arg("--verb")
+        .arg("read")
+        .arg("--target")
+        .arg("/tmp")
+        .arg("--status")
+        .arg("success")
+        .arg("--operation-args")
+        .arg("{}")
+        .output()
+        .context("failed to execute emit-record for workspace fallback")?;
+    assert!(output.status.success(), "emit-record should succeed");
+    let (record, _) = parse_boundary_object(&output.stdout)?;
+    let recorded = record.run.workspace_root.expect("workspace_root present");
+    assert_eq!(fs::canonicalize(recorded)?, pwd);
+    Ok(())
+}
+
+#[test]
 fn json_object_builder_overrides_fields() -> Result<()> {
     let mut builder = JsonObjectBuilder::default();
     builder.merge_json_string(r#"{"a":1,"b":2}"#, "object")?;
@@ -1396,6 +1522,49 @@ fn classify_preflight_defaults_to_error() {
     assert!(errno.is_none());
 }
 
+#[test]
+fn fence_run_emits_preflight_record_on_codex_denial() -> Result<()> {
+    let repo_root = repo_root();
+    let _guard = repo_guard();
+    let fixture = FixtureProbe::install(&repo_root, "tests_fixture_probe")?;
+    let codex_dir = TempDir::new().context("failed to allocate codex stub dir")?;
+    let codex_path = codex_dir.path().join("codex");
+    fs::write(
+        &codex_path,
+        r#"#!/usr/bin/env bash
+echo "sandbox_apply: Operation not permitted" >&2
+exit 71
+"#,
+    )?;
+    make_executable(&codex_path)?;
+    let original_path = env::var_os("PATH").unwrap_or_default();
+    let combined_path = env::join_paths(
+        std::iter::once(codex_dir.path().to_path_buf()).chain(env::split_paths(&original_path)),
+    )?;
+    let _path_guard = PathGuard::set_os(combined_path);
+
+    let mut cmd = Command::new(helper_binary(&repo_root, "fence-run"));
+    cmd.arg("codex-sandbox")
+        .arg(fixture.probe_id())
+        .env("CODEX_FENCE_PREFER_TARGET", "1");
+    let output = run_command(cmd)?;
+    let (record, value) = parse_boundary_object(&output.stdout)?;
+
+    assert_eq!(record.probe.id, fixture.probe_id());
+    assert_eq!(record.run.mode, "codex-sandbox");
+    assert_eq!(record.operation.category, "preflight");
+    assert_eq!(record.result.observed_result, "denied");
+    assert_eq!(record.result.raw_exit_code, Some(71));
+    assert_eq!(record.result.errno.as_deref(), Some("EPERM"));
+    assert_eq!(
+        value
+            .pointer("/payload/raw/preflight_kind")
+            .and_then(Value::as_str),
+        Some("codex_tmp")
+    );
+    Ok(())
+}
+
 // === CLI helper smoke tests (former bin_smoke) ===
 
 #[test]
@@ -1459,6 +1628,39 @@ fn codex_fence_falls_back_to_path() -> Result<()> {
 
     assert!(output.status.success());
     assert!(marker.is_file());
+    Ok(())
+}
+
+#[test]
+fn codex_fence_exports_root_to_helpers() -> Result<()> {
+    let repo_root = repo_root();
+    let temp_repo = TempDir::new().context("failed to allocate temp repo")?;
+    let repo = temp_repo.path();
+    let bin_dir = repo.join("bin");
+    fs::create_dir_all(&bin_dir)?;
+    fs::write(bin_dir.join(".gitkeep"), "")?;
+    fs::write(repo.join("Makefile"), "all:\n\t@true\n")?;
+
+    let marker = repo.join("root_seen");
+    let helper_path = bin_dir.join("fence-bang");
+    fs::write(
+        &helper_path,
+        "#!/bin/sh\n[ -n \"$CODEX_FENCE_ROOT\" ] && echo \"$CODEX_FENCE_ROOT\" > \"$MARK_FILE\"\n",
+    )?;
+    make_executable(&helper_path)?;
+
+    let codex_fence = helper_binary(&repo_root, "codex-fence");
+    let output = Command::new(codex_fence)
+        .arg("--bang")
+        .env("CODEX_FENCE_ROOT", repo)
+        .env("PATH", "")
+        .env("MARK_FILE", &marker)
+        .output()
+        .context("failed to run codex-fence env propagation test")?;
+
+    assert!(output.status.success());
+    let recorded = fs::read_to_string(&marker).context("marker missing")?;
+    assert_eq!(fs::canonicalize(recorded.trim())?, fs::canonicalize(repo)?);
     Ok(())
 }
 
@@ -1594,6 +1796,21 @@ fn portable_path_relpath_identical_path() -> Result<()> {
     let output = run_command(cmd)?;
     let relpath = String::from_utf8_lossy(&output.stdout).trim().to_string();
     assert_eq!(relpath, ".");
+    Ok(())
+}
+
+#[test]
+fn portable_path_realpath_nonexistent_is_blank() -> Result<()> {
+    let repo_root = repo_root();
+    let helper = helper_binary(&repo_root, "portable-path");
+    let missing = TempDir::new()?.path().join("nope");
+    let output = Command::new(helper)
+        .arg("realpath")
+        .arg(&missing)
+        .output()
+        .context("failed to run portable-path realpath")?;
+    assert!(output.status.success());
+    assert!(String::from_utf8_lossy(&output.stdout).trim().is_empty());
     Ok(())
 }
 
@@ -1774,6 +1991,14 @@ struct PathGuard {
 
 impl PathGuard {
     fn set(value: &Path) -> Self {
+        let original = env::var_os("PATH");
+        unsafe {
+            env::set_var("PATH", value);
+        }
+        Self { original }
+    }
+
+    fn set_os(value: OsString) -> Self {
         let original = env::var_os("PATH");
         unsafe {
             env::set_var("PATH", value);

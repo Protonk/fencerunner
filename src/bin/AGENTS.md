@@ -1,127 +1,68 @@
 # Agent Guidance for Rust Binaries
 
-All canonical helper implementations now live under `src/bin/`. `make build-bin`
-copies the compiled binaries into `bin/` so probes/tests can keep invoking
-`bin/<name>` directly; when editing code, assume Rust owns the real behavior and
-update these helpers together.
+`src/bin/` contains the canonical helper implementations. `make build-bin`
+copies them into `bin/` so probes/tests can keep invoking `bin/<name>`; when you
+change behavior, update Rust here first and then sync the artifacts.
 
-## CLI entry points
+## CLI entry points (front doors)
 
 ### `codex-fence`
-- **Purpose:** Front door for `--bang` and `--listen`. Delegates to the
-  specialized helpers while guaranteeing `CODEX_FENCE_ROOT` points at the repo
-  so binaries can find fixtures.
-- **Expectations:**
-  - Keep the CLI contract stable; add switches only when docs/tests are updated.
-  - Prefer the compiled binaries (`bin/` first, then `target/{release,debug}`)
-    when resolving helpers, falling back to `$PATH` only when necessary.
-  - Propagate exit codes verbatim so harness automation can detect failures.
+Front door for `--bang/--listen/--rattle`; its job is to locate helpers and set
+`CODEX_FENCE_ROOT` so downstream binaries find the repo. Keep the CLI contract
+stable, prefer repo helpers before PATH, and propagate exit codes verbatim.
 
 ### `fence-run`
-- **Purpose:** Resolve probe paths, enforce the requested sandbox mode, and
-  export `FENCE_*` metadata for downstream scripts.
-- **Expectations:**
-  - Preserve strict probe resolution (only under `probes/`), and keep
-    descriptive error messages when a probe cannot run.
-  - Continue honoring `--workspace-root` / `FENCE_WORKSPACE_ROOT` overrides.
-  - When touching sandbox modes, keep parity with codex CLI flags and ensure the
-    resulting environment variables still match the run mode.
+Executes a probe in a requested mode, exporting `FENCE_*` metadata and enforcing
+that probes live under `probes/`. Keep probe resolution strict, honor
+`--workspace-root`/`FENCE_WORKSPACE_ROOT`, and ensure sandbox env matches the
+mode (baseline vs codex modes).
 
-## Record helpers
+## Record helpers (cfbo emission/introspection)
 
 ### `emit-record`
-- **Purpose:** Gather capability metadata, stack info, and operation payloads to
-  emit cfbo-v1 JSON.
-- **Expectations:**
-  - Validate inputs aggressively and surface actionable errors.
-  - Shell out only to `detect-stack`; all other work should remain pure Rust for
-    portability and rely on the in-repo capability catalog instead of the
-    legacy adapter.
-  - Avoid printing to stdout except for the final JSON record.
+Builds cfbo-v1 JSON from probe CLI flags. Validate inputs aggressively, rely on
+the in-repo catalog, and shell out only to `detect-stack`. stdout should only
+carry the final JSON record.
 
 ### `detect-stack`
-- **Purpose:** Capture codex CLI details, sandbox metadata, and OS information.
-- **Expectations:**
-  - Keep execution fast and dependency-free; it runs before every record.
-  - Never remove existing JSON keys without versioning; new keys should default
-    to `null`/sane fallbacks so older environments keep working.
-
-## Harness helpers
-
-### `fence-bang`
-- **Purpose:** Iterate probes/modes and execute them via `fence-run`, printing
-  NDJSON boundary objects for each run.
-- **Expectations:**
-  - Use `resolve_helper_binary` to run the Rust `fence-run` implementation and
-    fail fast when binaries are missing, nudging users toward `make build-bin`.
-  - Keep probe filtering (`PROBES`, `PROBES_RAW`) and mode selection logic in
-    sync with docs; most automation depends on these env vars.
-
-### `fence-rattle`
-- **Purpose:** Back `codex-fence --rattle` by selecting a constrained probe set
-  (by capability id or explicit probe ids) and delegating execution to
-  `fence-bang` so the existing probe→record pipeline stays untouched.
-- **Expectations:**
-  - Enforce the CLI contract: `--rattle` requires exactly one of `--cap` or
-    `--probe`, optional `--mode`, `--repeat`, and `--list-only`.
-  - Reuse the bundled capability catalog when resolving `--cap` and surface
-    clear errors for unknown capabilities or missing probes.
-  - Keep list-only/dry-run output human-readable and deterministic (sorted
-    probe ids) so it can be diffed in scripts.
-  - Execute probes by calling `fence-bang` with the resolved `PROBES`/`MODES`
-    environment so cfbo-v1 emission, sandbox handling, and error collection
-    remain identical to `--bang`.
+Captures codex CLI details, sandbox metadata, and OS info. Keep it dependency-
+free and fast; never drop existing JSON keys without versioning, and default new
+keys sensibly.
 
 ### `fence-listen`
-- **Purpose:** Read cfbo-v1 JSON from stdin and display a human summary.
-- **Expectations:**
-  - Handle both NDJSON streams and JSON arrays; this binary is the main
-    inspection tool when iterating locally.
-  - Reject invalid input with clear error messages; don’t panic.
+Reads cfbo-v1 NDJSON/arrays and prints a human summary. Reject invalid input
+with clear errors; don’t panic.
+
+## Harness helpers (probe orchestration)
+
+### `fence-bang`
+Iterates probes/modes via `fence-run`, emitting NDJSON. Reuse
+`resolve_helper_binary`, enforce mode/probe selection per docs, and keep error
+messages actionable.
+
+### `fence-rattle`
+Backs `codex-fence --rattle` by selecting probes (by capability id or explicit
+ids) and delegating execution to `fence-bang`. Enforce the flag contract, use
+the bundled catalog for `--cap`, and keep list-only output deterministic.
 
 ### `fence-test`
-- **Purpose:** Execute `tools/validate_contract_gate.sh` for the
-  full probe set while enforcing repo root detection and a predictable
-  environment. The shell helper now prefers this binary when it’s available,
-  falling back to the interpreted gate only when the compiled helper is
-  missing.
-- **Expectations:**
-  - Keep the CLI simple; any extra flags should mirror the static contract
-    helper’s capabilities.
-  - Surface script exit codes verbatim for CI consumption; callers trigger the
-    static contract by invoking this binary (either directly or via the shell
-    shim).
+Runs `tools/validate_contract_gate.sh` with predictable env/repo detection.
+Mirror the static helper’s flags and surface exit codes verbatim.
 
-## Shared helpers
+## Utility helpers
 
 ### `portable-path`
-- **Purpose:** Provide `realpath`/`relpath` equivalents without depending on
-  system Python/Perl.
-- **Expectations:**
-  - Keep the CLI (`portable-path <realpath|relpath> …`) stable.
-  - Ensure outputs remain deterministic across macOS and Linux.
+Portable `realpath`/`relpath`. Keep the CLI stable and outputs deterministic
+across macOS/Linux.
 
 ### `json-extract`
-- **Purpose:** Minimal JSON pointer extractor for probes that need to read
-  structured fields from helper output.
-- **Expectations:**
-  - Keep the CLI small and predictable (`--file/--stdin`, `--pointer`, `--type`,
-    `--default`), returning compact JSON on stdout and actionable errors on
-    stderr.
-  - Favor deterministic failures over silent fallbacks; add tests when expanding
-    semantics.
+Minimal JSON pointer extractor for probes. Keep the small CLI surface, return
+compact JSON, and prefer explicit failures over silent fallbacks.
 
-### `resolve_helper_binary`
-- **Purpose:** Central helper (exposed from `lib.rs`) that prefers the synced
-  binaries under `bin/` before falling back to Cargo build outputs.
-- **Expectations:**
-  - Use it whenever Rust code invokes another helper so we consistently exercise
-    the Rust implementations.
-  - Extend its tests whenever you add new search paths or semantics.
-
-## General expectations
-- Prefer explicit, defensive argument parsing; fail fast with actionable errors.
-- Keep new policies reflected in docs/tests (README, `docs/*.md`, harness
-  scripts) so shell callers stay in sync with the Rust behavior.
-- Maintain portability: everything must run on macOS `/bin/bash 3.2` and inside
-  the `codex-universal` container with only the shipped Rust binaries.
+## Expectations across binaries
+- Subscribe to shared logic in `runtime.rs`/`fence_run_support.rs`/`lib.rs`
+  instead of rolling your own path/sandbox/catalog handling.
+- Keep argument parsing explicit and defensive; surface actionable errors.
+- Reflect behavioral changes in docs/tests so shell callers stay in sync.
+- Portability is non-negotiable: binaries must run on macOS `/bin/bash 3.2` and
+  inside `codex-universal` with only the shipped Rust helpers.
