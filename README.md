@@ -80,7 +80,7 @@ make install PREFIX=~/.local   # optional: install codex-fence globally
 - Sweep modes: `codex-fence --bang` (override `MODES="baseline codex-sandbox"` to limit modes)
 - Stream + listen: `codex-fence --bang | codex-fence --listen`
 
-## Repo map
+## Directory map
 
 | Directory | What lives here |
 | --- | --- |

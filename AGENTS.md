@@ -25,13 +25,12 @@
 ## Directory map
 | Path | Purpose / Notes |
 | --- | --- |
-| `bin/` | Synced Rust binaries produced by `make build-bin`; keep them aligned with the sources under `src/bin/`. |
-| `src/bin/` | Rust implementations of `codex-fence`, `fence-run`, `emit-record`, `detect-stack`, `fence-bang/listen/test`, and `portable-path`. |
-| `tools/` | Tools to support agent tool calls during development.  |
-| `probes/` | Flat directory of `<probe_id>.sh` scripts plus the probe author contract. |
+| `bin/` | Prebuilt Rust helper binaries (`codex-fence`, `fence-run`, etc.) synced from the sources in `src/bin/`. |
+| `docs/` | Human-readable explanations for schemas, probes, and boundary objects; keep these aligned with machine contracts. |
+| `probes/` | Flat directory of `<probe_id>.sh` scripts and the probe author contract. |
+| `schema/` | Machine-readable capability catalog plus boundary-object schema JSON consumed by tooling. |
+| `src/` | Rust sources for the CLI and helpers. |
+| `target/` | Cargo build artifacts; delete when you need a clean rebuild. |
 | `tests/` | Library helpers, the static probe contract, and Rust guard rails (`tests/suite.rs`). |
-| `docs/` | Human-readable explanations for schemas, probes, and boundary objects; cross-check with machine artifacts. |
-| `schema/` | Machine-readable capability catalog and boundary-object schema consumed by tooling. |
-| `tmp/` | Scratch space for probe/test runs; safe to clean. |
-| `Makefile` | Convenience targets (`probe`, `install`, `build-bin`) that tie bin/tools/tests together. |
-| `README.md` / `CONTRIBUTING.md` | Motivation plus repo-level contribution principles referenced above. |
+| `tmp/` | Scratch space for probe/test runs; currently packed with ephemeral `.tmp*` directories that are safe to purge. |
+| `tools/` | Developer tooling (validation scripts, helpers) used by supported workflows. |

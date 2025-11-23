@@ -9,7 +9,7 @@ BINDIR ?= $(PREFIX)/bin
 
 PROBE ?=
 
-.PHONY: all probe install build-bin
+.PHONY: all probe install build-bin clean
 
 # Default invocation currently acts as a lightweight reminder of available targets.
 all:
@@ -31,3 +31,7 @@ build-bin:
 install: build-bin
 	install -d "$(BINDIR)"
 	install -m 755 bin/codex-fence "$(BINDIR)/codex-fence"
+
+# Remove any probe scratch space locals keep in tmp/.
+clean:
+	rm -rf tmp/
