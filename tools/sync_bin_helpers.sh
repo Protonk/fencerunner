@@ -15,6 +15,7 @@ CARGO_BINARIES=(
   detect-stack
   emit-record
   fence-bang
+  fence-rattle
   fence-listen
   fence-run
   fence-test

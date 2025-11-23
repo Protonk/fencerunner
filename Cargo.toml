@@ -28,6 +28,11 @@ path = "src/bin/fence_bang.rs"
 test = false
 
 [[bin]]
+name = "fence-rattle"
+path = "src/bin/fence_rattle.rs"
+test = false
+
+[[bin]]
 name = "fence-listen"
 path = "src/bin/fence_listen.rs"
 test = false

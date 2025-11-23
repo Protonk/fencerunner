@@ -67,7 +67,7 @@ single command now executes the entire suite.
 | --- | --- |
 | Boundary object schema + payload semantics | `boundary_object_schema`, `boundary_object_round_trips_structs`, `capabilities_schema_version_serializes_in_json` |
 | Capability catalog + context wiring | `load_real_catalog_smoke`, `repository_lookup_context_matches_capabilities`, `capability_snapshot_serializes_to_expected_shape` |
-| Helper binaries & CLI ergonomics | `json_extract_*`, `portable_path_relpath_*`, `detect_stack_reports_expected_sandbox_modes`, `contract_gate_*`, `fence_bang_*` |
+| Helper binaries & CLI ergonomics | `json_extract_*`, `portable_path_relpath_*`, `detect_stack_reports_expected_sandbox_modes`, `contract_gate_*`, `fence_bang_*`, `fence_rattle_*` |
 | Workspace + sandbox guarantees | `workspace_root_fallback`, `workspace_tmpdir_*`, `probe_resolution_guards`, `baseline_no_codex_smoke` |
 | Probe contracts & fixtures | `harness_smoke_probe_fixture`, `dynamic_probe_contract_accepts_fixture`, `static_probe_contract_*` |
 

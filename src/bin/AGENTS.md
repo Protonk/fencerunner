@@ -57,6 +57,21 @@ update these helpers together.
   - Keep probe filtering (`PROBES`, `PROBES_RAW`) and mode selection logic in
     sync with docs; most automation depends on these env vars.
 
+### `fence-rattle`
+- **Purpose:** Back `codex-fence --rattle` by selecting a constrained probe set
+  (by capability id or explicit probe ids) and delegating execution to
+  `fence-bang` so the existing probe→record pipeline stays untouched.
+- **Expectations:**
+  - Enforce the CLI contract: `--rattle` requires exactly one of `--cap` or
+    `--probe`, optional `--mode`, `--repeat`, and `--list-only`.
+  - Reuse the bundled capability catalog when resolving `--cap` and surface
+    clear errors for unknown capabilities or missing probes.
+  - Keep list-only/dry-run output human-readable and deterministic (sorted
+    probe ids) so it can be diffed in scripts.
+  - Execute probes by calling `fence-bang` with the resolved `PROBES`/`MODES`
+    environment so cfbo-v1 emission, sandbox handling, and error collection
+    remain identical to `--bang`.
+
 ### `fence-listen`
 - **Purpose:** Read cfbo-v1 JSON from stdin and display a human summary.
 - **Expectations:**

@@ -418,6 +418,236 @@ exit 0
     Ok(())
 }
 
+// Smoke-tests the codex-fence --rattle CLI end-to-end with a single probe.
+#[test]
+fn fence_rattle_runs_single_probe() -> Result<()> {
+    let repo_root = repo_root();
+    let _guard = repo_guard();
+    let fixture = FixtureProbe::install(&repo_root, "tests_fixture_probe")?;
+
+    let codex_fence = helper_binary(&repo_root, "codex-fence");
+    let mut cmd = Command::new(&codex_fence);
+    cmd.arg("--rattle")
+        .arg("--probe")
+        .arg(fixture.probe_id())
+        .arg("--mode")
+        .arg("baseline")
+        .env("CODEX_FENCE_PREFER_TARGET", "1");
+    let output = run_command(cmd)?;
+    let stdout = String::from_utf8(output.stdout).context("rattle stdout utf-8")?;
+    let lines: Vec<&str> = stdout
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty())
+        .collect();
+    assert_eq!(lines.len(), 1, "expected exactly one record for a single probe+mode");
+    let (record, _) = parse_boundary_object(lines[0].as_bytes())?;
+    assert_eq!(record.probe.id, fixture.probe_id());
+    assert_eq!(record.run.mode, "baseline");
+
+    Ok(())
+}
+
+// Verifies --repeat fans out through fence-bang and yields multiple boundary objects.
+#[test]
+fn fence_rattle_repeats_probe_runs() -> Result<()> {
+    let repo_root = repo_root();
+    let _guard = repo_guard();
+    let fixture = FixtureProbe::install(&repo_root, "tests_fixture_probe")?;
+
+    let rattle = helper_binary(&repo_root, "fence-rattle");
+    let mut cmd = Command::new(&rattle);
+    cmd.arg("--probe")
+        .arg(fixture.probe_id())
+        .arg("--mode")
+        .arg("baseline")
+        .arg("--repeat")
+        .arg("2")
+        .env("CODEX_FENCE_PREFER_TARGET", "1");
+    let output = run_command(cmd)?;
+    let stdout = String::from_utf8(output.stdout).context("repeat stdout utf-8")?;
+    let lines: Vec<&str> = stdout
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty())
+        .collect();
+    assert_eq!(lines.len(), 2, "--repeat 2 should emit two boundary objects");
+    for line in lines {
+        let (record, _) = parse_boundary_object(line.as_bytes())?;
+        assert_eq!(record.probe.id, fixture.probe_id());
+        assert_eq!(record.run.mode, "baseline");
+    }
+
+    Ok(())
+}
+
+// Ensures capability selection resolves the bundled catalog and runs every probe in that slice.
+#[test]
+fn fence_rattle_runs_capability_subset() -> Result<()> {
+    let repo_root = repo_root();
+    let _guard = repo_guard();
+    let fixture = FixtureProbe::install(&repo_root, "tests_fixture_probe")?;
+
+    let rattle = helper_binary(&repo_root, "fence-rattle");
+    let mut cmd = Command::new(&rattle);
+    cmd.arg("--cap")
+        .arg("cap_fs_read_workspace_tree")
+        .arg("--mode")
+        .arg("baseline")
+        .env("CODEX_FENCE_PREFER_TARGET", "1");
+    let output = run_command(cmd)?;
+    let stdout = String::from_utf8(output.stdout).context("capability stdout utf-8")?;
+    let lines: Vec<&str> = stdout
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty())
+        .collect();
+    assert!(
+        lines.len() >= 1,
+        "capability selection should emit at least one boundary object"
+    );
+    let mut saw_fixture = false;
+    for line in lines {
+        let (record, _) = parse_boundary_object(line.as_bytes())?;
+        if record.probe.id == fixture.probe_id() {
+            saw_fixture = true;
+        }
+        assert_eq!(record.run.mode, "baseline");
+    }
+    assert!(
+        saw_fixture,
+        "capability selection should include the installed fixture probe"
+    );
+
+    Ok(())
+}
+
+// Dry-run listing should summarize the plan without emitting JSON.
+#[test]
+fn fence_rattle_list_only_reports_plan() -> Result<()> {
+    let repo_root = repo_root();
+    let _guard = repo_guard();
+    let _fixture = FixtureProbe::install(&repo_root, "tests_fixture_probe")?;
+
+    let rattle = helper_binary(&repo_root, "fence-rattle");
+    let mut cmd = Command::new(&rattle);
+    cmd.arg("--cap")
+        .arg("cap_fs_read_workspace_tree")
+        .arg("--mode")
+        .arg("baseline")
+        .arg("--list-only")
+        .env("CODEX_FENCE_PREFER_TARGET", "1");
+    let output = run_command(cmd)?;
+    let stdout = String::from_utf8(output.stdout).context("list-only stdout utf-8")?;
+    assert!(
+        stdout.contains("codex-fence rattle (dry-run)"),
+        "list-only output should include the dry-run banner"
+    );
+    assert!(
+        stdout.contains("modes: baseline"),
+        "list-only output should echo the resolved modes"
+    );
+    assert!(
+        stdout.contains("tests_fixture_probe"),
+        "list-only output should mention the planned probe ids"
+    );
+
+    Ok(())
+}
+
+// Error handling: unknown probe id should surface a descriptive failure.
+#[test]
+fn fence_rattle_errors_on_unknown_probe() -> Result<()> {
+    let repo_root = repo_root();
+    let rattle = helper_binary(&repo_root, "fence-rattle");
+    let output = Command::new(&rattle)
+        .arg("--probe")
+        .arg("does_not_exist")
+        .arg("--mode")
+        .arg("baseline")
+        .env("CODEX_FENCE_PREFER_TARGET", "1")
+        .output()
+        .context("failed to execute fence-rattle unknown probe")?;
+    assert!(
+        !output.status.success(),
+        "fence-rattle should fail for unknown probe ids"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("Probe not found"),
+        "stderr should explain the unknown probe; got: {stderr}"
+    );
+    Ok(())
+}
+
+// Error handling: unknown capability should be rejected before execution.
+#[test]
+fn fence_rattle_errors_on_unknown_capability() -> Result<()> {
+    let repo_root = repo_root();
+    let rattle = helper_binary(&repo_root, "fence-rattle");
+    let output = Command::new(&rattle)
+        .arg("--cap")
+        .arg("cap_does_not_exist")
+        .arg("--mode")
+        .arg("baseline")
+        .env("CODEX_FENCE_PREFER_TARGET", "1")
+        .output()
+        .context("failed to execute fence-rattle unknown capability")?;
+    assert!(
+        !output.status.success(),
+        "fence-rattle should fail for unknown capabilities"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("unknown capability"),
+        "stderr should explain the missing capability; got: {stderr}"
+    );
+    Ok(())
+}
+
+// Validation: a selector is required, and providing both should error.
+#[test]
+fn fence_rattle_selector_validation() -> Result<()> {
+    let repo_root = repo_root();
+    let rattle = helper_binary(&repo_root, "fence-rattle");
+
+    let missing = Command::new(&rattle)
+        .arg("--mode")
+        .arg("baseline")
+        .env("CODEX_FENCE_PREFER_TARGET", "1")
+        .output()
+        .context("failed to execute fence-rattle without selector")?;
+    assert!(
+        !missing.status.success(),
+        "--rattle should fail when --cap/--probe are both absent"
+    );
+    let missing_err = String::from_utf8_lossy(&missing.stderr);
+    assert!(
+        missing_err.contains("--cap or --probe"),
+        "missing-selector error should mention required flags; stderr: {missing_err}"
+    );
+
+    let both = Command::new(&rattle)
+        .arg("--cap")
+        .arg("cap_fs_read_workspace_tree")
+        .arg("--probe")
+        .arg("fs_read_workspace_readme")
+        .env("CODEX_FENCE_PREFER_TARGET", "1")
+        .output()
+        .context("failed to execute fence-rattle with conflicting selectors")?;
+    assert!(
+        !both.status.success(),
+        "--rattle should fail when both --cap and --probe are provided"
+    );
+    let both_err = String::from_utf8_lossy(&both.stderr);
+    assert!(
+        both_err.contains("exactly one"),
+        "combined-selector error should mention exclusivity; stderr: {both_err}"
+    );
+
+    Ok(())
+}
+
 // Confirms the static contract gate accepts the canonical fixture probe.
 #[test]
 fn static_probe_contract_accepts_fixture() -> Result<()> {

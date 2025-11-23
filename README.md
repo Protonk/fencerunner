@@ -10,6 +10,7 @@ writes every observation down as JSON. It never talks to models; it just asks
 
 - Build the helper binaries: `make build-bin`
 - Run everything: `codex-fence --bang`
+- Target a subset: `codex-fence --rattle --cap <capability-id>`
 - Read what happened: `codex-fence --bang | codex-fence --listen`
 
 Probes are single Bash scripts under `probes/`, one action each, emitting one
@@ -39,8 +40,9 @@ Everything in the repo exists to turn a capability into an auditable signal:
 4. **Serialization**: `emit-record` validates capability IDs, pulls stack info
    from `detect-stack`, and serializes a cfbo-v1 record. Everything is strict:
    bad flags are fatal, capability IDs must exist in the catalog. [docs/boundary_object.md](docs/boundary_object.md) contains field-by-field detail.
-5. **Signals**: `codex-fence --bang` streams cfbo-v1 JSON per probe/mode.
-  Capture the NDJSON anywhere you like to diff across modes, commits, or hosts.
+5. **Signals**: `codex-fence --bang` streams cfbo-v1 JSON per probe/mode while
+   `codex-fence --rattle` does the same for a selected subset. Capture the
+   NDJSON anywhere you like to diff across modes, commits, or hosts.
 
 ### Probes
 
@@ -78,6 +80,7 @@ make install PREFIX=~/.local   # optional: install codex-fence globally
 
 - Run a single probe: `bin/fence-run baseline fs_outside_workspace`
 - Sweep modes: `codex-fence --bang` (override `MODES="baseline codex-sandbox"` to limit modes)
+- Iterate on a capability/probe: `codex-fence --rattle --cap cap_fs_read_workspace_tree`
 - Stream + listen: `codex-fence --bang | codex-fence --listen`
 
 ## Directory map

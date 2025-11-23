@@ -36,6 +36,7 @@ struct Cli {
 enum CommandTarget {
     Bang,
     Listen,
+    Rattle,
 }
 
 impl CommandTarget {
@@ -43,6 +44,7 @@ impl CommandTarget {
         match self {
             CommandTarget::Bang => "fence-bang",
             CommandTarget::Listen => "fence-listen",
+            CommandTarget::Rattle => "fence-rattle",
         }
     }
 }
@@ -63,6 +65,7 @@ impl Cli {
         let command = match flag_str {
             "--bang" | "-b" => CommandTarget::Bang,
             "--listen" | "-l" => CommandTarget::Listen,
+            "--rattle" => CommandTarget::Rattle,
             "--help" | "-h" => usage(0),
             _ => usage(1),
         };
@@ -77,7 +80,7 @@ impl Cli {
 
 fn usage(code: i32) -> ! {
     eprintln!(
-        "Usage: codex-fence (--bang | --listen) [args]\n\nCommands:\n  --bang, -b   Run the probe matrix and emit cfbo-v1 records to stdout (NDJSON).\n  --listen, -l Read cfbo-v1 JSON from stdin and print a human summary.\n\nExample:\n  codex-fence --bang | codex-fence --listen"
+        "Usage: codex-fence (--bang | --listen | --rattle) [args]\n\nCommands:\n  --bang, -b   Run the full probe matrix once and emit cfbo-v1 records (NDJSON).\n  --listen, -l Read cfbo-v1 JSON from stdin and print a human summary.\n  --rattle     Run a targeted probe subset (see fence-rattle --help).\n\nExamples:\n  codex-fence --bang | codex-fence --listen\n  codex-fence --rattle --probe fs_read_workspace_readme --mode baseline"
     );
     std::process::exit(code);
 }
