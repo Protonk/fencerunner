@@ -1,10 +1,10 @@
 # AGENTS.md
 
+`README.md` explains why `codex-fence` exists, how probes run across modes, and the harness vocabulary.`CONTRIBUTING.md` explains how to think about making changes to the project. Both are brief; skim them before continuing.
+
 ## Start here
 
 Treat this file as a router: decide which subsystem you are editing, then obey the `*/AGENTS.md` in that directory so guidance stays layered instead of duplicated here.
-- `README.md` explains why `codex-fence` exists, how probes run across modes, and the harness vocabulary—skim it before touching anything else.
-- `CONTRIBUTING.md` is the repo-level contract for changes outside a single probe; it encodes the portability + documentation rules you must honor.
 - `probes/AGENTS.md` — Probe author contract: one observable action per script, cfbo-v1 emission rules, capability metadata selection.
 - `tests/AGENTS.md` — Structure of the test harness, fixture locations, and guidance for fast vs. second-tier suites.
 - `src/AGENTS.md` - Structure and expectations for Rust code, exclusive of the helpers in...
