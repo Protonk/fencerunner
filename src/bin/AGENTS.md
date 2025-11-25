@@ -42,8 +42,10 @@ messages actionable.
 
 ### `fence-rattle`
 Backs `codex-fence --rattle` by selecting probes (by capability id or explicit
-ids) and delegating execution to `fence-bang`. Enforce the flag contract, use
-the bundled catalog for `--cap`, and keep list-only output deterministic.
+ids) and delegating execution to `fence-bang`. Enforce the flag contract (cap
+or probe required, `--mode` limited to baseline/codex-sandbox/codex-full with
+the same defaults as `fence-bang`), use the bundled catalog for `--cap`, and
+keep list-only output deterministic.
 
 ### `fence-test`
 Runs `tools/validate_contract_gate.sh` with predictable env/repo detection.

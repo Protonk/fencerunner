@@ -86,7 +86,7 @@ You can also invoke the compiled binary directly from `target/release/codex-fenc
 
 ### Run probes
 
-Run the full matrix of probes in all configured modes and stream NDJSON to stdout:
+Run the full matrix of probes in all available modes (defaults to `baseline`, plus `codex-sandbox` and `codex-full` when the Codex CLI is on `PATH`) and stream NDJSON to stdout:
 
 ```sh
 codex-fence --bang
@@ -95,14 +95,14 @@ codex-fence --bang
 Limit the run to a subset of modes:
 
 ```sh
-MODES="baseline codex-sandbox" codex-fence --bang
+MODES="baseline codex-sandbox codex-full" codex-fence --bang
 ```
 
-With `--rattle` you can select a capability or probe by id:
+With `--rattle` you can select a capability or probe by id and optionally restrict the modes with `--mode` (repeatable):
 
 ```sh
-codex-fence --rattle --cap cap_fs_read_workspace_tree
-codex-fence --rattle --probe fs_outside_workspace
+codex-fence --rattle --cap cap_fs_read_workspace_tree --mode codex-sandbox --mode codex-full
+codex-fence --rattle --probe fs_outside_workspace --mode baseline
 ```
 
 ### Inspect what happened
