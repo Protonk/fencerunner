@@ -1,4 +1,4 @@
-//! Translates probe CLI inputs into a cfbo-v1 boundary object.
+//! Translates probe CLI inputs into a boundary-event object.
 //!
 //! This binary is the authoritative serializer for probe output. It validates
 //! capability IDs against the shipped catalog, shells out to `detect-stack` for
@@ -11,7 +11,7 @@ use fencerunner::emit_support::{
     validate_capability_id, validate_status,
 };
 use fencerunner::{
-    BoundarySchema, CapabilityId, CapabilityIndex, CapabilitySnapshot, find_repo_root,
+    BoundarySchema, CapabilityId, CapabilityIndex, CapabilitySnapshot, StackInfo, find_repo_root,
     resolve_boundary_schema_path, resolve_catalog_path, resolve_helper_binary, split_list,
 };
 use serde_json::{Value, json};
@@ -63,8 +63,12 @@ fn run() -> Result<()> {
     let payload = args.payload.build()?;
     let operation_args = args.operation_args.build("operation args")?;
 
-    let stack_json = run_command_json(&detect_stack, &[&args.run_mode])
+    let stack_raw = run_command_json(&detect_stack, &[&args.run_mode])
         .with_context(|| format!("Failed to execute {}", detect_stack.display()))?;
+    let stack: StackInfo = serde_json::from_value(stack_raw.clone()).context(
+        "detect-stack emitted JSON that does not match the current stack schema",
+    )?;
+    let stack_json = serde_json::to_value(stack)?;
 
     let workspace_root = resolve_workspace_root()?;
 
@@ -102,9 +106,16 @@ fn run() -> Result<()> {
             boundary_schema_path.display()
         )
     })?;
+    let schema_key = boundary_schema.schema_key().ok_or_else(|| {
+        anyhow!(
+            "boundary schema at {} is missing a schema_key; provide a descriptor file",
+            boundary_schema_path.display()
+        )
+    })?;
 
     let record = json!({
         "schema_version": boundary_schema.schema_version(),
+        "schema_key": schema_key,
         "capabilities_schema_version": capabilities_schema_version,
         "stack": stack_json,
         "probe": {
@@ -139,7 +150,7 @@ fn run() -> Result<()> {
 
 /// Parsed command-line arguments for a single record emission.
 ///
-/// Fields mirror the cfbo envelope; most values are required because probes are
+/// Fields mirror the boundary-event envelope; most values are required because probes are
 /// expected to normalize outcomes themselves before calling this binary.
 struct CliArgs {
     catalog_path: Option<String>,
@@ -174,8 +185,8 @@ impl CliArgs {
                     let value = next_value(&mut args, "--catalog")?;
                     config.catalog_path = Some(value);
                 }
-                "--boundary-schema" => {
-                    let value = next_value(&mut args, "--boundary-schema")?;
+                "--boundary" => {
+                    let value = next_value(&mut args, "--boundary")?;
                     config.boundary_schema_path = Some(value);
                 }
                 "--run-mode" => config.run_mode = Some(next_value(&mut args, "--run-mode")?),

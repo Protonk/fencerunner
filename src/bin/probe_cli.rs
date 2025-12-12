@@ -82,7 +82,7 @@ impl Cli {
 
 fn usage(code: i32) -> ! {
     eprintln!(
-        "Usage: probe (--matrix | --listen | --target) [args]\n\nCommands:\n  --matrix, -m   Run the full probe matrix once and emit cfbo-v1 records (NDJSON).\n  --listen, -l   Read cfbo-v1 JSON from stdin and print a human summary.\n  --target, -t   Run a targeted probe subset (see probe-target --help).\n\nExamples:\n  probe --matrix | probe --listen\n  probe --target --probe fs_read_workspace_readme --mode baseline"
+        "Usage: probe (--matrix | --listen | --target) [args]\n\nCommands:\n  --matrix, -m   Run the full probe matrix once and emit boundary records (NDJSON).\n  --listen, -l   Read boundary-object JSON from stdin and print a human summary.\n  --target, -t   Run a targeted probe subset (see probe-target --help).\n\nExamples:\n  probe --matrix | probe --listen\n  probe --target --probe fs_read_workspace_readme --mode baseline"
     );
     std::process::exit(code);
 }

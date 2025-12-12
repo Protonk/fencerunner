@@ -100,28 +100,3 @@ pub fn resolve_probe_metadata(
         primary_capability,
     })
 }
-
-pub fn classify_preflight_error(stderr: &str) -> (&'static str, Option<&'static str>, String) {
-    // Pattern-match common external sandbox errors to normalize cfbo result fields.
-    // This keeps preflight failures consistent with probe results.
-    let lower = stderr.to_ascii_lowercase();
-    if lower.contains("operation not permitted") {
-        (
-            "denied",
-            Some("EPERM"),
-            "external sandbox preflight denied (operation not permitted)".to_string(),
-        )
-    } else if lower.contains("permission denied") {
-        (
-            "denied",
-            Some("EACCES"),
-            "external sandbox preflight denied (permission denied)".to_string(),
-        )
-    } else {
-        (
-            "error",
-            None,
-            "external sandbox preflight failed".to_string(),
-        )
-    }
-}

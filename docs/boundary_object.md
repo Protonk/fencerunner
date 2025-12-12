@@ -1,36 +1,58 @@
-# Probe Contract and Boundary Object (cfbo-v1)
+# Probe Contract and Boundary Objects (boundary_event_v1 pattern)
 
-`probe` records every probe run as a versioned JSON “boundary object”. Version **cfbo-v1** is the current contract. It incorporates the current capability catalog (via the Rust capability index backed by the catalog schema and bundled catalog) so every record carries a snapshot of the capability metadata it referenced.
+`probe` records every probe run as a versioned JSON boundary object. The
+structure comes from the **boundary_event_v1** pattern at
+`schema/boundary_object_schema.json`. Instances are selected by
+**boundary_schema_v1** descriptors such as `catalogs/cfbo-v1.json`, which
+declare:
 
-Each boundary object captures *one* probe execution in one run mode. Probes are tiny scripts stored under `probes/<probe_id>.sh` (filenames match the capability catalog’s probe ids) that:
+- the boundary schema key (`schema_key`, e.g., `cfbo-v1`),
+- the pattern version they expect (`pattern_version`, e.g., `boundary_event_v1`),
+- and the path to the shared pattern (`schema_path`).
+
+Each boundary object captures *one* probe execution in one run mode. Probes are
+tiny scripts stored under `probes/<probe_id>.sh` that:
 
 1. Use `#!/usr/bin/env bash` with `set -euo pipefail`.
-2. Perform exactly one observable action (write a file, open a socket, read `sysctl`, etc.).
-3. Collect the stdout/stderr snippets needed to describe that action plus any structured payload.
-4. Call `bin/emit-record` once with `--run-mode "$FENCE_RUN_MODE"` plus the metadata described below.
-5. Exit with status `0` after emitting JSON. They must not print anything else to stdout; use stderr only for debugging.
+2. Perform exactly one observable action (write a file, open a socket, read
+   `sysctl`, etc.).
+3. Collect the stdout/stderr snippets needed to describe that action plus any
+   structured payload.
+4. Call `bin/emit-record` once with `--run-mode "$FENCE_RUN_MODE"` plus the
+   metadata described below.
+5. Exit with status `0` after emitting JSON. They must not print anything else
+   to stdout; use stderr only for debugging.
 
 See `probes/AGENTS.md` for the workflow details expected from probe authors.
 
 ## Formal commitments
 
-The project commits to the cfbo-v1 contract as specified by:
+The project commits to the boundary_event_v1 pattern as specified by:
 
-- The boundary-schema descriptor schema at `schema/boundary_object_schema.json` plus the bundled descriptor `catalogs/cfbo-v1.json` (which points at the concrete cfbo-v1 schema).
-- The machine-readable cfbo-v1 JSON schema at `schema/boundary_object.json`.
+- The canonical boundary-event JSON schema at `schema/boundary_object_schema.json`
+  (`schema_version: "boundary_event_v1"`).
+- Boundary schema descriptors under `catalogs/` (defaults recorded in
+  `catalogs/defaults.json`, initially `catalogs/cfbo-v1.json`)
+  that use `schema_version: "boundary_schema_v1"` to name the active
+  `schema_key`, declare a `pattern_version`, and point at the canonical pattern.
 - This document’s field-by-field explanations.
 
-Within cfbo-v1, the required fields, field names, and semantics described below are stable. Changes that break compatibility (renaming fields, relaxing/adding required fields, or altering meanings) require creating a new schema version and updating this document to match.
+Within boundary_event_v1, the required fields, field names, and semantics
+described below are stable. Structural changes require a new pattern version
+and matching documentation/tests. Adding a new schema key for the same pattern
+only requires a new descriptor that points at the existing pattern file.
 
-## Boundary object layout (cfbo-v1)
+## Boundary object layout (boundary_event_v1 + schema_key)
 
-The machine-readable definition lives in the schema referenced by the active descriptor (default: `catalogs/cfbo-v1.json` -> `schema/boundary_object.json`) and is enforced by `bin/emit-record`.
+The machine-readable definition lives in `schema/boundary_object_schema.json`
+(referenced by `catalogs/cfbo-v1.json`) and is enforced by `bin/emit-record`.
 
 | Field | Required | Description |
 | --- | --- | --- |
-| `schema_version` | yes | Always `"cfbo-v1"`. |
+| `schema_version` | yes | Always `"boundary_event_v1"` (the pattern version). |
+| `schema_key` | yes | Boundary schema key from the descriptor (e.g., `cfbo-v1`). |
 | `capabilities_schema_version` | yes | The catalog key from the loaded capability catalog. It is a string with no whitespace such as `macOS_codex_v1`. |
-| `stack` | yes | Fingerprint of the external CLI (when present) and OS stack that hosted the probe. |
+| `stack` | yes | Sandbox/OS fingerprint for the host that ran the probe. |
 | `probe` | yes | Identity and capability linkage for the probe implementation. |
 | `run` | yes | Execution metadata for this invocation (mode, workspace, command). This harness intentionally omits timestamps so records stay stateless. |
 | `operation` | yes | Description of the sandbox-facing operation being attempted. |
@@ -44,14 +66,13 @@ Populated automatically by `bin/detect-stack`.
 
 | Field | Required | Meaning |
 | --- | --- | --- |
-| `external_cli_version` | yes (nullable) | Output of the configured external CLI `--version` if available, else `null`. |
-| `external_profile` | yes (nullable) | Runner profile/mode if known (`FENCE_EXTERNAL_PROFILE` or `FENCE_CODEX_PROFILE`). |
-| `sandbox_mode` | yes (nullable) | `read-only`, `workspace-write`, `danger-full-access`, or `null` for baseline runs. |
+| `sandbox_mode` | yes (nullable) | `read-only`, `workspace-write`, `danger-full-access`, or `null` when unspecified. |
 | `os` | yes | Value from `uname -srm`. |
 
 ### `probe`
 
-`bin/emit-record` validates capability IDs by loading the bundled capability catalog directly (the legacy adapter remains for automation).
+`bin/emit-record` validates capability IDs by loading the bundled capability
+catalog directly (the legacy adapter remains for automation).
 
 | Field | Required | Meaning |
 | --- | --- | --- |
@@ -60,18 +81,17 @@ Populated automatically by `bin/detect-stack`.
 | `primary_capability_id` | yes | Capability tested by this probe. Must match the capability catalog. |
 | `secondary_capability_ids` | yes | Zero or more supporting capability ids (unique, may be empty). |
 
-
-
 ### `run`
 
-cfbo-v1 deliberately does **not** capture timestamps or run durations. The harness stays stateless; downstream consumers that need clocks or diffing data must add it outside the boundary object.
+boundary_event_v1 deliberately does **not** capture timestamps or run durations.
+The harness stays stateless; downstream consumers that need clocks or diffing
+data must add it outside the boundary object.
 
 | Field | Required | Meaning |
 | --- | --- | --- |
-| `mode` | yes | `baseline`, `codex-sandbox`, or `codex-full`; matches `bin/probe-exec`. |
+| `mode` | yes | `baseline`; matches `bin/probe-exec`. |
 | `workspace_root` | yes (nullable) | Canonical workspace root exported by `bin/probe-exec` (`FENCE_WORKSPACE_ROOT`), falling back to `git rev-parse` / `pwd` if unset. |
 | `command` | yes | Human/machine-usable string describing the actual command. |
-
 
 ### `operation`
 
@@ -86,7 +106,8 @@ Describes the resource being touched.
 
 ### `result`
 
-Normalized observation of what happened, regardless of how the probe implemented it.
+Normalized observation of what happened, regardless of how the probe implemented
+it.
 
 | Field | Required | Meaning |
 | --- | --- | --- |
@@ -99,11 +120,12 @@ Normalized observation of what happened, regardless of how the probe implemented
 Interpretation of `observed_result`:
 
 - `success`: the sandbox allowed the operation outright.
-- `denied`: explicitly blocked by sandbox/policy (permission denied, EPERM, etc.).
-- `partial`: some sub-step succeeded while another failed; note details in `message` / `payload.raw`.
-- `error`: probe failed for reasons unrelated to sandbox policy (implementation bug, transient infra error).
-
-cfbo-v1 does not carry runtime durations. The probe contract stays clock-free; any per-probe timings shown by development tooling are diagnostics for authors and do not reach the boundary object.
+- `denied`: explicitly blocked by sandbox/policy (permission denied, EPERM,
+  etc.).
+- `partial`: some sub-step succeeded while another failed; note details in
+  `message` / `payload.raw`.
+- `error`: probe failed for reasons unrelated to sandbox policy (implementation
+  bug, transient infra error).
 
 ### `payload`
 
@@ -117,7 +139,9 @@ Catch-all for probe-specific breadcrumbs. Keep these small (<4 KB).
 
 ### `capability_context`
 
-Every record includes the capability snapshot(s) that were resolved when the probe was emitted. This lets downstream tooling trace exactly which schema version and metadata were in effect.
+Every record includes the capability snapshot(s) that were resolved when the
+probe was emitted. This lets downstream tooling trace exactly which catalog key
+and metadata were in effect.
 
 | Field | Required | Meaning |
 | --- | --- | --- |
@@ -126,11 +150,13 @@ Every record includes the capability snapshot(s) that were resolved when the pro
 
 ## Example
 
-A trimmed record from `probes/fs_outside_workspace.sh` (writes outside the workspace and expects a denial):
+A trimmed record from `probes/fs_outside_workspace.sh` (writes outside the
+workspace and expects a denial):
 
 ```json
 {
-  "schema_version": "cfbo-v1",
+  "schema_version": "boundary_event_v1",
+  "schema_key": "cfbo-v1",
   "capabilities_schema_version": "macOS_codex_v1",
   "probe": {
     "id": "fs_outside_workspace",
@@ -139,7 +165,7 @@ A trimmed record from `probes/fs_outside_workspace.sh` (writes outside the works
     "secondary_capability_ids": []
   },
   "run": {
-    "mode": "codex-sandbox",
+    "mode": "baseline",
     "workspace_root": "/Users/example/project",
     "command": "printf 'probe write ...' >> '/tmp/probe-outside-root-test'"
   },
@@ -170,9 +196,7 @@ A trimmed record from `probes/fs_outside_workspace.sh` (writes outside the works
     "secondary": []
   },
   "stack": {
-    "external_cli_version": "codex 1.2.3",
-    "external_profile": "Auto",
-    "sandbox_mode": "workspace-write",
+    "sandbox_mode": null,
     "os": "Darwin 23.3.0 arm64"
   }
 }
@@ -180,12 +204,19 @@ A trimmed record from `probes/fs_outside_workspace.sh` (writes outside the works
 
 ## Updating the commitments
 
-When the boundary-object contract needs to change in a backward-incompatible way, follow this procedure:
+When the boundary-object contract needs to change, follow this procedure:
 
-1. Add a new schema file (for example `schema/boundary_object_cfbo_v2.json`) with an updated `$id`, `title`, and `schema_version` constant while preserving the prior file unchanged, and add a matching descriptor under `catalogs/` that passes `schema/boundary_object_schema.json`.
-2. Update this document to describe the new version, including any added or removed fields and the rationale for the change.
-3. Refresh `AGENTS.md`, `README.md`, `docs/probes.md`, and any tooling that validates or emits boundary objects (`bin/emit-record`, `tests/`, probe helpers) so they reference and enforce the new schema.
-4. Document the migration expectations (whether older versions are still accepted, and for how long) alongside the new version announcement.
-5. Use `--boundary-schema` (or `FENCE_BOUNDARY_SCHEMA_PATH`) to validate or emit against a drop-in schema file when experimenting with new versions; otherwise set `FENCE_BOUNDARY_SCHEMA_CATALOG_PATH` to point at an alternate descriptor. The active schema’s `schema_version` will be written into emitted records.
-
-Until such a change is made, cfbo-v1 remains the committed contract.
+1. For structural changes, introduce a new pattern version in
+   `schema/boundary_object_schema.json` (and update `pattern_version` in any
+   descriptors that target it). Keep prior patterns available for consumers
+   that still need them.
+2. For a new boundary schema key using the same pattern, add a new
+   `boundary_schema_v1` descriptor under `catalogs/` with its own `key`,
+   `pattern_version`, and `schema_path` pointing at the canonical pattern file.
+3. Update this document, `AGENTS.md`, `README.md`, probe docs, and any tooling
+   (`bin/emit-record`, tests, listeners) that validates or emits boundary
+   objects so the new pattern and descriptors remain in lockstep.
+4. Use `--boundary` (or `BOUNDARY_PATH`) to validate or emit against a drop-in
+   descriptor when experimenting with new schema keys or pattern versions. The
+   `schema_version` in emitted records reflects the pattern version; the
+   `schema_key` reflects the descriptor key.

@@ -9,22 +9,21 @@ use fencerunner::emit_support::{
     JsonObjectBuilder, PayloadArgs, TextSource, normalize_secondary_ids, validate_status,
 };
 use fencerunner::fence_run_support::{
-    WorkspaceOverride, canonicalize_path, classify_preflight_error, resolve_probe_metadata,
-    workspace_plan_from_override, workspace_tmpdir_plan,
+    WorkspaceOverride, canonicalize_path, resolve_probe_metadata, workspace_plan_from_override,
+    workspace_tmpdir_plan,
 };
 use fencerunner::{
-    self, BoundaryObject, BoundarySchema, BoundarySchemaCatalog, CapabilityCategory,
+    self, BoundaryObject, BoundarySchema, CANONICAL_BOUNDARY_SCHEMA_PATH, CapabilityCategory,
     CapabilityContext, CapabilityId, CapabilityIndex, CapabilityLayer, CapabilitySnapshot,
-    CatalogKey, CatalogRepository, DEFAULT_BOUNDARY_SCHEMA_CATALOG_PATH, DEFAULT_CATALOG_PATH,
-    OperationInfo, Payload, Probe, ProbeInfo, ProbeMetadata, ResultInfo, RunInfo, StackInfo,
-    external_cli_present, list_probes, load_catalog_from_path, resolve_boundary_schema_path,
-    resolve_helper_binary, resolve_probe,
+    CatalogKey, CatalogRepository, OperationInfo, Payload, Probe, ProbeInfo, ProbeMetadata,
+    ResultInfo, RunInfo, StackInfo, default_boundary_descriptor_path, default_catalog_path,
+    list_probes, load_catalog_from_path, resolve_boundary_schema_path, resolve_helper_binary,
+    resolve_probe,
 };
 use jsonschema::JSONSchema;
 use serde_json::{Value, json};
 use std::collections::{BTreeMap, BTreeSet};
 use std::env;
-use std::ffi::OsString;
 use std::fs::{self, File};
 use std::io::Write;
 use std::os::unix::fs::{PermissionsExt, symlink};
@@ -35,7 +34,7 @@ use std::sync::{Mutex, MutexGuard, OnceLock};
 use support::{helper_binary, make_executable, repo_root, run_command};
 use tempfile::{NamedTempFile, TempDir};
 
-// Ensures boundary objects emitted via emit-record satisfy the cfbo-v1 schema and
+// Ensures boundary objects emitted via emit-record satisfy the boundary schema and
 // contain the required contextual metadata.
 #[test]
 fn boundary_object_schema() -> Result<()> {
@@ -78,12 +77,26 @@ fn boundary_object_schema() -> Result<()> {
         .arg("{\"fixture\":true}")
         .arg("--payload-file")
         .arg(payload_file.path());
-    emit_cmd.env("FENCE_PREFER_TARGET", "1");
+    emit_cmd.env("TEST_PREFER_TARGET", "1");
     let output = run_command(emit_cmd)?;
 
     let (record, value) = parse_boundary_object(&output.stdout)?;
 
     assert_eq!(record.schema_version, boundary_schema_version());
+    assert_eq!(
+        record.schema_key.as_deref(),
+        boundary_schema_key().as_deref()
+    );
+    let schema_key = value
+        .get("schema_key")
+        .and_then(Value::as_str)
+        .expect("schema_key present");
+    assert!(
+        schema_key
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '.' | '-')),
+        "schema_key must match ^[A-Za-z0-9_.-]+$"
+    );
     let cap_schema = value
         .get("capabilities_schema_version")
         .and_then(Value::as_str)
@@ -110,10 +123,7 @@ fn boundary_object_schema() -> Result<()> {
             .unwrap_or(false)
     );
 
-    assert!(matches!(
-        record.run.mode.as_str(),
-        "baseline" | "codex-sandbox" | "codex-full"
-    ));
+    assert_eq!(record.run.mode.as_str(), "baseline");
     assert!(record.run.workspace_root.is_some());
     assert!(
         value
@@ -190,22 +200,13 @@ fn boundary_object_schema() -> Result<()> {
             .unwrap_or(false)
     );
 
-    static BOUNDARY_OBJECT_SCHEMA: OnceLock<Value> = OnceLock::new();
-    let schema = if let Some(existing) = BOUNDARY_OBJECT_SCHEMA.get() {
-        existing
-    } else {
-        let schema_path = resolve_boundary_schema_path(&repo_root, None)?;
-        let schema_value: Value = serde_json::from_reader(File::open(&schema_path)?)?;
-        BOUNDARY_OBJECT_SCHEMA.get_or_init(move || schema_value)
-    };
-    let compiled = JSONSchema::compile(schema)?;
-    if let Err(errors) = compiled.validate(&value) {
-        let details = errors
-            .map(|err| err.to_string())
-            .collect::<Vec<_>>()
-            .join("\n");
-        bail!("boundary object failed schema validation:\n{details}");
-    }
+    static BOUNDARY_OBJECT_SCHEMA: OnceLock<BoundarySchema> = OnceLock::new();
+    let schema = BOUNDARY_OBJECT_SCHEMA.get_or_init(|| {
+        let schema_path =
+            resolve_boundary_schema_path(&repo_root, None).expect("resolve boundary schema");
+        BoundarySchema::load(&schema_path).expect("load boundary schema")
+    });
+    schema.validate(&value)?;
 
     Ok(())
 }
@@ -215,7 +216,7 @@ fn boundary_object_schema() -> Result<()> {
 fn capability_catalog_schema() -> Result<()> {
     let repo_root = repo_root();
     let schema_path = repo_root.join("schema/capability_catalog.schema.json");
-    let catalog_path = repo_root.join(DEFAULT_CATALOG_PATH);
+    let catalog_path = default_catalog_path(&repo_root);
 
     static CATALOG_SCHEMA: OnceLock<Value> = OnceLock::new();
     let schema_value = if let Some(existing) = CATALOG_SCHEMA.get() {
@@ -238,44 +239,47 @@ fn capability_catalog_schema() -> Result<()> {
     Ok(())
 }
 
-// Confirms the bundled boundary schema descriptor satisfies the boundary schema catalog schema.
+// Confirms the bundled boundary schema descriptor embeds the canonical schema.
 #[test]
-fn boundary_schema_descriptor_schema() -> Result<()> {
+fn boundary_schema_matches_canonical() -> Result<()> {
     let repo_root = repo_root();
-    let schema_path = repo_root.join("schema/boundary_object_schema.json");
-    let catalog_path = repo_root.join(DEFAULT_BOUNDARY_SCHEMA_CATALOG_PATH);
+    let descriptor_path = default_boundary_descriptor_path(&repo_root);
+    let canonical_path = repo_root.join(CANONICAL_BOUNDARY_SCHEMA_PATH);
 
-    static BOUNDARY_SCHEMA_SCHEMA: OnceLock<Value> = OnceLock::new();
-    let schema_value = if let Some(existing) = BOUNDARY_SCHEMA_SCHEMA.get() {
-        existing
-    } else {
-        let loaded: Value = serde_json::from_reader(File::open(&schema_path)?)?;
-        BOUNDARY_SCHEMA_SCHEMA.get_or_init(move || loaded)
-    };
-    let catalog_value: Value = serde_json::from_reader(File::open(&catalog_path)?)?;
-
-    let compiled = JSONSchema::compile(schema_value)?;
-    if let Err(errors) = compiled.validate(&catalog_value) {
-        let details = errors
-            .map(|err| err.to_string())
-            .collect::<Vec<_>>()
-            .join("\n");
-        bail!("boundary schema catalog failed validation:\n{details}");
-    }
-
-    let descriptor = BoundarySchemaCatalog::load(&catalog_path)?;
-    let resolved = descriptor.schema.schema_path(&repo_root);
+    let descriptor_value: Value = serde_json::from_reader(File::open(&descriptor_path)?)?;
     assert!(
-        resolved.is_file(),
-        "schema path {} should exist",
-        resolved.display()
+        descriptor_value.get("schema").is_none(),
+        "boundary descriptor should defer to the canonical schema file"
+    );
+
+    let schema_path = descriptor_value
+        .get("schema_path")
+        .and_then(Value::as_str)
+        .context("schema_path missing from boundary descriptor")?;
+    let resolved_schema = descriptor_path
+        .parent()
+        .unwrap_or(&repo_root)
+        .join(schema_path)
+        .canonicalize()
+        .context("canonicalizing schema_path from boundary descriptor")?;
+    assert_eq!(
+        resolved_schema,
+        canonical_path.canonicalize()?,
+        "boundary descriptor should point at the canonical schema"
+    );
+
+    let descriptor_schema = BoundarySchema::load(&descriptor_path)?;
+    let canonical_schema = BoundarySchema::load(&canonical_path)?;
+    assert_eq!(
+        descriptor_schema.schema_version(),
+        canonical_schema.schema_version(),
+        "descriptor and canonical schema should expose the same version"
     );
     assert_eq!(
-        descriptor.schema.key,
-        BoundarySchema::load(&resolved)?.schema_version(),
-        "descriptor key should match schema_version from the boundary schema"
+        descriptor_schema.raw_schema(),
+        canonical_schema.raw_schema(),
+        "descriptor and canonical schema should compile the same payload"
     );
-
     Ok(())
 }
 
@@ -289,7 +293,7 @@ fn harness_smoke_probe_fixture() -> Result<()> {
 
     let mut baseline_cmd = Command::new(helper_binary(&repo_root, "probe-exec"));
     baseline_cmd
-        .env("FENCE_PREFER_TARGET", "1")
+        .env("TEST_PREFER_TARGET", "1")
         .arg("baseline")
         .arg(fixture.probe_id());
     let output = run_command(baseline_cmd)?;
@@ -311,57 +315,6 @@ fn harness_smoke_probe_fixture() -> Result<()> {
     Ok(())
 }
 
-// Verifies baseline mode succeeds without codex binaries while sandbox mode
-// fails when codex is absent from PATH, preventing false positives.
-#[test]
-fn baseline_no_codex_smoke() -> Result<()> {
-    let repo_root = repo_root();
-    let _guard = repo_guard();
-    let fixture = FixtureProbe::install(&repo_root, "tests_fixture_probe")?;
-
-    let sanitized_path = sanitized_path_without_codex()?;
-
-    let probe_run = helper_binary(&repo_root, "probe-exec");
-    let mut baseline_cmd = Command::new(&probe_run);
-    baseline_cmd
-        .env("PATH", &sanitized_path)
-        .env("FENCE_PREFER_TARGET", "1")
-        .arg("baseline")
-        .arg(fixture.probe_id());
-    let baseline_output = run_command(baseline_cmd)?;
-    let (record, _) = parse_boundary_object(&baseline_output.stdout)?;
-    assert_eq!(record.probe.id, fixture.probe_id());
-    assert_eq!(record.result.observed_result, "success");
-
-    let mut codex_full_cmd = Command::new(&probe_run);
-    codex_full_cmd
-        .env("PATH", &sanitized_path)
-        .env("FENCE_PREFER_TARGET", "1")
-        .arg("codex-full")
-        .arg(fixture.probe_id());
-    let codex_full_output = run_command(codex_full_cmd)?;
-    let (full_record, _) = parse_boundary_object(&codex_full_output.stdout)?;
-    assert_eq!(full_record.run.mode, "codex-full");
-    assert_eq!(full_record.probe.id, fixture.probe_id());
-    assert_eq!(full_record.result.observed_result, "success");
-
-    let sandbox_result = Command::new(&probe_run)
-        .env("PATH", &sanitized_path)
-        .env("FENCE_PREFER_TARGET", "1")
-        .arg("codex-sandbox")
-        .arg(fixture.probe_id())
-        .output()
-        .context("failed to execute probe-exec codex-sandbox")?;
-    assert!(
-        !sandbox_result.status.success(),
-        "codex-sandbox unexpectedly succeeded without codex (stdout: {}, stderr: {})",
-        String::from_utf8_lossy(&sandbox_result.stdout),
-        String::from_utf8_lossy(&sandbox_result.stderr)
-    );
-
-    Ok(())
-}
-
 // Checks that workspace_root falls back to the caller's cwd when the env hint
 // is blank, matching legacy agent expectations.
 #[test]
@@ -375,7 +328,7 @@ fn workspace_root_fallback() -> Result<()> {
     fallback_cmd
         .current_dir(temp_run_dir.path())
         .env("FENCE_WORKSPACE_ROOT", "")
-        .env("FENCE_PREFER_TARGET", "1")
+        .env("TEST_PREFER_TARGET", "1")
         .arg("baseline")
         .arg(fixture.probe_id());
     let output = run_command(fallback_cmd)?;
@@ -411,7 +364,7 @@ fn probe_resolution_guards() -> Result<()> {
 
     let abs_result = Command::new(helper_binary(&repo_root, "probe-exec"))
         .arg("baseline")
-        .env("FENCE_PREFER_TARGET", "1")
+        .env("TEST_PREFER_TARGET", "1")
         .arg(&outside_script)
         .output()
         .context("failed to execute probe-exec outside script")?;
@@ -436,7 +389,7 @@ fn probe_resolution_guards() -> Result<()> {
 
     let symlink_result = Command::new(helper_binary(&repo_root, "probe-exec"))
         .arg("baseline")
-        .env("FENCE_PREFER_TARGET", "1")
+        .env("TEST_PREFER_TARGET", "1")
         .arg("tests_probe_resolution_symlink")
         .output()
         .context("failed to execute probe-exec via symlink")?;
@@ -471,7 +424,7 @@ exit 0
         format!("{},{}", broken.probe_id(), good.probe_id()),
     )
     .env("MODES", "baseline")
-    .env("FENCE_PREFER_TARGET", "1");
+    .env("TEST_PREFER_TARGET", "1");
     let output = cmd
         .output()
         .context("failed to execute probe-matrix with malformed probe")?;
@@ -513,7 +466,7 @@ fn probe_target_runs_single_probe() -> Result<()> {
         .arg(fixture.probe_id())
         .arg("--mode")
         .arg("baseline")
-        .env("FENCE_PREFER_TARGET", "1");
+        .env("TEST_PREFER_TARGET", "1");
     let output = run_command(cmd)?;
     let stdout = String::from_utf8(output.stdout).context("target stdout utf-8")?;
     let lines: Vec<&str> = stdout
@@ -548,7 +501,7 @@ fn probe_target_repeats_probe_runs() -> Result<()> {
         .arg("baseline")
         .arg("--repeat")
         .arg("2")
-        .env("FENCE_PREFER_TARGET", "1");
+        .env("TEST_PREFER_TARGET", "1");
     let output = run_command(cmd)?;
     let stdout = String::from_utf8(output.stdout).context("repeat stdout utf-8")?;
     let lines: Vec<&str> = stdout
@@ -583,7 +536,7 @@ fn probe_target_runs_capability_subset() -> Result<()> {
         .arg("cap_fs_read_workspace_tree")
         .arg("--mode")
         .arg("baseline")
-        .env("FENCE_PREFER_TARGET", "1");
+        .env("TEST_PREFER_TARGET", "1");
     let output = run_command(cmd)?;
     let stdout = String::from_utf8(output.stdout).context("capability stdout utf-8")?;
     let lines: Vec<&str> = stdout
@@ -621,7 +574,7 @@ fn proc_paging_stress_probe_emits_expected_record() -> Result<()> {
     let mut cmd = Command::new(&probe_run);
     cmd.arg("baseline")
         .arg("proc_paging_stress")
-        .env("FENCE_PREFER_TARGET", "1");
+        .env("TEST_PREFER_TARGET", "1");
     let output = run_command(cmd)?;
     let (record, value) = parse_boundary_object(&output.stdout)?;
     assert_eq!(record.probe.id, "proc_paging_stress");
@@ -659,7 +612,7 @@ fn probe_target_list_only_reports_plan() -> Result<()> {
         .arg("--mode")
         .arg("baseline")
         .arg("--list-only")
-        .env("FENCE_PREFER_TARGET", "1");
+        .env("TEST_PREFER_TARGET", "1");
     let output = run_command(cmd)?;
     let stdout = String::from_utf8(output.stdout).context("list-only stdout utf-8")?;
     assert!(
@@ -688,7 +641,7 @@ fn probe_target_errors_on_unknown_probe() -> Result<()> {
         .arg("does_not_exist")
         .arg("--mode")
         .arg("baseline")
-        .env("FENCE_PREFER_TARGET", "1")
+        .env("TEST_PREFER_TARGET", "1")
         .output()
         .context("failed to execute probe-target unknown probe")?;
     assert!(
@@ -713,7 +666,7 @@ fn probe_target_errors_on_unknown_capability() -> Result<()> {
         .arg("cap_does_not_exist")
         .arg("--mode")
         .arg("baseline")
-        .env("FENCE_PREFER_TARGET", "1")
+        .env("TEST_PREFER_TARGET", "1")
         .output()
         .context("failed to execute probe-target unknown capability")?;
     assert!(
@@ -737,7 +690,7 @@ fn probe_target_selector_validation() -> Result<()> {
     let missing = Command::new(&target_runner)
         .arg("--mode")
         .arg("baseline")
-        .env("FENCE_PREFER_TARGET", "1")
+        .env("TEST_PREFER_TARGET", "1")
         .output()
         .context("failed to execute probe-target without selector")?;
     assert!(
@@ -755,7 +708,7 @@ fn probe_target_selector_validation() -> Result<()> {
         .arg("cap_fs_read_workspace_tree")
         .arg("--probe")
         .arg("fs_read_workspace_readme")
-        .env("FENCE_PREFER_TARGET", "1")
+        .env("TEST_PREFER_TARGET", "1")
         .output()
         .context("failed to execute probe-target with conflicting selectors")?;
     assert!(
@@ -855,7 +808,7 @@ fn dynamic_probe_contract_accepts_fixture() -> Result<()> {
         .arg(fixture.probe_id())
         .arg("--modes")
         .arg("baseline")
-        .env("FENCE_PREFER_TARGET", "1");
+        .env("TEST_PREFER_TARGET", "1");
     let output = cmd
         .output()
         .context("failed to execute dynamic probe contract")?;
@@ -1114,7 +1067,7 @@ fn paging_stress_runs_small_workload() -> Result<()> {
         "--max-seconds",
         "2",
     ])
-    .env("FENCE_PREFER_TARGET", "1");
+    .env("TEST_PREFER_TARGET", "1");
     let output = run_command(cmd)?;
     assert!(
         output.stdout.is_empty(),
@@ -1130,33 +1083,12 @@ fn paging_stress_rejects_invalid_arguments() -> Result<()> {
 
     let mut cmd = Command::new(&helper);
     cmd.args(["--megabytes", "0"])
-        .env("FENCE_PREFER_TARGET", "1");
+        .env("TEST_PREFER_TARGET", "1");
     let output = cmd
         .output()
         .context("failed to execute paging-stress with invalid args")?;
     assert!(!output.status.success(), "invalid argument run should fail");
     assert_eq!(output.status.code(), Some(1));
-    Ok(())
-}
-
-#[test]
-#[cfg(unix)]
-fn external_cli_present_requires_executable() -> Result<()> {
-    let temp = TempRepo::new();
-    let codex_bin = temp.root.join("codex");
-    fs::write(&codex_bin, "#!/bin/sh\nexit 0\n")?;
-
-    let _guard = PathGuard::set(&temp.root);
-    assert!(
-        !external_cli_present(),
-        "non-executable binary should be ignored"
-    );
-
-    make_executable(&codex_bin)?;
-    assert!(
-        external_cli_present(),
-        "executable external runner should be detected"
-    );
     Ok(())
 }
 
@@ -1435,6 +1367,7 @@ fn capability_index_enforces_schema_version() -> Result<()> {
 
 #[test]
 fn capability_index_accepts_allowed_schema_version_override() -> Result<()> {
+    // Custom schema versions are no longer allowed; ensure rejection path is covered.
     let mut temp = NamedTempFile::new()?;
     serde_json::to_writer(
         &mut temp,
@@ -1457,13 +1390,10 @@ fn capability_index_accepts_allowed_schema_version_override() -> Result<()> {
         }),
     )?;
 
-    let guard = EnvGuard::new(
-        "FENCE_ALLOWED_CATALOG_SCHEMAS",
-        Some("custom_catalog_v1,sandbox_catalog_v1"),
+    assert!(
+        CapabilityIndex::load(temp.path()).is_err(),
+        "custom catalog schema_version should be rejected"
     );
-    let index = CapabilityIndex::load(temp.path())?;
-    drop(guard);
-    assert_eq!(index.key().0, "custom_catalog_v1");
     Ok(())
 }
 
@@ -1739,64 +1669,6 @@ primary_capability_id="cap_fs_read_workspace_tree"
     Ok(())
 }
 
-#[test]
-fn classify_preflight_recognizes_permission_denied() {
-    let (status, errno, message) = classify_preflight_error("mktemp: Operation not permitted\n");
-    assert_eq!(status, "denied");
-    assert_eq!(errno, Some("EPERM"));
-    assert!(message.contains("preflight"));
-}
-
-#[test]
-fn classify_preflight_defaults_to_error() {
-    let (status, errno, _) = classify_preflight_error("unexpected failure");
-    assert_eq!(status, "error");
-    assert!(errno.is_none());
-}
-
-#[test]
-fn probe_run_emits_preflight_record_on_codex_denial() -> Result<()> {
-    let repo_root = repo_root();
-    let _guard = repo_guard();
-    let fixture = FixtureProbe::install(&repo_root, "tests_fixture_probe")?;
-    let codex_dir = TempDir::new().context("failed to allocate codex stub dir")?;
-    let codex_path = codex_dir.path().join("codex");
-    fs::write(
-        &codex_path,
-        r#"#!/usr/bin/env bash
-echo "sandbox_apply: Operation not permitted" >&2
-exit 71
-"#,
-    )?;
-    make_executable(&codex_path)?;
-    let original_path = env::var_os("PATH").unwrap_or_default();
-    let combined_path = env::join_paths(
-        std::iter::once(codex_dir.path().to_path_buf()).chain(env::split_paths(&original_path)),
-    )?;
-    let _path_guard = PathGuard::set_os(combined_path);
-
-    let mut cmd = Command::new(helper_binary(&repo_root, "probe-exec"));
-    cmd.arg("codex-sandbox")
-        .arg(fixture.probe_id())
-        .env("FENCE_PREFER_TARGET", "1");
-    let output = run_command(cmd)?;
-    let (record, value) = parse_boundary_object(&output.stdout)?;
-
-    assert_eq!(record.probe.id, fixture.probe_id());
-    assert_eq!(record.run.mode, "codex-sandbox");
-    assert_eq!(record.operation.category, "preflight");
-    assert_eq!(record.result.observed_result, "denied");
-    assert_eq!(record.result.raw_exit_code, Some(71));
-    assert_eq!(record.result.errno.as_deref(), Some("EPERM"));
-    assert_eq!(
-        value
-            .pointer("/payload/raw/preflight_kind")
-            .and_then(Value::as_str),
-        Some("external_tmp")
-    );
-    Ok(())
-}
-
 // === CLI helper smoke tests (former bin_smoke) ===
 
 #[test]
@@ -1912,24 +1784,12 @@ fn detect_stack_reports_expected_sandbox_modes() -> Result<()> {
             .unwrap_or(true)
     );
 
-    let mut sandbox_cmd = Command::new(&detect_stack);
-    sandbox_cmd.arg("codex-sandbox");
-    let sandbox = run_command(sandbox_cmd)?;
-    let sandbox_json: Value = serde_json::from_slice(&sandbox.stdout)?;
-    assert_eq!(
-        sandbox_json
-            .get("sandbox_mode")
-            .and_then(|v| v.as_str())
-            .unwrap_or_default(),
-        "workspace-write"
-    );
-
     let override_val = "custom-mode";
-    let mut full_cmd = Command::new(&detect_stack);
-    full_cmd
-        .arg("codex-full")
+    let mut override_cmd = Command::new(&detect_stack);
+    override_cmd
+        .arg("baseline")
         .env("FENCE_SANDBOX_MODE", override_val);
-    let full = run_command(full_cmd)?;
+    let full = run_command(override_cmd)?;
     let full_json: Value = serde_json::from_slice(&full.stdout)?;
     assert_eq!(
         full_json
@@ -2127,45 +1987,6 @@ fn parse_boundary_object(bytes: &[u8]) -> Result<(BoundaryObject, Value)> {
     Ok((record, value))
 }
 
-fn sanitized_path_without_codex() -> Result<OsString> {
-    let original = env::var_os("PATH").unwrap_or_default();
-    let mut entries: Vec<PathBuf> = Vec::new();
-    let codex_dir = find_in_path("codex").and_then(|path| path.parent().map(PathBuf::from));
-    for entry in env::split_paths(&original) {
-        if let Some(dir) = &codex_dir {
-            if same_path(&entry, dir) {
-                continue;
-            }
-        }
-        entries.push(entry);
-    }
-    // Keep a minimal search path so /usr/bin/env can resolve bash even when the
-    // host PATH only contained codex.
-    if entries.is_empty() {
-        entries.push(PathBuf::from("/usr/bin"));
-        entries.push(PathBuf::from("/bin"));
-    }
-    Ok(env::join_paths(entries)?)
-}
-
-fn same_path(a: &Path, b: &Path) -> bool {
-    if let (Ok(a_real), Ok(b_real)) = (fs::canonicalize(a), fs::canonicalize(b)) {
-        return a_real == b_real;
-    }
-    a == b
-}
-
-fn find_in_path(program: &str) -> Option<PathBuf> {
-    let path = env::var_os("PATH")?;
-    for entry in env::split_paths(&path) {
-        let candidate = entry.join(program);
-        if candidate.is_file() {
-            return Some(candidate);
-        }
-    }
-    None
-}
-
 // Keep a helper for future assertions; suppress unused warnings for now.
 #[allow(dead_code)]
 fn relative_to_repo(path: &Path, repo_root: &Path) -> String {
@@ -2223,70 +2044,6 @@ impl Drop for TempWorkspace {
     }
 }
 
-struct PathGuard {
-    original: Option<OsString>,
-}
-
-impl PathGuard {
-    fn set(value: &Path) -> Self {
-        let original = env::var_os("PATH");
-        unsafe {
-            env::set_var("PATH", value);
-        }
-        Self { original }
-    }
-
-    fn set_os(value: OsString) -> Self {
-        let original = env::var_os("PATH");
-        unsafe {
-            env::set_var("PATH", value);
-        }
-        Self { original }
-    }
-}
-
-impl Drop for PathGuard {
-    fn drop(&mut self) {
-        unsafe {
-            match self.original.take() {
-                Some(val) => env::set_var("PATH", val),
-                None => env::remove_var("PATH"),
-            }
-        }
-    }
-}
-
-struct EnvGuard {
-    key: &'static str,
-    previous: Option<Option<String>>,
-}
-
-impl EnvGuard {
-    fn new(key: &'static str, value: Option<&str>) -> Self {
-        let previous = match env::var(key) {
-            Ok(v) => Some(Some(v)),
-            Err(env::VarError::NotPresent) => Some(None),
-            Err(env::VarError::NotUnicode(_)) => None,
-        };
-        match value {
-            Some(v) => unsafe { env::set_var(key, v) },
-            None => unsafe { env::remove_var(key) },
-        }
-        Self { key, previous }
-    }
-}
-
-impl Drop for EnvGuard {
-    fn drop(&mut self) {
-        if let Some(prev) = self.previous.take() {
-            match prev {
-                Some(val) => unsafe { env::set_var(self.key, val) },
-                None => unsafe { env::remove_var(self.key) },
-            }
-        }
-    }
-}
-
 fn sample_capability_index(entries: &[(&str, &str, &str)]) -> Result<CapabilityIndex> {
     let mut file = NamedTempFile::new()?;
     let capabilities: Vec<Value> = entries
@@ -2330,7 +2087,7 @@ fn sample_capability_index(entries: &[(&str, &str, &str)]) -> Result<CapabilityI
 }
 
 fn catalog_path() -> PathBuf {
-    repo_root().join(DEFAULT_CATALOG_PATH)
+    default_catalog_path(&repo_root())
 }
 
 fn default_catalog_key() -> CatalogKey {
@@ -2359,6 +2116,19 @@ fn boundary_schema_version() -> String {
         .clone()
 }
 
+fn boundary_schema_key() -> Option<String> {
+    static KEY: OnceLock<Option<String>> = OnceLock::new();
+    KEY.get_or_init(|| {
+        let path =
+            resolve_boundary_schema_path(&repo_root(), None).expect("resolve boundary schema path");
+        BoundarySchema::load(&path)
+            .expect("load boundary schema")
+            .schema_key()
+            .map(str::to_string)
+    })
+    .clone()
+}
+
 fn empty_json_object() -> Value {
     Value::Object(Default::default())
 }
@@ -2366,10 +2136,9 @@ fn empty_json_object() -> Value {
 fn sample_boundary_object() -> BoundaryObject {
     BoundaryObject {
         schema_version: boundary_schema_version(),
+        schema_key: boundary_schema_key(),
         capabilities_schema_version: Some(default_catalog_key()),
         stack: StackInfo {
-            external_cli_version: Some("1.0".to_string()),
-            external_profile: None,
             sandbox_mode: Some("workspace-write".to_string()),
             os: "Darwin".to_string(),
         },

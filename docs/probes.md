@@ -38,26 +38,13 @@ This file serves as documentation. For authoritative, test-enforced Probe and Pr
 `bin/probe-exec` executes probes under a specific mode:
 
 1. **Environment setup** – determines the workspace root, sets the probe id,
-   and exports `FENCE_RUN_MODE`, `FENCE_WORKSPACE_ROOT`, plus
-   mode-specific variables such as `FENCE_SANDBOX_MODE`. Override the exported
-   workspace via `--workspace-root PATH` or by setting `FENCE_WORKSPACE_ROOT`;
-   pass an empty value to defer to `bin/emit-record`’s `git rev-parse`/`pwd`
-   fallback.
-   `codex-sandbox` preflights sandbox write access via `mktemp`; if the host blocks
-   the sandbox from creating temp directories, `probe-exec` emits a
-   `preflight` record (`observed_result=denied`) instead of invoking the probe.
-2. **Mode dispatch**
-   - `baseline` runs the probe directly with no sandboxing.
-   - `codex-sandbox` shells out through the external CLI
-     (`${FENCE_EXTERNAL_CLI:-codex} sandbox <platform> --full-auto -- …`)
-     so the probe runs inside the sandbox profile applied by that runner.
-     (Requires the external CLI on `PATH`; default matrices drop this mode when
-     the runner is absent.)
-   - `codex-full` runs directly (no external CLI) but uses the `codex-full` mode
-     marker to record the intent to bypass sandboxing
-     (`FENCE_SANDBOX_MODE=danger-full-access`). It remains available even
-     when the external CLI is missing, so the default mode matrix becomes
-     `baseline` + `codex-full` on hosts without the runner.
+   and exports `FENCE_RUN_MODE`, `FENCE_WORKSPACE_ROOT`, plus any caller-set
+   `FENCE_SANDBOX_MODE` value. Override the exported workspace via
+   `--workspace-root PATH` or by setting `FENCE_WORKSPACE_ROOT`; pass an empty
+   value to defer to `bin/emit-record`’s `git rev-parse`/`pwd` fallback.
+2. **Mode dispatch** – `baseline` runs the probe directly with no extra
+   sandboxing. (This is the only supported mode after removing Codex-specific
+   runners.)
 3. **Result capture** – the probe prints one JSON boundary object to stdout.
   `probe --matrix` streams every record as NDJSON so you can capture and diff
   runs across modes, CLI versions, or host machines.
@@ -65,8 +52,10 @@ This file serves as documentation. For authoritative, test-enforced Probe and Pr
 ## What a probe emits
 
 Every probe emits one [boundary object](boundary_object.md) that conforms to
-the active boundary-object schema (default: `catalogs/cfbo-v1.json` ->
-`schema/boundary_object.json`). Required data includes:
+the active boundary-object schema (defaults resolve from
+`catalogs/defaults.json`, initially the `cfbo-v1` descriptor in `catalogs/`,
+which points to the canonical `schema/boundary_object_schema.json` pattern and
+carries `schema_key: "cfbo-v1"`). Required data includes:
 
 - Probe identity (`probe.id`, `probe.version`,
   `probe.primary_capability_id`, `probe.secondary_capability_ids`).
@@ -150,7 +139,7 @@ implemented by `gate_probe` and `run_dynamic_gate` inside
 `tools/validate_contract_gate.sh`:
 
 - The gate runs the probe through `bin/probe-exec` in one or more run modes
-  (`baseline`, `codex-sandbox`, `codex-full` unless overridden).
+  (`baseline` by default).
 - An embedded `emit-record` stub intercepts the probe’s call to `bin/emit-record`
   and checks:
   - all required flags are present and used at most once,

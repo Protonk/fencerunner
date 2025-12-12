@@ -14,24 +14,22 @@ PATH, and propagate exit codes verbatim.
 ### `probe-exec`
 Executes a probe in a requested mode, exporting `FENCE_*` metadata and enforcing that probes live under `probes/`. Keep probe
 resolution strict, honor `--workspace-root`/`FENCE_WORKSPACE_ROOT`, and
-ensure sandbox env matches the mode (baseline vs external CLI modes such as
-`codex-sandbox`/`codex-full` when configured).
+ensure sandbox env matches the mode (baseline today).
 
-## Record helpers (cfbo emission/introspection)
+## Record helpers (boundary emission/introspection)
 
 ### `emit-record`
-Builds cfbo-v1 JSON from probe CLI flags. Validate inputs aggressively, rely on
-the in-repo catalog, and shell out only to `detect-stack`. stdout should only
-carry the final JSON record.
+Builds boundary-event JSON from probe CLI flags. Validate inputs aggressively,
+rely on the in-repo catalog, and shell out only to `detect-stack`. stdout
+should only carry the final JSON record.
 
 ### `detect-stack`
-Captures external CLI details, sandbox metadata, and OS info. Keep it
-dependency-free and fast; never drop existing JSON keys without versioning, and
-default new keys sensibly.
+Captures sandbox metadata and OS info. Keep it dependency-free and fast; never
+drop existing JSON keys without versioning, and default new keys sensibly.
 
 ### `probe-listen`
-Reads cfbo-v1 NDJSON/arrays and prints a human summary. Reject invalid input
-with clear errors; don’t panic.
+Reads boundary-object NDJSON/arrays and prints a human summary. Reject invalid
+input with clear errors; don’t panic.
 
 ## Harness helpers (probe orchestration)
 
@@ -43,9 +41,9 @@ messages actionable.
 ### `probe-target`
 Backs `probe --target` by selecting probes (by capability id or explicit
 ids) and delegating execution to `probe-matrix`. Enforce the flag contract
-(cap or probe required, `--mode` limited to baseline/codex-sandbox/codex-full
-with the same defaults as `probe-matrix`), use the bundled catalog for
-`--cap`, and keep list-only output deterministic.
+(cap or probe required, `--mode` limited to baseline with the same defaults as
+`probe-matrix`), use the bundled catalog for `--cap`, and keep list-only output
+deterministic.
 
 ### `probe-gate`
 Runs `tools/validate_contract_gate.sh` (the probe contract gate) with
@@ -68,4 +66,4 @@ compact JSON, and prefer explicit failures over silent fallbacks.
 - Keep argument parsing explicit and defensive; surface actionable errors.
 - Reflect behavioral changes in docs/tests so shell callers stay in sync.
 - Portability is non-negotiable: binaries must run on macOS `/bin/bash 3.2` and
-  inside `codex-universal` with only the shipped Rust helpers.
+  inside CI containers with only the shipped Rust helpers.

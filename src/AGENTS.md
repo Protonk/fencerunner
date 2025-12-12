@@ -3,30 +3,29 @@
 `src/` is the shared Rust crate every helper links against. It encodes the
 contracts promised in README/CONTRIBUTING/AGENTS and should make those layers
 obvious: discover the repo, load the catalog, resolve probes inside the trusted
-tree, emit/parse cfbo-v1, and share runtime helpers with the binaries under
-`src/bin/`.
+tree, emit/parse boundary-event records (default schema key `cfbo-v1`), and
+share runtime helpers with the binaries under `src/bin/`.
 
 ## Map of responsibilities
 - `lib.rs` — entry point and glue. Owns repo/root detection, helper resolution,
   and the small helper APIs the binaries depend on. Keep public surface small
   and documented here or in the target module.
-- `boundary/` — cfbo-v1 types and serde. Schema changes start in
-  `schema/boundary_object_schema.json` plus the descriptor under `catalogs/`
-  (default: `cfbo-v1.json` -> `schema/boundary_object.json`) and docs, then
-  land here with tests.
+- `boundary/` — boundary-event types and serde. Schema changes start in
+  `schema/boundary_object_schema.json` (canonical pattern) and the bundled
+  descriptor under `catalogs/` (default: `cfbo-v1.json`), then land here with
+  tests.
 - `catalog/` — capability catalog parsing and indexing. Pure Rust; no shelling
   out. Must stay aligned with `schema/capability_catalog.schema.json` and the
   bundled catalogs under `catalogs/`.
 - `emit_support.rs`, `probe_metadata.rs`, `metadata_validation.rs`,
   `coverage.rs` — harness utilities (payload builders, static probe parsing,
   catalog/probe/record cross-checks). Add focused unit tests when touching them.
-- `connectors.rs` — registry of run modes/connectors (baseline vs external CLI
-  codex-* modes). Owns defaults, sandbox env overrides, command/preflight
-  planning, and the helper APIs binaries should call when adding new
-  connector-aware behavior.
+- `connectors.rs` — registry of run modes/connectors (baseline today). Owns
+  defaults, sandbox env overrides, command planning, and the helper APIs
+  binaries should call when adding new connector-aware behavior.
 - `runtime.rs`, `fence_run_support.rs` — shared runtime mechanics (helper search
-  order, workspace planning, preflight classification). CLIs should reuse these
-  instead of re-implementing path/sandbox logic.
+  order, workspace planning). CLIs should reuse these instead of re-implementing
+  path/sandbox logic.
 
 ### Adding a new connector/run mode
 - Extend `RunMode`/`MODE_SPECS` in `connectors.rs` with the new mode name,
@@ -43,7 +42,7 @@ tree, emit/parse cfbo-v1, and share runtime helpers with the binaries under
   instead of duplicating the logic.
 - Errors should be actionable and consistent; binaries surface them directly.
 - Portability is part of the contract: code must run on macOS 13-era hosts and
-  in `codex-universal` without extra runtime deps.
+  in the CI container images without extra runtime deps.
 - When behavior is subtle, add a comment and a test that explains why.
 
 ## Working loop

@@ -13,9 +13,9 @@ This directory hosts helpers for automated agents.
 Before changing or adding tooling:
 - Mirror the existing safety posture: every script sets `set -euo pipefail`,
   resolves `repo_root`, and fails fast if prerequisites are absent.
-- Ship hermetic behaviors. Keep awk/sed snippets inline (as the adapter does)
-  so contributors can audit the script without hunting external files. jq is
-  only used by the contract gate; probes themselves should not depend on it.
+- Ship hermetic behaviors. Keep awk/sed/python snippets inline (as the adapter
+  does) so contributors can audit the script without hunting external files.
+  Probes themselves should not depend on external JSON tooling.
 - Validate inputs early and emit actionable errors (include file paths the way
    the current tools do).
 - Document your intent at the top of the script with a guard-rail summary so

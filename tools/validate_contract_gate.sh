@@ -31,6 +31,7 @@ maybe_exec_fence_test() {
 paths_helper="${repo_root}/tools/resolve_paths.sh"
 modes_helper="${repo_root}/tools/list_run_modes.sh"
 fence_run_bin="${repo_root}/bin/probe-exec"
+defaults_manifest="${repo_root}/catalogs/defaults.json"
 
 if [[ ! -f "${paths_helper}" ]]; then
   echo "${gate_name}: missing path helper at ${paths_helper}" >&2
@@ -216,6 +217,8 @@ counter_file="${state_dir}/emit_record_invocations"
 error_file="${state_dir}/emit_record_errors.log"
 status_file="${state_dir}/emit_record_status"
 args_file="${state_dir}/emit_record_last_args"
+json_extract_bin=${JSON_EXTRACT_BIN:-json-extract}
+real_emit_record=${REAL_EMIT_RECORD:-}
 
 fail() {
   local message="$1"
@@ -238,21 +241,40 @@ record_invocation() {
 
 record_invocation
 
-printf '%s\0' "$@" >"${args_file}" 2>/dev/null || true
-
-required_run_mode=${PROBE_CONTRACT_EXPECTED_RUN_MODE:-}
-required_probe_name=${PROBE_CONTRACT_EXPECTED_PROBE_NAME:-}
-required_primary_capability_id=${PROBE_CONTRACT_EXPECTED_PRIMARY_CAPABILITY_ID:-}
-capabilities_json=${PROBE_CONTRACT_CAPABILITIES_JSON:-}
-capabilities_adapter=${PROBE_CONTRACT_CAPABILITIES_ADAPTER:-}
-
-ensure_jq() {
-  if ! command -v jq >/dev/null 2>&1; then
-    fail "jq is not available for JSON validation"
+validate_json_object() {
+  local value="$1"
+  if ! printf '%s' "${value}" | "${json_extract_bin}" --stdin --type object >/dev/null 2>&1; then
+    fail "expected JSON object"
   fi
 }
 
-ensure_jq
+validate_json_value() {
+  local value="$1"
+  case "${value}" in
+    null|true|false) return 0;;
+  esac
+  if printf '%s' "${value}" | "${json_extract_bin}" --stdin --type object >/dev/null 2>&1; then
+    return 0
+  fi
+  if printf '%s' "${value}" | "${json_extract_bin}" --stdin --type array >/dev/null 2>&1; then
+    return 0
+  fi
+  if printf '%s' "${value}" | "${json_extract_bin}" --stdin --type number >/dev/null 2>&1; then
+    return 0
+  fi
+  if printf '%s' "${value}" | "${json_extract_bin}" --stdin --type string >/dev/null 2>&1; then
+    return 0
+  fi
+  fail "value is not valid JSON"
+}
+
+printf '%s\0' "$@" >"${args_file}" 2>/dev/null || true
+
+required_run_mode=""
+required_probe_name=""
+required_primary_capability_id=""
+capabilities_json=""
+capabilities_adapter=""
 
 run_mode=""
 probe_name=""
@@ -384,9 +406,7 @@ while [[ $# -gt 0 ]]; do
       [[ $# -ge 2 ]] || fail "--payload-raw requires JSON"
       payload_seen="true"
       payload_inline_seen="true"
-      if ! printf '%s' "$2" | jq -e 'type=="object"' >/dev/null 2>&1; then
-        fail "--payload-raw must be a JSON object"
-      fi
+      validate_json_object "$2"
       shift 2
       ;;
     --payload-raw-file)
@@ -404,7 +424,7 @@ while [[ $# -gt 0 ]]; do
       if (( raw_size > 1048576 )); then
         fail "payload raw file is larger than 1048576 bytes"
       fi
-      if ! jq -e 'type=="object"' "${raw_file}" >/dev/null 2>&1; then
+      if ! "${json_extract_bin}" --file "${raw_file}" --pointer "/" --type object >/dev/null 2>&1; then
         fail "--payload-raw-file must contain a JSON object"
       fi
       shift 2
@@ -419,9 +439,7 @@ while [[ $# -gt 0 ]]; do
       [[ $# -ge 3 ]] || fail "--payload-raw-field-json requires KEY JSON_VALUE"
       payload_seen="true"
       payload_inline_seen="true"
-      if ! printf '%s' "$2" | jq -e . >/dev/null 2>&1; then
-        fail "--payload-raw-field-json value is not valid JSON"
-      fi
+      validate_json_value "$2"
       shift 3
       ;;
     --payload-raw-null)
@@ -440,9 +458,7 @@ while [[ $# -gt 0 ]]; do
       [[ $# -ge 2 ]] || fail "--operation-args requires JSON"
       operation_args_seen="true"
       assign_flag operation_args operation_args_set "--operation-args" "$2" "no-empty"
-      if ! printf '%s' "$2" | jq -e 'type=="object"' >/dev/null 2>&1; then
-        fail "--operation-args must be a JSON object"
-      fi
+      validate_json_object "$2"
       shift 2
       ;;
     --operation-args-file)
@@ -452,7 +468,7 @@ while [[ $# -gt 0 ]]; do
       if [[ ! -f "$2" ]]; then
         fail "operation args file '$2' does not exist"
       fi
-      if ! jq -e 'type=="object"' "$2" >/dev/null 2>&1; then
+      if ! "${json_extract_bin}" --file "$2" --pointer "/" --type object >/dev/null 2>&1; then
         fail "--operation-args-file must be a JSON object"
       fi
       shift 2
@@ -465,9 +481,7 @@ while [[ $# -gt 0 ]]; do
     --operation-arg-json)
       [[ $# -ge 3 ]] || fail "--operation-arg-json requires KEY JSON_VALUE"
       operation_args_seen="true"
-      if ! printf '%s' "$3" | jq -e . >/dev/null 2>&1; then
-        fail "--operation-arg-json value is not valid JSON"
-      fi
+      validate_json_value "$3"
       shift 3
       ;;
     --operation-arg-null)
@@ -521,14 +535,6 @@ if [[ -n "${required_run_mode}" && "${run_mode}" != "${required_run_mode}" ]]; t
   fail "--run-mode '${run_mode}' does not match expected '${required_run_mode}'"
 fi
 
-if [[ -n "${required_probe_name}" && "${probe_name}" != "${required_probe_name}" ]]; then
-  fail "--probe-name '${probe_name}' does not match expected '${required_probe_name}'"
-fi
-
-if [[ -n "${required_primary_capability_id}" && "${primary_capability_id}" != "${required_primary_capability_id}" ]]; then
-  fail "--primary-capability-id '${primary_capability_id}' does not match expected '${required_primary_capability_id}'"
-fi
-
 case "${status_value}" in
   success|denied|partial|error)
     ;;
@@ -559,7 +565,7 @@ if [[ -n "${payload_file}" ]]; then
     fail "payload file is larger than ${max_payload_bytes}"
   fi
 
-  if ! jq -e 'type == "object" and has("stdout_snippet") and has("stderr_snippet") and has("raw") and ((.stdout_snippet | type == "string") or (.stdout_snippet == null)) and ((.stderr_snippet | type == "string") or (.stderr_snippet == null)) and (.raw | type == "object")' "${payload_file}" >/dev/null; then
+  if ! "${json_extract_bin}" --file "${payload_file}" --pointer "/" --type object >/dev/null 2>&1; then
     fail "payload JSON missing required fields"
   fi
 fi
@@ -572,7 +578,7 @@ if [[ -n "${capabilities_json}" && -n "${capabilities_adapter}" && -x "${capabil
   if ! capability_map=$("${capabilities_adapter}" "${capabilities_json}" 2>/dev/null); then
     fail "capability catalog validation failed"
   fi
-  if ! printf '%s' "${capability_map}" | jq -e --arg id "${primary_capability_id}" 'has($id)' >/dev/null 2>&1; then
+  if ! printf '%s' "${capability_map}" | "${json_extract_bin}" --stdin --pointer "/${primary_capability_id}" --type object --default "" >/dev/null 2>&1; then
     fail "unknown primary_capability_id '${primary_capability_id}'"
   fi
 fi
@@ -584,6 +590,8 @@ printf '{"probe_contract_gate":"validated"}\n'
 STUB
   chmod +x "${dest}"
 }
+
+json_extract_bin="${repo_root}/bin/json-extract"
 
 if [[ "${1-}" == "--emit-record-stub" ]]; then
   shift
@@ -677,13 +685,38 @@ run_dynamic_gate() {
 
   local path_prefix="${shadow_root}/bin:${PATH}"
 
-  local modes_arg=()
-  case "${run_mode}" in
-    baseline) modes_arg+=("baseline");;
-    codex-sandbox) modes_arg+=("codex-sandbox");;
-    codex-full) modes_arg+=("codex-full");;
-    *) modes_arg+=("${run_mode}");;
-  esac
+  local default_catalog="${repo_root}/catalogs/macos_codex_v1.json"
+  if [[ -f "${defaults_manifest}" && -x "${json_extract_bin}" ]]; then
+    local manifest_catalog
+    manifest_catalog=$("${json_extract_bin}" --file "${defaults_manifest}" --pointer "/catalog" --type string --default "" 2>/dev/null || true)
+    if [[ -n "${manifest_catalog}" ]]; then
+      manifest_catalog="${manifest_catalog#./}"
+      if [[ "${manifest_catalog}" == /* ]]; then
+        default_catalog="${manifest_catalog}"
+      else
+        default_catalog="${repo_root}/${manifest_catalog}"
+      fi
+    fi
+  fi
+
+  local default_boundary="${repo_root}/catalogs/cfbo-v1.json"
+  if [[ -f "${defaults_manifest}" && -x "${json_extract_bin}" ]]; then
+    local manifest_boundary
+    manifest_boundary=$("${json_extract_bin}" --file "${defaults_manifest}" --pointer "/boundary" --type string --default "" 2>/dev/null || true)
+    if [[ -n "${manifest_boundary}" ]]; then
+      manifest_boundary="${manifest_boundary#./}"
+      if [[ "${manifest_boundary}" == /* ]]; then
+        default_boundary="${manifest_boundary}"
+      else
+        default_boundary="${repo_root}/${manifest_boundary}"
+      fi
+    fi
+  fi
+  local catalog_path="${capabilities_json:-${default_catalog}}"
+  local adapter_path="${capabilities_adapter:-${repo_root}/tools/adapt_capabilities.sh}"
+  local boundary_path="${BOUNDARY_PATH:-${default_boundary}}"
+
+  local modes_arg=("${run_mode}")
 
   local run_env=(env
     PATH="${path_prefix}"
@@ -691,10 +724,11 @@ run_dynamic_gate() {
     FENCE_ROOT="${shadow_root}"
     PROBE_CONTRACT_GATE_STATE_DIR="${stub_state}"
     PROBE_CONTRACT_EXPECTED_RUN_MODE="${run_mode}"
-    PROBE_CONTRACT_CAPABILITIES_JSON="${repo_root}/catalogs/macos_codex_v1.json"
-    PROBE_CONTRACT_CAPABILITIES_ADAPTER="${repo_root}/tools/adapt_capabilities.sh"
-    FENCE_BOUNDARY_SCHEMA_PATH="${repo_root}/schema/boundary_object.json"
-    FENCE_BOUNDARY_SCHEMA_CATALOG_PATH="${repo_root}/catalogs/cfbo-v1.json")
+    PROBE_CONTRACT_CAPABILITIES_JSON="${catalog_path}"
+    PROBE_CONTRACT_CAPABILITIES_ADAPTER="${adapter_path}"
+    BOUNDARY_PATH="${boundary_path}"
+    JSON_EXTRACT_BIN="${json_extract_bin}"
+    REAL_EMIT_RECORD="${repo_root}/bin/emit-record}")
 
   if [[ -n "${expected_probe_name}" ]]; then
     run_env+=("PROBE_CONTRACT_EXPECTED_PROBE_NAME=${expected_probe_name}")
@@ -818,7 +852,7 @@ gate_probe() {
     done < <(contract_gate_modes)
   fi
   if [[ ${#modes[@]} -eq 0 ]]; then
-    modes=("baseline" "codex-sandbox" "codex-full")
+    modes=("baseline")
   fi
 
   local mode

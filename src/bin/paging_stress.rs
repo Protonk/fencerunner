@@ -343,4 +343,3 @@ impl XorShift64 {
         x
     }
 }
-

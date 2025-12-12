@@ -42,7 +42,7 @@ pub enum CapabilityLayer {
 
 /// Compact capability snapshot attached to boundary objects.
 ///
-/// Snapshots denormalize catalog metadata into cfbo records so they remain
+/// Snapshots denormalize catalog metadata into boundary records so they remain
 /// self-describing even when the catalog evolves on disk.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct CapabilitySnapshot {

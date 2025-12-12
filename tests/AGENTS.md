@@ -65,10 +65,10 @@ single command now executes the entire suite.
 
 | Contract surface | Representative tests |
 | --- | --- |
-| Boundary object schema + payload semantics | `boundary_object_schema`, `boundary_schema_descriptor_schema`, `boundary_object_round_trips_structs`, `capabilities_schema_version_serializes_in_json` |
+| Boundary object schema + payload semantics | `boundary_object_schema`, `boundary_schema_matches_canonical`, `boundary_object_round_trips_structs`, `capabilities_schema_version_serializes_in_json` |
 | Capability catalog + context wiring | `load_real_catalog_smoke`, `repository_lookup_context_matches_capabilities`, `capability_snapshot_serializes_to_expected_shape` |
 | Helper binaries & CLI ergonomics | `json_extract_*`, `portable_path_relpath_*`, `detect_stack_reports_expected_sandbox_modes`, `paging_stress_*`, `contract_gate_*`, `probe_matrix_*`, `probe_target_*` |
-| Workspace + sandbox guarantees | `workspace_root_fallback`, `workspace_tmpdir_*`, `probe_resolution_guards`, `baseline_no_codex_smoke` |
+| Workspace + sandbox guarantees | `workspace_root_fallback`, `workspace_tmpdir_*`, `probe_resolution_guards` |
 | Probe contracts & fixtures | `harness_smoke_probe_fixture`, `dynamic_probe_contract_accepts_fixture`, `static_probe_contract_*`, `proc_paging_stress_probe_emits_expected_record` |
 
 Use this table to decide where to plug a new test. If your change touches a

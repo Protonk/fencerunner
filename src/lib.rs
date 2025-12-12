@@ -6,11 +6,11 @@
 //! keep behavior aligned with the narrative in README.md and docs/*.md.
 
 use anyhow::{Context, Result, bail};
+use serde::Deserialize;
 use serde_json::Value;
 use std::collections::BTreeMap;
 use std::{
     env,
-    ffi::OsString,
     fs,
     path::{Path, PathBuf},
 };
@@ -24,11 +24,11 @@ pub mod fence_run_support;
 pub mod metadata_validation;
 pub mod probe_metadata;
 pub mod runtime;
+pub(crate) mod schema_loader;
 
 pub use boundary::{
-    BoundaryObject, BoundaryReadError, BoundarySchema, BoundarySchemaCatalog,
-    BoundarySchemaDescriptor, CapabilityContext, OperationInfo, Payload, ProbeInfo, ResultInfo,
-    RunInfo, StackInfo, read_boundary_objects,
+    BoundaryObject, BoundaryReadError, BoundarySchema, CapabilityContext, OperationInfo, Payload,
+    ProbeInfo, ResultInfo, RunInfo, StackInfo, read_boundary_objects,
 };
 pub use catalog::{
     Capability, CapabilityCatalog, CapabilityCategory, CapabilityId, CapabilityIndex,
@@ -42,11 +42,18 @@ pub use probe_metadata::{ProbeMetadata, collect_probe_scripts};
 // === Repository discovery and helper resolution ===
 const ROOT_SENTINEL: &str = "bin/.gitkeep";
 const MAKEFILE: &str = "Makefile";
-const ENV_CATALOG_PATH: &str = "FENCE_CATALOG_PATH";
-const ENV_BOUNDARY_SCHEMA_PATH: &str = "FENCE_BOUNDARY_SCHEMA_PATH";
-const ENV_BOUNDARY_SCHEMA_CATALOG_PATH: &str = "FENCE_BOUNDARY_SCHEMA_CATALOG_PATH";
-pub const DEFAULT_BOUNDARY_SCHEMA_PATH: &str = "schema/boundary_object.json";
-pub const DEFAULT_BOUNDARY_SCHEMA_CATALOG_PATH: &str = "catalogs/cfbo-v1.json";
+const ENV_CATALOG_PATH: &str = "CATALOG_PATH";
+const ENV_BOUNDARY_SCHEMA_PATH: &str = "BOUNDARY_PATH";
+const DEFAULTS_MANIFEST_PATH: &str = "catalogs/defaults.json";
+pub const DEFAULT_BOUNDARY_SCHEMA_PATH: &str = "catalogs/cfbo-v1.json";
+pub const CANONICAL_BOUNDARY_SCHEMA_PATH: &str = "schema/boundary_object_schema.json";
+
+/// Default paths for catalog and boundary descriptors, resolved relative to a repo root.
+#[derive(Debug, Clone)]
+pub struct DefaultDescriptorPaths {
+    pub catalog: PathBuf,
+    pub boundary: PathBuf,
+}
 
 /// Returns true when `candidate` looks like the repository root.
 ///
@@ -102,69 +109,44 @@ pub fn find_repo_root() -> Result<PathBuf> {
         }
     }
 
-    if let Some(hint) = option_env!("FENCE_ROOT_HINT") {
-        if let Some(root) = repo_root_from_hint(hint) {
-            return Ok(root);
-        }
-    }
-
     bail!("Unable to locate probe repository root. Set FENCE_ROOT to the cloned repository.");
 }
 
 /// Resolve the capability catalog path using CLI/env overrides or the default.
 pub fn resolve_catalog_path(repo_root: &Path, cli_override: Option<&Path>) -> PathBuf {
-    resolve_repo_data_path(
-        repo_root,
-        cli_override,
-        ENV_CATALOG_PATH,
-        DEFAULT_CATALOG_PATH,
-    )
+    let default_catalog = default_catalog_path(repo_root);
+    resolve_repo_data_path(repo_root, cli_override, ENV_CATALOG_PATH, &default_catalog)
 }
 
-/// Resolve the boundary-object schema path using CLI/env overrides or the default descriptor.
+/// Resolve the boundary-object schema path using CLI/env overrides or the default.
 pub fn resolve_boundary_schema_path(
     repo_root: &Path,
     cli_override: Option<&Path>,
 ) -> Result<PathBuf> {
-    if let Some(path) = cli_override {
-        return Ok(repo_relative(repo_root, path));
-    }
-
-    if let Ok(env_path) = env::var(ENV_BOUNDARY_SCHEMA_PATH) {
-        if !env_path.is_empty() {
-            return Ok(repo_relative(repo_root, Path::new(&env_path)));
+    let default_boundary = default_boundary_descriptor_path(repo_root);
+    let resolved = if let Some(path) = cli_override {
+        repo_relative(repo_root, path)
+    } else if let Ok(env_path) = env::var(ENV_BOUNDARY_SCHEMA_PATH) {
+        if env_path.is_empty() {
+            default_boundary.clone()
+        } else {
+            repo_relative(repo_root, Path::new(&env_path))
         }
-    }
+    } else {
+        default_boundary.clone()
+    };
 
-    let catalog_path = resolve_boundary_schema_catalog_path(repo_root, None);
-    let descriptor = boundary::BoundarySchemaCatalog::load(&catalog_path).with_context(|| {
-        format!(
-            "loading boundary schema catalog from {}",
-            catalog_path.display()
-        )
-    })?;
+    BoundarySchema::load(&resolved)
+        .with_context(|| format!("loading boundary schema {}", resolved.display()))?;
 
-    Ok(descriptor.schema.schema_path(repo_root))
-}
-
-/// Resolve the boundary-object schema catalog path (descriptor) via CLI/env overrides.
-pub fn resolve_boundary_schema_catalog_path(
-    repo_root: &Path,
-    cli_override: Option<&Path>,
-) -> PathBuf {
-    resolve_repo_data_path(
-        repo_root,
-        cli_override,
-        ENV_BOUNDARY_SCHEMA_CATALOG_PATH,
-        DEFAULT_BOUNDARY_SCHEMA_CATALOG_PATH,
-    )
+    Ok(resolved)
 }
 
 fn resolve_repo_data_path(
     repo_root: &Path,
     cli_override: Option<&Path>,
     env_key: &str,
-    default_relative: &str,
+    default_path: &Path,
 ) -> PathBuf {
     if let Some(path) = cli_override {
         return repo_relative(repo_root, path);
@@ -174,7 +156,7 @@ fn resolve_repo_data_path(
             return repo_relative(repo_root, Path::new(&env_path));
         }
     }
-    repo_root.join(default_relative)
+    repo_relative(repo_root, default_path)
 }
 
 fn repo_relative(repo_root: &Path, candidate: &Path) -> PathBuf {
@@ -183,6 +165,40 @@ fn repo_relative(repo_root: &Path, candidate: &Path) -> PathBuf {
     } else {
         repo_root.join(candidate)
     }
+}
+
+/// Return the default capability catalog descriptor, honoring `catalogs/defaults.json` when present.
+pub fn default_catalog_path(repo_root: &Path) -> PathBuf {
+    default_descriptor_paths(repo_root).catalog
+}
+
+/// Return the default boundary descriptor, honoring `catalogs/defaults.json` when present.
+pub fn default_boundary_descriptor_path(repo_root: &Path) -> PathBuf {
+    default_descriptor_paths(repo_root).boundary
+}
+
+/// Resolve default descriptors from `catalogs/defaults.json`, falling back to baked-in paths.
+pub fn default_descriptor_paths(repo_root: &Path) -> DefaultDescriptorPaths {
+    load_defaults_manifest(repo_root).unwrap_or_else(|| DefaultDescriptorPaths {
+        catalog: repo_root.join(DEFAULT_CATALOG_PATH),
+        boundary: repo_root.join(DEFAULT_BOUNDARY_SCHEMA_PATH),
+    })
+}
+
+fn load_defaults_manifest(repo_root: &Path) -> Option<DefaultDescriptorPaths> {
+    let manifest_path = repo_root.join(DEFAULTS_MANIFEST_PATH);
+    let contents = fs::read_to_string(&manifest_path).ok()?;
+    let parsed: DefaultsManifest = serde_json::from_str(&contents).ok()?;
+    Some(DefaultDescriptorPaths {
+        catalog: repo_relative(repo_root, Path::new(&parsed.catalog)),
+        boundary: repo_relative(repo_root, Path::new(&parsed.boundary)),
+    })
+}
+
+#[derive(Deserialize)]
+struct DefaultsManifest {
+    catalog: String,
+    boundary: String,
 }
 
 /// Resolve another helper binary within the same repo.
@@ -202,35 +218,6 @@ pub fn resolve_helper_binary(repo_root: &Path, name: &str) -> Result<PathBuf> {
     );
 }
 
-/// Returns the configured external CLI runner command (defaults to `codex`).
-pub fn external_cli_command() -> OsString {
-    env::var_os("FENCE_EXTERNAL_CLI")
-        .or_else(|| env::var_os("CODEX_CLI"))
-        .filter(|value| !value.is_empty())
-        .unwrap_or_else(|| OsString::from("codex"))
-}
-
-/// Returns true when the configured external CLI runner is present on PATH.
-pub fn external_cli_present() -> bool {
-    let command = external_cli_command();
-    let command_path = PathBuf::from(&command);
-    if command_path.components().count() > 1 {
-        return runtime::helper_is_executable(&command_path);
-    }
-
-    env::var_os("PATH")
-        .map(|paths| {
-            env::split_paths(&paths).any(|dir| runtime::helper_is_executable(&dir.join(&command)))
-        })
-        .unwrap_or(false)
-}
-
-/// Legacy alias for detecting a `codex` binary on PATH.
-#[deprecated(note = "use external_cli_present instead")]
-pub fn codex_present() -> bool {
-    external_cli_present()
-}
-
 // === Small parsing helpers ===
 /// Split comma- or whitespace-delimited configuration lists into tokens.
 pub fn split_list(value: &str) -> Vec<String> {
@@ -242,7 +229,7 @@ pub fn split_list(value: &str) -> Vec<String> {
         .collect()
 }
 
-/// Parse a cfbo stream from stdin, accepting either NDJSON or a JSON array.
+/// Parse a boundary-object stream from stdin, accepting either NDJSON or a JSON array.
 ///
 /// The parser mirrors the listener contract: empty input is an error, single
 /// boundary objects or arrays are accepted, and NDJSON streams are parsed
@@ -418,11 +405,10 @@ mod tests {
 
     fn sample_record_json() -> serde_json::Value {
         json!({
-            "schema_version": "cfbo-v1",
+            "schema_version": "boundary_event_v1",
+            "schema_key": "cfbo-v1",
             "capabilities_schema_version": "macOS_codex_v1",
             "stack": {
-                "external_cli_version": null,
-                "external_profile": null,
                 "sandbox_mode": null,
                 "os": "Darwin"
             },

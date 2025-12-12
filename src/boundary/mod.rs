@@ -1,36 +1,40 @@
-//! Serializable types for the `cfbo-v1` boundary object.
+//! Serializable types for boundary-event records.
 //!
 //! Shared between the emit/listen binaries and the test suite. The structures
 //! mirror the active boundary-object schema (default: `catalogs/cfbo-v1.json`
-//! -> `schema/boundary_object.json`) so helpers can round-trip JSON without
+//! and `schema/boundary_object_schema.json`) so helpers can round-trip JSON without
 //! re-parsing ad-hoc maps. When attaching capability context, callers are
 //! expected to use snapshots from the capability catalog resolved at runtime.
 
-pub mod schema_catalog;
-
-pub use schema_catalog::{
-    BoundarySchemaCatalog, BoundarySchemaDescriptor, BOUNDARY_SCHEMA_CATALOG_VERSION,
-};
-
 use crate::catalog::{Capability, CapabilityId, CapabilitySnapshot, CatalogKey, CatalogRepository};
+use crate::schema_loader::{SchemaLoadOptions, load_json_schema};
 use anyhow::{Context, Result, bail};
 use jsonschema::JSONSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use std::collections::BTreeSet;
+use std::env;
 use std::fmt;
+use std::fs::File;
 use std::io::BufRead;
 use std::path::Path;
 use std::sync::Arc;
 
+const DEFAULT_BOUNDARY_PATTERN_VERSION: &str = "boundary_event_v1";
+const BOUNDARY_DESCRIPTOR_VERSION: &str = "boundary_schema_v1";
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 /// Full boundary object captured for a single probe execution.
 ///
-/// This struct encodes the cfbo-v1 contract: stack metadata captured at runtime
-/// plus the probe/run/operation/result blocks emitted by `bin/emit-record`.
-/// `capabilities_schema_version` is expected to be set for new records, but
-/// remains optional here so legacy boundary objects can still be parsed.
+/// This struct encodes the boundary-event contract: stack metadata captured at
+/// runtime plus the probe/run/operation/result blocks emitted by
+/// `bin/emit-record`. `capabilities_schema_version` is expected to be set for
+/// new records, but remains optional here so legacy boundary objects can still
+/// be parsed.
 pub struct BoundaryObject {
     pub schema_version: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub schema_key: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub capabilities_schema_version: Option<CatalogKey>,
     pub stack: StackInfo,
@@ -49,10 +53,6 @@ pub struct BoundaryObject {
 /// description so downstream consumers can correlate results with host
 /// characteristics.
 pub struct StackInfo {
-    #[serde(default, alias = "codex_cli_version")]
-    pub external_cli_version: Option<String>,
-    #[serde(default, alias = "codex_profile")]
-    pub external_profile: Option<String>,
     #[serde(default)]
     pub sandbox_mode: Option<String>,
     pub os: String,
@@ -200,15 +200,118 @@ impl CatalogRepository {
 }
 
 fn empty_object() -> Value {
-    // The cfbo schema requires `args`/`raw` to be JSON objects; default to an
-    // empty map so callers never emit `null`.
+    // The boundary schema requires `args`/`raw` to be JSON objects; default to
+    // an empty map so callers never emit `null`.
     Value::Object(Default::default())
+}
+
+fn allowed_boundary_pattern_versions() -> BTreeSet<String> {
+    BTreeSet::from_iter([default_boundary_pattern_version()])
+}
+
+fn default_boundary_pattern_version() -> String {
+    canonical_boundary_pattern_version()
+        .unwrap_or_else(|| DEFAULT_BOUNDARY_PATTERN_VERSION.to_string())
+}
+
+fn canonical_boundary_pattern_version() -> Option<String> {
+    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join(crate::CANONICAL_BOUNDARY_SCHEMA_PATH);
+    schema_version_from_path(&path)
+}
+
+fn schema_version_from_path(path: &Path) -> Option<String> {
+    let file = File::open(path).ok()?;
+    let value: Value = serde_json::from_reader(file).ok()?;
+    value
+        .get("schema_version")
+        .and_then(Value::as_str)
+        .map(str::to_string)
+}
+
+fn validate_descriptor_key(key: &str) -> Result<()> {
+    if key.is_empty() {
+        bail!("boundary descriptor key must not be empty");
+    }
+    if !key
+        .chars()
+        .all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '.' | '-'))
+    {
+        bail!("boundary descriptor key must match ^[A-Za-z0-9_.-]+$, got {key}");
+    }
+    Ok(())
+}
+
+#[derive(Debug)]
+struct BoundaryDescriptor {
+    key: String,
+    pattern_version: String,
+}
+
+fn parse_boundary_descriptor(path: &Path) -> Result<Option<BoundaryDescriptor>> {
+    let descriptor_file = File::open(path)
+        .with_context(|| format!("opening boundary descriptor {}", path.display()))?;
+    let descriptor_value: Value = serde_json::from_reader(descriptor_file)
+        .with_context(|| format!("parsing boundary descriptor {}", path.display()))?;
+    let has_schema_ref =
+        descriptor_value.get("schema_path").is_some() || descriptor_value.get("schema").is_some();
+    let key = descriptor_value.get("key").and_then(Value::as_str);
+
+    if key.is_none() && !has_schema_ref {
+        return Ok(None);
+    }
+
+    let version = descriptor_value
+        .get("schema_version")
+        .and_then(Value::as_str)
+        .ok_or_else(|| {
+            anyhow::anyhow!(
+                "boundary descriptor {} missing schema_version",
+                path.display()
+            )
+        })?;
+    if version != BOUNDARY_DESCRIPTOR_VERSION {
+        bail!(
+            "boundary descriptor {} expected schema_version {} but found {}",
+            path.display(),
+            BOUNDARY_DESCRIPTOR_VERSION,
+            version
+        );
+    }
+
+    let key = key
+        .ok_or_else(|| anyhow::anyhow!("boundary descriptor {} missing key", path.display()))?
+        .to_string();
+    validate_descriptor_key(&key)?;
+
+    if !has_schema_ref {
+        bail!(
+            "boundary descriptor {} missing schema or schema_path field",
+            path.display()
+        );
+    }
+
+    let pattern_version = descriptor_value
+        .get("pattern_version")
+        .and_then(Value::as_str)
+        .ok_or_else(|| {
+            anyhow::anyhow!(
+                "boundary descriptor {} missing pattern_version",
+                path.display()
+            )
+        })?
+        .to_string();
+
+    Ok(Some(BoundaryDescriptor {
+        key,
+        pattern_version,
+    }))
 }
 
 #[derive(Debug)]
 /// Loaded boundary-object schema with a cached JSONSchema validator.
 pub struct BoundarySchema {
     schema_version: String,
+    schema_key: Option<String>,
     compiled: JSONSchema,
     #[allow(dead_code)]
     raw: Arc<Value>,
@@ -217,23 +320,37 @@ pub struct BoundarySchema {
 impl BoundarySchema {
     /// Load a boundary-object schema from disk and compile it.
     pub fn load(path: &Path) -> Result<Self> {
-        let raw_value: Value = serde_json::from_reader(
-            std::fs::File::open(path)
-                .with_context(|| format!("opening boundary schema {}", path.display()))?,
-        )?;
-        let raw = Arc::new(raw_value);
-        let schema_version =
-            extract_schema_version(&raw).context("boundary schema missing schema_version const")?;
-        // JSONSchema stores references to the provided schema value; keep it
-        // alive via Arc and use a stable pointer for compilation.
-        let raw_static: &'static Value = unsafe { &*(Arc::as_ptr(&raw)) };
-        let compiled = JSONSchema::compile(raw_static)
-            .with_context(|| format!("compiling boundary schema {}", path.display()))?;
+        let descriptor = parse_boundary_descriptor(path)?;
+        let canonical_schema =
+            Path::new(env!("CARGO_MANIFEST_DIR")).join(crate::CANONICAL_BOUNDARY_SCHEMA_PATH);
+        let allowed_versions = allowed_boundary_pattern_versions();
+        let options = SchemaLoadOptions {
+            canonical_schema_path: Some(canonical_schema.as_path()),
+            allowed_versions: Some(&allowed_versions),
+            ..Default::default()
+        };
+        let loaded = load_json_schema(path, options)?;
+        if let Some(descriptor) = descriptor.as_ref() {
+            if descriptor.pattern_version != loaded.schema_version {
+                bail!(
+                    "boundary descriptor {} declares pattern_version {} but schema reports {}",
+                    path.display(),
+                    descriptor.pattern_version,
+                    loaded.schema_version
+                );
+            }
+        }
         Ok(Self {
-            schema_version,
-            compiled,
-            raw,
+            schema_version: loaded.schema_version,
+            schema_key: descriptor.map(|d| d.key),
+            compiled: loaded.compiled,
+            raw: loaded.raw,
         })
+    }
+
+    /// Exposes the raw schema value backing the compiled validator.
+    pub fn raw_schema(&self) -> &Value {
+        &self.raw
     }
 
     /// Extracted schema version (from `properties.schema_version.const`).
@@ -241,8 +358,27 @@ impl BoundarySchema {
         &self.schema_version
     }
 
+    /// Boundary schema key declared by the descriptor, if available.
+    pub fn schema_key(&self) -> Option<&str> {
+        self.schema_key.as_deref()
+    }
+
     /// Validate a JSON value against the compiled schema.
     pub fn validate(&self, value: &Value) -> Result<()> {
+        if let Some(expected_key) = &self.schema_key {
+            match value.get("schema_key").and_then(Value::as_str) {
+                Some(actual) if actual == expected_key => {}
+                Some(actual) => bail!(
+                    "boundary object schema_key '{}' does not match expected '{}'",
+                    actual,
+                    expected_key
+                ),
+                None => bail!(
+                    "boundary object missing schema_key (expected {})",
+                    expected_key
+                ),
+            }
+        }
         if let Err(errors) = self.compiled.validate(value) {
             let mut details = Vec::new();
             for err in errors {
@@ -254,20 +390,6 @@ impl BoundarySchema {
             );
         }
         Ok(())
-    }
-}
-
-fn extract_schema_version(schema: &Value) -> Option<String> {
-    let version = schema
-        .pointer("/properties/schema_version/const")
-        .and_then(Value::as_str)?;
-    if version
-        .chars()
-        .all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '.' | '-'))
-    {
-        Some(version.to_string())
-    } else {
-        None
     }
 }
 
@@ -291,7 +413,7 @@ impl std::error::Error for BoundaryReadError {
     }
 }
 
-/// Read cfbo-v1 boundary objects from an NDJSON stream.
+/// Read boundary objects from an NDJSON stream.
 ///
 /// Lines containing only whitespace are skipped. Errors include the 1-based
 /// line number where parsing failed to simplify diagnostics for callers.
@@ -334,7 +456,6 @@ mod tests {
     use serde_json::json;
     use std::collections::HashSet;
     use std::io::{BufReader, Cursor};
-    use std::path::PathBuf;
 
     #[test]
     fn parses_golden_snippet_ndjson() {
@@ -391,13 +512,13 @@ mod tests {
 
     fn sample_record(probe_id: &str, observed_result: &str) -> String {
         let schema_version = current_schema_version();
+        let schema_key = current_schema_key();
         let catalog_key = current_catalog_key();
         json!({
             "schema_version": schema_version,
+            "schema_key": schema_key,
             "capabilities_schema_version": catalog_key,
             "stack": {
-                "external_cli_version": "codex-cli 0.63.0",
-                "external_profile": null,
                 "sandbox_mode": null,
                 "os": "Darwin 23.4.0 arm64"
             },
@@ -453,16 +574,27 @@ mod tests {
     }
 
     fn current_schema_version() -> String {
-        let path =
-            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(crate::DEFAULT_BOUNDARY_SCHEMA_PATH);
+        let repo = crate::find_repo_root().expect("repo root available");
+        let path = crate::default_boundary_descriptor_path(&repo);
         BoundarySchema::load(&path)
             .expect("boundary schema loads")
             .schema_version()
             .to_string()
     }
 
+    fn current_schema_key() -> String {
+        let repo = crate::find_repo_root().expect("repo root available");
+        let path = crate::default_boundary_descriptor_path(&repo);
+        BoundarySchema::load(&path)
+            .expect("boundary schema loads")
+            .schema_key()
+            .map(str::to_string)
+            .expect("boundary schema key")
+    }
+
     fn current_catalog_key() -> CatalogKey {
-        let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(crate::DEFAULT_CATALOG_PATH);
+        let repo = crate::find_repo_root().expect("repo root available");
+        let path = crate::default_catalog_path(&repo);
         crate::load_catalog_from_path(&path)
             .expect("catalog loads")
             .catalog

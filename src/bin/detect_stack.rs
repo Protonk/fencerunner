@@ -2,12 +2,10 @@
 //!
 //! The binary is intentionally dependency-free and lightweight because probes
 //! invoke it for every record. It reflects the current run mode (from CLI or
-//! env), infers sandbox/external-runner details, and emits a JSON `StackInfo`
-//! snapshot.
+//! env), captures any sandbox override, and emits a JSON `StackInfo` snapshot.
 
 use anyhow::Result;
-use fencerunner::connectors::{RunMode, sandbox_override_from_env};
-use fencerunner::external_cli_command;
+use fencerunner::connectors::RunMode;
 use serde::Serialize;
 use std::env;
 use std::process::Command;
@@ -26,15 +24,11 @@ fn run() -> Result<()> {
         None => env_non_empty_any(&["FENCE_RUN_MODE"]).unwrap_or_else(|| usage_and_exit()),
     };
 
-    let run_mode = RunMode::try_from(run_mode_raw.as_str())?;
-    let sandbox_mode = run_mode.sandbox_stack_value(sandbox_override_from_env())?;
-    let external_cli_version = detect_external_cli_version();
-    let external_profile = env_non_empty_any(&["FENCE_EXTERNAL_PROFILE", "FENCE_CODEX_PROFILE"]);
+    let _run_mode = RunMode::try_from(run_mode_raw.as_str())?;
+    let sandbox_mode = env_non_empty("FENCE_SANDBOX_MODE");
     let os_info = detect_uname(&["-srm"]).unwrap_or_else(|| fallback_os_info());
 
     let info = StackInfo {
-        external_cli_version,
-        external_profile,
         sandbox_mode,
         os: os_info,
     };
@@ -45,8 +39,6 @@ fn run() -> Result<()> {
 
 #[derive(Serialize)]
 struct StackInfo {
-    external_cli_version: Option<String>,
-    external_profile: Option<String>,
     sandbox_mode: Option<String>,
     os: String,
 }
@@ -61,22 +53,6 @@ fn parse_cli_run_mode() -> Option<String> {
         usage_and_exit();
     }
     Some(first)
-}
-
-fn detect_external_cli_version() -> Option<String> {
-    let output = Command::new(external_cli_command())
-        .arg("--version")
-        .output()
-        .ok()?;
-    if !output.status.success() {
-        return None;
-    }
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    stdout
-        .lines()
-        .next()
-        .map(|line| line.trim().to_string())
-        .filter(|line| !line.is_empty())
 }
 
 fn detect_uname(args: &[&str]) -> Option<String> {

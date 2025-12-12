@@ -1,8 +1,8 @@
-//! Plain-text listener that turns cfbo-v1 NDJSON into a readable summary.
+//! Plain-text listener that turns boundary-object NDJSON into a readable summary.
 //!
 //! This binary intentionally stays text-only so it can sit in pipelines like
 //! `probe --matrix | probe --listen`. It leans on the shared
-//! boundary reader so it understands the exact cfbo-v1 schema without rolling
+//! boundary reader so it understands the exact boundary schema without rolling
 //! bespoke parsers.
 
 use anyhow::{Context, Result, anyhow, bail};
@@ -32,7 +32,7 @@ fn run() -> Result<()> {
     let stdin = io::stdin();
     if stdin.is_terminal() {
         bail!(
-            "probe --listen expects cfbo-v1 NDJSON on stdin (e.g. probe --matrix | probe --listen)"
+            "probe --listen expects boundary-object NDJSON on stdin (e.g. probe --matrix | probe --listen)"
         );
     }
 
@@ -228,14 +228,15 @@ impl Cli {
                 .to_str()
                 .ok_or_else(|| anyhow!("invalid UTF-8 in argument"))?;
             match arg_str {
-                "--boundary-schema" => {
+                "--boundary" => {
                     let value = args
                         .next()
-                        .ok_or_else(|| anyhow!("--boundary-schema requires a value"))?;
-                    boundary_schema_path =
-                        Some(PathBuf::from(value.into_string().map_err(|_| {
-                            anyhow!("--boundary-schema must be valid UTF-8")
-                        })?));
+                        .ok_or_else(|| anyhow!("--boundary requires a value"))?;
+                    boundary_schema_path = Some(PathBuf::from(
+                        value
+                            .into_string()
+                            .map_err(|_| anyhow!("--boundary must be valid UTF-8"))?,
+                    ));
                 }
                 "--help" | "-h" => usage(0),
                 other => bail!("unknown argument: {other}"),
@@ -255,14 +256,14 @@ fn resolve_listen_schema_path(
     if let Some(path) = override_path {
         return Ok(repo_relative(repo_root, &path));
     }
-    if let Ok(env_path) = env::var("FENCE_BOUNDARY_SCHEMA_PATH") {
+    if let Ok(env_path) = env::var("BOUNDARY_PATH") {
         return Ok(repo_relative(repo_root, Path::new(&env_path)));
     }
     if let Some(root) = repo_root {
         return resolve_boundary_schema_path(root, None);
     }
     bail!(
-        "Unable to resolve boundary schema path. Set --boundary-schema, FENCE_BOUNDARY_SCHEMA_PATH, adjust FENCE_BOUNDARY_SCHEMA_CATALOG_PATH, or run from a probe repository."
+        "Unable to resolve boundary schema path. Set --boundary, BOUNDARY_PATH, or run from a probe repository."
     )
 }
 
@@ -278,7 +279,7 @@ fn repo_relative(base: Option<&Path>, candidate: &Path) -> PathBuf {
 
 fn usage(code: i32) -> ! {
     eprintln!(
-        "Usage: probe --listen [--boundary-schema PATH]\n\nOptions:\n  --boundary-schema PATH    Override boundary-object schema path (or set FENCE_BOUNDARY_SCHEMA_PATH; default descriptor via FENCE_BOUNDARY_SCHEMA_CATALOG_PATH).\n  --help                    Show this help text."
+        "Usage: probe --listen [--boundary PATH]\n\nOptions:\n  --boundary PATH           Override boundary-object schema path (or set BOUNDARY_PATH).\n  --help                    Show this help text."
     );
     std::process::exit(code);
 }
@@ -353,12 +354,12 @@ mod tests {
     }
 
     fn minimal_record() -> BoundaryObject {
+        let schema = boundary_schema();
         BoundaryObject {
-            schema_version: boundary_schema().schema_version().to_string(),
+            schema_version: schema.schema_version().to_string(),
+            schema_key: schema.schema_key().map(str::to_string),
             capabilities_schema_version: Some(default_catalog_key()),
             stack: fencerunner::StackInfo {
-                external_cli_version: Some("codex-cli test".to_string()),
-                external_profile: None,
                 sandbox_mode: Some("baseline".to_string()),
                 os: "Darwin".to_string(),
             },
@@ -410,7 +411,7 @@ mod tests {
 
     fn default_catalog_key() -> fencerunner::CatalogKey {
         let repo_root = fencerunner::find_repo_root().expect("repo root");
-        let path = repo_root.join(fencerunner::DEFAULT_CATALOG_PATH);
+        let path = fencerunner::default_catalog_path(&repo_root);
         fencerunner::load_catalog_from_path(&path)
             .expect("load catalog")
             .catalog

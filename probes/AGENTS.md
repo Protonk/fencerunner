@@ -8,7 +8,9 @@ As the Probe Author, you:
 - Use the capability catalog in `catalogs/macos_codex_v1.json` to select accurate
   `primary_capability_id` values. `bin/emit-record` validates IDs, so use the
   exact slugs defined in that file.
-- Read `schema/boundary_object.json` alongside
+- Read the active boundary schema descriptor (defaults resolve from
+  `catalogs/defaults.json`, initially `catalogs/cfbo-v1.json`,
+  which points at `schema/boundary_object_schema.json`) alongside
   `docs/boundary_object.md` to understand every field the probe must provide.
 - Review existing probes under `probes/` to see which behaviors already have
   coverage and how outcomes are classified.
@@ -55,7 +57,7 @@ invalid args, 2 internal error, 3 timeout). Keep helper CLIs small and
 capability-aligned so their behavior is easy to reason about from the probe and
 its README.
 
-## Probe description and agent guidance (cfbo-v1)
+## Probe description and agent guidance (boundary_event_v1 + cfbo-v1 schema key)
 
 A probe:
 1. Is an executable script under `probes/<probe_id>.sh`, where the filename
@@ -90,8 +92,9 @@ Call `bin/emit-record` exactly once with:
 - Outcome metadata (`--status` → `result.observed_result`, `--errno`,
   `--message`, `--raw-exit-code`, etc.) plus `--payload-file`.
 
-See `docs/boundary_object.md` for a complete field description (cfbo-v1
-includes `capabilities_schema_version` and `capability_context` snapshots to
+See `docs/boundary_object.md` for a complete field description (the
+boundary_event_v1 pattern includes `capabilities_schema_version` and
+`capability_context` snapshots to
 provide full context for every record).
 `capabilities_schema_version` is the CatalogKey chosen by the harness when it
 loads capability catalogs via the Rust `CatalogRepository` (`src/catalog/`).
@@ -128,7 +131,8 @@ Matching JSON output (trimmed for brevity):
 
 ```json
 {
-  "schema_version": "cfbo-v1",
+  "schema_version": "boundary_event_v1",
+  "schema_key": "cfbo-v1",
   "capabilities_schema_version": "macOS_codex_v1",
   "probe": {
     "id": "fs_outside_workspace",
@@ -168,9 +172,7 @@ Matching JSON output (trimmed for brevity):
     "secondary": []
   },
   "stack": {
-    "external_cli_version": "codex 1.2.3",
-    "external_profile": "Auto",
-    "sandbox_mode": "workspace-write",
+    "sandbox_mode": null,
     "os": "Darwin 23.3.0 arm64"
   }
 }

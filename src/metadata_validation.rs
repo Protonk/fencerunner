@@ -156,8 +156,10 @@ fn extract_capability_ids(value: &Value) -> Vec<CapabilityId> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::{default_catalog_path, find_repo_root, load_catalog_from_path};
     use serde_json::json;
     use std::path::PathBuf;
+    use std::sync::OnceLock;
     use tempfile::NamedTempFile;
 
     #[test]
@@ -181,8 +183,9 @@ mod tests {
         let dir = tempfile::tempdir().expect("temp dir");
         let bo_path = dir.path().join("bo.json");
         let record = json!({
-            "schema_version": "cfbo-v1",
-            "capabilities_schema_version": "macOS_codex_v1",
+            "schema_version": boundary_schema_version(),
+            "schema_key": boundary_schema_key(),
+            "capabilities_schema_version": default_catalog_key(),
             "stack": {"os": "Darwin"},
             "probe": {
                 "id": "probe",
@@ -212,8 +215,9 @@ mod tests {
         std::fs::create_dir_all(&nested).unwrap();
         let bo_path = nested.join("record.json");
         let record = json!({
-            "schema_version": "cfbo-v1",
-            "capabilities_schema_version": "macOS_codex_v1",
+            "schema_version": boundary_schema_version(),
+            "schema_key": boundary_schema_key(),
+            "capabilities_schema_version": default_catalog_key(),
             "stack": {"os": "Darwin"},
             "probe": {
                 "id": "probe",
@@ -235,6 +239,36 @@ mod tests {
             errors.is_empty(),
             "expected no validation errors, got {errors:?}"
         );
+    }
+
+    fn boundary_schema_version() -> String {
+        boundary_schema().schema_version().to_string()
+    }
+
+    fn boundary_schema_key() -> String {
+        boundary_schema()
+            .schema_key()
+            .map(str::to_string)
+            .expect("boundary schema key")
+    }
+
+    fn boundary_schema() -> &'static BoundarySchema {
+        static SCHEMA: OnceLock<BoundarySchema> = OnceLock::new();
+        SCHEMA.get_or_init(|| {
+            let repo = find_repo_root().expect("metadata validation requires repository root");
+            let path = crate::default_boundary_descriptor_path(&repo);
+            BoundarySchema::load(&path).expect("boundary schema loads")
+        })
+    }
+
+    fn default_catalog_key() -> String {
+        let repo = find_repo_root().expect("metadata validation requires repository root");
+        load_catalog_from_path(&default_catalog_path(&repo))
+            .expect("default catalog loads")
+            .catalog
+            .key
+            .0
+            .clone()
     }
 
     fn sample_index() -> Result<CapabilityIndex> {

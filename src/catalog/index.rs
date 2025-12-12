@@ -7,15 +7,19 @@
 
 use crate::catalog::load_catalog_from_path;
 use crate::catalog::{Capability, CapabilityCatalog, CapabilityId, CatalogKey, CatalogMetadata};
+use crate::schema_loader::{SchemaLoadOptions, load_json_schema};
 use anyhow::{Context, Result, bail};
+use serde_json::Value;
 use std::collections::{BTreeMap, BTreeSet};
+use std::env;
+use std::fs::File;
+use std::io::BufReader;
 use std::path::Path;
+use std::path::PathBuf;
 
 // The harness currently ships a single catalog; reject unexpected versions
-// rather than risk emitting records with mismatched metadata. Allow callers to
-// widen the accepted set via env while keeping a sane default.
+// rather than risk emitting records with mismatched metadata.
 const DEFAULT_SCHEMA_VERSION: &str = "sandbox_catalog_v1";
-const ENV_ALLOWED_SCHEMA_VERSIONS: &str = "FENCE_ALLOWED_CATALOG_SCHEMAS";
 
 #[derive(Debug)]
 /// Capability catalog plus a derived index keyed by capability id.
@@ -31,6 +35,8 @@ impl CapabilityIndex {
     /// Validates the schema key, ensures capability ids are unique, and builds
     /// a deterministic BTreeMap for fast lookups.
     pub fn load(path: &Path) -> Result<Self> {
+        validate_against_schema(path)?;
+
         let catalog =
             load_catalog_from_path(path).with_context(|| format!("loading {}", path.display()))?;
         validate_schema_version(&catalog.schema_version)?;
@@ -95,14 +101,25 @@ fn validate_schema_version(schema_version: &str) -> Result<()> {
 }
 
 fn allowed_schema_versions() -> BTreeSet<String> {
-    let mut versions: BTreeSet<String> = BTreeSet::new();
-    versions.insert(DEFAULT_SCHEMA_VERSION.to_string());
-    if let Ok(raw) = std::env::var(ENV_ALLOWED_SCHEMA_VERSIONS) {
-        for v in raw.split(',').map(str::trim).filter(|s| !s.is_empty()) {
-            versions.insert(v.to_string());
-        }
-    }
-    versions
+    BTreeSet::from_iter([default_catalog_schema_version()])
+}
+
+fn default_catalog_schema_version() -> String {
+    catalog_schema_version_from_disk().unwrap_or_else(|| DEFAULT_SCHEMA_VERSION.to_string())
+}
+
+fn catalog_schema_version_from_disk() -> Option<String> {
+    let path = canonical_catalog_schema_path();
+    let file = File::open(path).ok()?;
+    let value: Value = serde_json::from_reader(BufReader::new(file)).ok()?;
+    value
+        .get("schema_version")
+        .and_then(Value::as_str)
+        .map(str::to_string)
+}
+
+fn canonical_catalog_schema_path() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("schema/capability_catalog.schema.json")
 }
 
 fn validate_catalog_metadata(meta: &CatalogMetadata) -> Result<()> {
@@ -186,4 +203,54 @@ fn build_index(catalog: &CapabilityCatalog) -> Result<BTreeMap<CapabilityId, Cap
         map.insert(cap.id.clone(), cap.clone());
     }
     Ok(map)
+}
+
+fn validate_against_schema(catalog_path: &Path) -> Result<()> {
+    let catalog_file = File::open(catalog_path)
+        .with_context(|| format!("opening catalog {}", catalog_path.display()))?;
+    let catalog_value: Value = serde_json::from_reader(BufReader::new(catalog_file))
+        .with_context(|| format!("parsing catalog {}", catalog_path.display()))?;
+
+    let catalog_version = catalog_value
+        .get("schema_version")
+        .and_then(Value::as_str)
+        .unwrap_or_default()
+        .to_string();
+
+    let schema_path = resolve_catalog_schema_path(catalog_path);
+    let allowed = allowed_schema_versions();
+    let schema = load_json_schema(
+        &schema_path,
+        SchemaLoadOptions {
+            allowed_versions: Some(&allowed),
+            expected_version: Some(&catalog_version),
+            patch_schema_version_const: true,
+            ..Default::default()
+        },
+    )
+    .with_context(|| format!("loading catalog schema {}", schema_path.display()))?;
+
+    if let Err(errors) = schema.compiled.validate(&catalog_value) {
+        let details = errors
+            .map(|err| err.to_string())
+            .collect::<Vec<_>>()
+            .join("\n");
+        bail!(
+            "capability catalog {} failed schema validation:\n{}",
+            catalog_path.display(),
+            details
+        );
+    }
+    Ok(())
+}
+
+fn resolve_catalog_schema_path(catalog_path: &Path) -> PathBuf {
+    if let Some(base) = catalog_path.parent().and_then(|p| p.parent()) {
+        let candidate = base.join("schema/capability_catalog.schema.json");
+        if candidate.exists() {
+            return candidate;
+        }
+    }
+
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("schema/capability_catalog.schema.json")
 }

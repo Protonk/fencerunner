@@ -27,7 +27,7 @@ pub fn helper_is_executable(path: &Path) -> bool {
 
 /// Whether callers requested preferring target/ builds over synced bin/.
 pub fn prefer_target_builds() -> bool {
-    if let Ok(value) = env::var("FENCE_PREFER_TARGET") {
+    if let Ok(value) = env::var("TEST_PREFER_TARGET") {
         return !value.trim().is_empty() && value != "0";
     }
     false
@@ -37,7 +37,7 @@ pub fn prefer_target_builds() -> bool {
 ///
 /// The candidates mirror how users build binaries: synced bin/ first when
 /// present, then target/release and target/debug. Ordering is controlled by
-/// `FENCE_PREFER_TARGET` so tests can prefer local builds.
+/// `TEST_PREFER_TARGET` so tests can prefer local builds.
 pub fn repo_helper_candidates(repo_root: &Path, name: &str, prefer_target: bool) -> Vec<PathBuf> {
     let target_release = repo_root.join("target").join("release").join(name);
     let target_debug = repo_root.join("target").join("debug").join(name);

@@ -29,8 +29,7 @@ fn run() -> Result<()> {
     let cli = Cli::parse()?;
     let repo_root = find_repo_root()?;
     let catalog_path = resolve_catalog_path(&repo_root, cli.catalog_path.as_deref());
-    let boundary_schema_path =
-        resolve_boundary_schema_path(&repo_root, cli.boundary_schema_path.as_deref())?;
+    let boundary_path = resolve_boundary_schema_path(&repo_root, cli.boundary_path.as_deref())?;
     let modes = resolve_modes(&cli.modes)?;
     let plan = resolve_selection(&repo_root, &catalog_path, &cli.selection)?;
 
@@ -45,7 +44,7 @@ fn run() -> Result<()> {
         &modes,
         cli.repeat,
         &catalog_path,
-        &boundary_schema_path,
+        &boundary_path,
     )
 }
 
@@ -76,7 +75,7 @@ fn run_matrix(
     modes: &[RunMode],
     repeat: u32,
     catalog_path: &Path,
-    boundary_schema_path: &Path,
+    boundary_path: &Path,
 ) -> Result<()> {
     if probes.is_empty() {
         bail!("no probes resolved for target run");
@@ -100,8 +99,8 @@ fn run_matrix(
             .stderr(Stdio::inherit())
             .env("PROBES", &probes_arg)
             .env("MODES", &modes_arg)
-            .env("FENCE_CATALOG_PATH", catalog_path)
-            .env("FENCE_BOUNDARY_SCHEMA_PATH", boundary_schema_path);
+            .env("CATALOG_PATH", catalog_path)
+            .env("BOUNDARY_PATH", boundary_path);
         if env::var_os("FENCE_ROOT").is_none() {
             cmd.env("FENCE_ROOT", repo_root);
         }
@@ -238,7 +237,7 @@ struct Cli {
     repeat: u32,
     list_only: bool,
     catalog_path: Option<PathBuf>,
-    boundary_schema_path: Option<PathBuf>,
+    boundary_path: Option<PathBuf>,
 }
 
 impl Cli {
@@ -252,7 +251,7 @@ impl Cli {
         let mut repeat: u32 = 1;
         let mut list_only = false;
         let mut catalog_path = None;
-        let mut boundary_schema_path = None;
+        let mut boundary_path = None;
 
         while let Some(arg) = args.next() {
             let arg_str = arg
@@ -263,9 +262,9 @@ impl Cli {
                     let value = next_value("--catalog", &mut args)?;
                     catalog_path = Some(PathBuf::from(value));
                 }
-                "--boundary-schema" => {
-                    let value = next_value("--boundary-schema", &mut args)?;
-                    boundary_schema_path = Some(PathBuf::from(value));
+                "--boundary" => {
+                    let value = next_value("--boundary", &mut args)?;
+                    boundary_path = Some(PathBuf::from(value));
                 }
                 "--cap" => {
                     let value = next_value("--cap", &mut args)?;
@@ -314,7 +313,7 @@ impl Cli {
             repeat,
             list_only,
             catalog_path,
-            boundary_schema_path,
+            boundary_path,
         })
     }
 }
@@ -338,7 +337,7 @@ fn normalize_token(raw: String, flag: &str) -> Result<String> {
 
 fn usage(code: i32) -> ! {
     eprintln!(
-        "Usage: probe-target (--cap <capability-id> | --probe <probe-id>) [options]\n\nOptions:\n      --cap <id>            Run every probe whose primary capability matches <id>.\n      --probe <id>          Run a specific probe (repeatable).\n      --mode <mode>         Restrict modes (baseline, codex-sandbox, codex-full).\n      --repeat <n>          Rerun the selection n times (default: 1).\n      --catalog <path>      Override capability catalog path (or set FENCE_CATALOG_PATH).\n      --boundary-schema <path> Override boundary-object schema path (or set FENCE_BOUNDARY_SCHEMA_PATH; default descriptor via FENCE_BOUNDARY_SCHEMA_CATALOG_PATH).\n      --list-only           Print the plan without executing probes.\n      --help                Show this help text.\n"
+        "Usage: probe-target (--cap <capability-id> | --probe <probe-id>) [options]\n\nOptions:\n      --cap <id>            Run every probe whose primary capability matches <id>.\n      --probe <id>          Run a specific probe (repeatable).\n      --mode <mode>         Restrict modes (baseline only).\n      --repeat <n>          Rerun the selection n times (default: 1).\n      --catalog <path>      Override capability catalog path (or set CATALOG_PATH).\n      --boundary <path>     Override boundary-object schema path (or set BOUNDARY_PATH).\n      --list-only           Print the plan without executing probes.\n      --help                Show this help text.\n"
     );
     std::process::exit(code);
 }

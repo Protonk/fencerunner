@@ -4,14 +4,14 @@ This document summarizes the structure of the capability catalog schema and the 
 
 > NOTE: This document exists to help agents understand the structure of the catalog, NOT to provide additional technical or policy information.
 
-The catalog schema lives at `schema/capability_catalog.schema.json` (current schema version: **sandbox_catalog_v1**). The bundled catalog instance is stored at `catalogs/macos_codex_v1.json` (catalog key: **macOS_codex_v1**) and can be swapped for another catalog without code changes.
+The catalog schema lives at `schema/capability_catalog.schema.json` (current schema version: **sandbox_catalog_v1**). The bundled catalog instance is stored at `catalogs/macos_codex_v1.json` (catalog key: **macOS_codex_v1**) and can be swapped for another catalog without code changes. Defaults for catalogs/boundary descriptors are recorded in `catalogs/defaults.json`.
 
 ## Catalog keys and repositories
 
 - `schema_version` is the catalog schema version (currently `sandbox_catalog_v1`).
 - `catalog.key` is the **CatalogKey** used across the harness. Boundary objects echo it as `capabilities_schema_version` so downstream readers know which catalog to consult.
-- The Rust types under `src/catalog/` load a catalog JSON into a `CapabilityCatalog`, validate it via `CapabilityIndex`, and can optionally register it inside a `CatalogRepository`. The repository is intentionally generic—drop in another catalog JSON with a different `catalog.key`, register it, and the same lookup helpers work. Use `--catalog`/`FENCE_CATALOG_PATH` to point helpers at a different file; widen accepted catalog `schema_version` values with `FENCE_ALLOWED_CATALOG_SCHEMAS` (comma-separated) when testing new schema revisions.
-- Probes stay insulated from catalog internals: they declare `CapabilityId`s, while the harness resolves those IDs to `CapabilitySnapshot`s when emitting `cfbo-v1` records. Guard-rail tests in `tests/suite.rs` (for example, `capability_catalog_schema`, `load_real_catalog_smoke`, and `repository_lookup_context_matches_capabilities`) ensure that catalogs, snapshots, and boundary objects stay in sync.
+- The Rust types under `src/catalog/` load a catalog JSON into a `CapabilityCatalog`, validate it via `CapabilityIndex`, and can optionally register it inside a `CatalogRepository`. The repository is intentionally generic—drop in another catalog JSON with a different `catalog.key`, register it, and the same lookup helpers work. Use `--catalog`/`CATALOG_PATH` to point helpers at a different file; new catalogs must match the canonical schema version.
+- Probes stay insulated from catalog internals: they declare `CapabilityId`s, while the harness resolves those IDs to `CapabilitySnapshot`s when emitting boundary-event records. Guard-rail tests in `tests/suite.rs` (for example, `capability_catalog_schema`, `load_real_catalog_smoke`, and `repository_lookup_context_matches_capabilities`) ensure that catalogs, snapshots, and boundary objects stay in sync.
 
 ## Catalog structure
 

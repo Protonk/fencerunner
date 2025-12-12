@@ -27,10 +27,12 @@ At a high level, Fencerunner is built from three ideas:
   about (`cap_fs_write_workspace_tree`, `cap_net_connect_loopback`, …) and
   explains how they map onto low‑level operations. Probes refer to capabilities
   by id; the harness resolves those ids against the catalog.
-- **Boundary objects (cfbo‑v1)** — the JSON records emitted by each probe run.
-  They encode the catalog key, probe identity, run mode, operation details,
-  normalized outcome, payload, and capability context, all validated against a
-  schema.
+- **Boundary objects (boundary_event_v1 pattern + schema key)** — the JSON
+  records emitted by each probe run. They encode the catalog key, probe
+  identity, run mode, operation details, normalized outcome, payload, and
+  capability context, all validated against a pattern (`schema_version:
+  "boundary_event_v1"`) and tagged with a boundary schema key from the active
+  descriptor (default `schema_key: "cfbo-v1"`).
 
 ## Core CLI surface
 
@@ -47,9 +49,9 @@ The primary entry point is the `probe` binary (synced into `bin/probe`).
   of behavior.
 
 - `probe --listen`  
-  Read cfbo‑v1 NDJSON (for example, from `probe --matrix`) on stdin and print a
-  human‑readable summary. This is a text‑only viewer; it never changes the
-  underlying JSON.
+  Read boundary-object NDJSON (for example, from `probe --matrix`) on stdin and
+  print a human‑readable summary. This is a text‑only viewer; it never changes
+  the underlying JSON.
 
 
 ## Probes: how you measure a sandbox
@@ -83,24 +85,25 @@ Two JSON schemas define how data flows through Fencerunner:
   `catalogs/macos_codex_v1.json` and is keyed by `catalog.key` (the
   `capabilities_schema_version` echoed into boundary objects).
 
-- **Boundary object schema (cfbo‑v1)**  
-  `schema/boundary_object_schema.json` defines the descriptor format for
-  boundary schemas under `catalogs/` (default `catalogs/cfbo-v1.json`), which
-  points at the concrete cfbo‑v1 schema `schema/boundary_object.json`. `docs/boundary_object.md`
-  walks each field and explains evolution rules.
+- **Boundary object pattern (boundary_event_v1)**  
+  The canonical boundary-event pattern lives at
+  `schema/boundary_object_schema.json` (`schema_version: "boundary_event_v1"`).
+  Boundary schema descriptors under `catalogs/` (default: `catalogs/cfbo-v1.json`)
+  use `schema_version: "boundary_schema_v1"` to declare a `schema_key`,
+  `pattern_version`, and `schema_path` pointing at the pattern file.
+  `docs/boundary_object.md` walks each field and explains evolution rules.
 
 The harness always requires a catalog and a boundary schema, but you can swap
 them out without changing code:
 
-- Use `--catalog <path>` or `FENCE_CATALOG_PATH` to point helpers at a different
-  catalog file.
-- Use `FENCE_ALLOWED_CATALOG_SCHEMAS` (comma‑separated) to temporarily accept
-  additional catalog `schema_version` values while experimenting.
-- Use `--boundary-schema <path>` or `FENCE_BOUNDARY_SCHEMA_PATH` to point
-  helpers at an alternate boundary‑object schema file. By default helpers read
-  `catalogs/cfbo-v1.json` (override with `FENCE_BOUNDARY_SCHEMA_CATALOG_PATH`)
-  to discover the active boundary schema; the loaded `schema_version` is
-  written into emitted records.
+- Use `--catalog <path>` or `CATALOG_PATH` to point helpers at a different
+  catalog file. Default catalog/boundary descriptors are declared in
+  `catalogs/defaults.json` (initially `catalogs/macos_codex_v1.json` and
+  `catalogs/cfbo-v1.json`).
+- Use `--boundary <path>` or `BOUNDARY_PATH` to point helpers at an alternate
+  boundary descriptor. Defaults resolve from `catalogs/defaults.json` and point
+  at `schema/boundary_object_schema.json`; emitted records carry
+  `schema_version: "boundary_event_v1"` plus `schema_key` from the descriptor.
 
 The Rust layer (`src/catalog`, `src/boundary`) validates catalogs and boundary
 objects at load and emit time, and the integration tests under `tests/suite.rs`

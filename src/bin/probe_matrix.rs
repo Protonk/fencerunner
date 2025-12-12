@@ -32,7 +32,7 @@ fn run() -> Result<()> {
     let repo_root = find_repo_root()?;
     let catalog_path = resolve_catalog_path(&repo_root, cli.catalog_path.as_deref());
     let boundary_schema_path =
-        resolve_boundary_schema_path(&repo_root, cli.boundary_schema_path.as_deref())?;
+        resolve_boundary_schema_path(&repo_root, cli.boundary_path.as_deref())?;
     let probes = resolve_probes(&repo_root)?;
     let modes = resolve_modes()?;
 
@@ -119,7 +119,7 @@ fn run_probe(
     probe: &Probe,
     mode: RunMode,
     catalog_path: &Path,
-    boundary_schema_path: &Path,
+    boundary_path: &Path,
 ) -> Result<()> {
     let runner = resolve_helper_binary(repo_root, "probe-exec")?;
     let output = Command::new(&runner)
@@ -128,26 +128,12 @@ fn run_probe(
         .current_dir(repo_root)
         .stdout(Stdio::piped())
         .stderr(Stdio::inherit())
-        .env("FENCE_CATALOG_PATH", catalog_path)
-        .env("FENCE_BOUNDARY_SCHEMA_PATH", boundary_schema_path)
+        .env("CATALOG_PATH", catalog_path)
+        .env("BOUNDARY_PATH", boundary_path)
         .output()
         .with_context(|| format!("Failed to execute {}", runner.display()))?;
 
     if !output.status.success() {
-        // Gracefully skip external sandbox modes when the host blocks sandbox
-        // application (exit 71 or a sandbox_apply error), but surface all other
-        // failures as hard errors.
-        if mode.is_external()
-            && (output.status.code() == Some(71)
-                || String::from_utf8_lossy(&output.stderr).contains("sandbox_apply"))
-        {
-            eprintln!(
-                "probe-matrix: skipping mode {} for probe {}: external sandbox unavailable",
-                mode.as_str(),
-                probe.id
-            );
-            return Ok(());
-        }
         let code = output.status.code().unwrap_or(-1);
         bail!(
             "Probe {} in mode {} returned non-zero exit code {code}",
@@ -170,7 +156,7 @@ fn run_probe(
 
 struct Cli {
     catalog_path: Option<PathBuf>,
-    boundary_schema_path: Option<PathBuf>,
+    boundary_path: Option<PathBuf>,
 }
 
 impl Cli {
@@ -178,7 +164,7 @@ impl Cli {
         let mut args = env::args_os();
         let _program = args.next();
         let mut catalog_path = None;
-        let mut boundary_schema_path = None;
+        let mut boundary_path = None;
 
         while let Some(arg) = args.next() {
             let arg_str = arg
@@ -186,9 +172,7 @@ impl Cli {
                 .ok_or_else(|| anyhow!("invalid UTF-8 in argument"))?;
             match arg_str {
                 "--catalog" => catalog_path = Some(next_path("--catalog", &mut args)?),
-                "--boundary-schema" => {
-                    boundary_schema_path = Some(next_path("--boundary-schema", &mut args)?)
-                }
+                "--boundary" => boundary_path = Some(next_path("--boundary", &mut args)?),
                 "--help" | "-h" => usage(0),
                 other => bail!("unknown argument: {other}"),
             }
@@ -196,7 +180,7 @@ impl Cli {
 
         Ok(Self {
             catalog_path,
-            boundary_schema_path,
+            boundary_path,
         })
     }
 }
@@ -218,7 +202,7 @@ fn next_path(flag: &str, args: &mut env::ArgsOs) -> Result<PathBuf> {
 
 fn usage(code: i32) -> ! {
     eprintln!(
-        "Usage: probe-matrix [--catalog PATH] [--boundary-schema PATH]\n\nOptions:\n  --catalog PATH            Override capability catalog path (or set FENCE_CATALOG_PATH).\n  --boundary-schema PATH    Override boundary-object schema path (or set FENCE_BOUNDARY_SCHEMA_PATH; default descriptor via FENCE_BOUNDARY_SCHEMA_CATALOG_PATH).\n  --help                    Show this help text."
+        "Usage: probe-matrix [--catalog PATH] [--boundary PATH]\n\nOptions:\n  --catalog PATH            Override capability catalog path (or set CATALOG_PATH).\n  --boundary PATH           Override boundary-object schema path (or set BOUNDARY_PATH).\n  --help                    Show this help text."
     );
     std::process::exit(code);
 }
