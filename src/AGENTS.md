@@ -12,7 +12,7 @@ share runtime helpers with the binaries under `src/bin/`.
   and documented here or in the target module.
 - `boundary/` — boundary-event types and serde. Schema changes start in the
   descriptor contract `schema/boundary_object_schema.json` and the bundled
-  descriptor under `catalogs/` (default: `cfbo-v1.json`, which embeds the
+  descriptor under `boundaries/` (default: `cfbo-v1.json`, which embeds the
   boundary-event schema), then land here with tests.
 - `catalog/` — capability catalog parsing and indexing. Pure Rust; no shelling
   out. Must stay aligned with `schema/capability_catalog.schema.json` and the

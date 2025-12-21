@@ -142,7 +142,7 @@ implementation or runtime.
 
 ### Boundary schema descriptors (and boundary objects)
 
-The bundled boundary descriptor (`catalogs/cfbo-v1.json`) is a schema descriptor
+The bundled boundary descriptor (`boundaries/cfbo-v1.json`) is a schema descriptor
 (key + embedded JSON Schema) that defines the `boundary_event_v1` record shape
 and pins the `schema_key` used to tag emitted boundary objects.
 
@@ -159,7 +159,7 @@ can swap them out without changing code:
   catalog file. Defaults fall back to the bundled `catalogs/macos_codex_v1.json`
   when no overrides are provided.
 - Use `--boundary <path>` or `BOUNDARY_PATH` to point helpers at an alternate
-  boundary descriptor. Defaults resolve to the bundled `catalogs/cfbo-v1.json`;
+  boundary descriptor. Defaults resolve to the bundled `boundaries/cfbo-v1.json`;
   emitted records carry the `schema_version` and `schema_key` declared by that
   descriptor’s embedded boundary schema.
 

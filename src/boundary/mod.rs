@@ -2,7 +2,7 @@
 //!
 //! Shared between the emit/listen binaries and the test suite. The structures
 //! mirror the active boundary-object schema (default: embedded in
-//! `catalogs/cfbo-v1.json`, validated by `schema/boundary_object_schema.json`) so helpers can round-trip JSON without
+//! `boundaries/cfbo-v1.json`, validated by `schema/boundary_object_schema.json`) so helpers can round-trip JSON without
 //! re-parsing ad-hoc maps. When attaching capability context, callers are
 //! expected to use snapshots from the capability catalog resolved at runtime.
 

@@ -2,7 +2,7 @@
 
 `probe` records every probe run as a versioned JSON boundary object. The
 structure comes from the **boundary_event_v1** schema embedded in the default
-descriptor `catalogs/cfbo-v1.json`. Descriptors follow the contract in
+descriptor `boundaries/cfbo-v1.json`. Descriptors follow the contract in
 `schema/boundary_object_schema.json`: they declare the boundary schema key
 (`schema_key`, e.g., `cfbo-v1`) and embed the boundary-event JSON Schema used to
 validate emitted records.
@@ -28,7 +28,7 @@ The project commits to the boundary_event_v1 pattern as specified by:
 
 - The descriptor contract at `schema/boundary_object_schema.json` (shape of
   boundary descriptors: `key`, metadata, embedded `boundary_schema`).
-- Boundary schema descriptors under `catalogs/` (default `catalogs/cfbo-v1.json`)
+- Boundary schema descriptors under `boundaries/` (default `boundaries/cfbo-v1.json`)
   that embed the boundary-event JSON Schema (`schema_version: "boundary_event_v1"`,
   key `"cfbo-v1"`).
 - This document’s field-by-field explanations.
@@ -40,7 +40,7 @@ only requires a new descriptor that embeds the schema for that key.
 
 ## Boundary object layout (boundary_event_v1 + schema_key)
 
-The machine-readable definition lives under `catalogs/cfbo-v1.json` as
+The machine-readable definition lives under `boundaries/cfbo-v1.json` as
 `boundary_schema` (validated by `schema/boundary_object_schema.json`) and is
 enforced by `bin/emit-record`.
 
@@ -204,12 +204,12 @@ workspace and expects a denial):
 When the boundary-object contract needs to change, follow this procedure:
 
 1. For structural changes to the boundary-event schema, embed the new schema
-   (with a new `schema_version`) in a new descriptor under `catalogs/` and
+   (with a new `schema_version`) in a new descriptor under `boundaries/` and
    update `schema/boundary_object_schema.json` only if the descriptor *shape*
    changes. Keep prior descriptors available for consumers that still need
    them.
 2. For a new boundary schema key using the same pattern version, add a new
-   descriptor under `catalogs/` with its own `key` and embedded schema for that
+   descriptor under `boundaries/` with its own `key` and embedded schema for that
    key.
 3. Update this document, `AGENTS.md`, `README.md`, probe docs, and any tooling
    (`bin/emit-record`, tests, listeners) that validates or emits boundary

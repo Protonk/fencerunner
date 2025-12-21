@@ -10,7 +10,7 @@ As the Probe Author, you:
   points to) to select accurate `primary_capability_id` values.
   `bin/emit-record` validates IDs, so use the exact slugs defined in that file.
 - Read the active boundary schema descriptor (defaults resolve from
-  the bundled `catalogs/cfbo-v1.json`,
+  the bundled `boundaries/cfbo-v1.json`,
   validated by `schema/boundary_object_schema.json`) alongside
   `docs/boundary_object.md` to understand every field the probe must provide.
 - Review existing probes under `probes/` to see which behaviors already have

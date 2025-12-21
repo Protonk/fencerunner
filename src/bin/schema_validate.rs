@@ -2,7 +2,7 @@
 //!
 //! Usage:
 //!   schema-validate --mode catalog --file catalogs/macos_codex_v1.json
-//!   schema-validate --mode boundary --file catalogs/cfbo-v1.json
+//!   schema-validate --mode boundary --file boundaries/cfbo-v1.json
 //!   schema-validate --mode boundary < payload.json
 
 use anyhow::{Context, Result, bail};

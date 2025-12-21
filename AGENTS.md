@@ -9,7 +9,8 @@ For quick orientation, this is how the tree is organized.
 | Path      | Purpose / Notes                                                                                                                                       |
 | --------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `bin/`    | Prebuilt Rust helper binaries (`fencerunner`, `probe-exec`, `probe-matrix`, `emit-record`, `portable-path`, `detect-stack`, etc.) synced from `src/bin/`. |
-| `catalogs/` | Capability catalogs and boundary schema descriptors (bundled examples: `macos_codex_v1.json`, `cfbo-v1.json`).                                      |
+| `catalogs/` | Capability catalogs (bundled example: `macos_codex_v1.json`).                                                                                       |
+| `boundaries/` | Boundary schema descriptors (bundled example: `cfbo-v1.json`).                                                                                    |
 | `docs/`   | Human-readable explanations for schemas, probes, and boundary objects; kept aligned with machine contracts like `schema/*.json` and the tests.      |
 | `probes/` | Flat directory of `<probe_id>.sh` scripts plus `probes/AGENTS.md`, the only code that directly exercises the sandboxed runtime.                     |
 | `schema/` | Machine-readable schemas (`boundary_object_schema.json`, `capability_catalog.schema.json`) consumed by tooling.                                     |

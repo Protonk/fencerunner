@@ -54,7 +54,7 @@ This file serves as documentation. For authoritative, test-enforced Probe and Pr
 
 Every probe emits one [boundary object](boundary_object.md) that conforms to
 the active boundary-object schema (defaults resolve to the bundled descriptor
-in `catalogs/`, which embeds the boundary-event schema and declares a
+in `boundaries/`, which embeds the boundary-event schema and declares a
 `schema_key`). Required data includes:
 
 - Probe identity (`probe.id`, `probe.version`,

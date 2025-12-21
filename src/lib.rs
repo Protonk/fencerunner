@@ -42,7 +42,7 @@ const ROOT_SENTINEL: &str = "bin/.gitkeep";
 const MAKEFILE: &str = "Makefile";
 const ENV_CATALOG_PATH: &str = "CATALOG_PATH";
 const ENV_BOUNDARY_SCHEMA_PATH: &str = "BOUNDARY_PATH";
-pub const DEFAULT_BOUNDARY_SCHEMA_PATH: &str = "catalogs/cfbo-v1.json";
+pub const DEFAULT_BOUNDARY_SCHEMA_PATH: &str = "boundaries/cfbo-v1.json";
 pub const CANONICAL_BOUNDARY_SCHEMA_PATH: &str = "schema/boundary_object_schema.json";
 
 /// Default paths for catalog and boundary descriptors, resolved relative to a repo root.
