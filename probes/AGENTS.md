@@ -10,8 +10,8 @@ As the Probe Author, you:
   points to) to select accurate `primary_capability_id` values.
   `bin/emit-record` validates IDs, so use the exact slugs defined in that file.
 - Read the active boundary object schema (defaults resolve to
-  `schema/boundary_object_schema.json`) alongside
-  `boundaries/boundary_object.md` to understand the required fields and the
+  `boundary/boundary_object_schema.json`) alongside
+  `boundary/boundary_object.md` to understand the required fields and the
   common context/payload conventions.
 - Review existing probes under `probes/` to see which behaviors already have
   coverage and how outcomes are classified.
@@ -89,7 +89,7 @@ Call `bin/emit-record` exactly once with:
   `--message`, `--error-detail` as needed) plus `--payload-file` or the
   `--payload-*` flags.
 
-See `boundaries/boundary_object.md` for a complete field description. The
+See `boundary/boundary_object.md` for a complete field description. The
 boundary object schema allows optional `context`/`payload` blocks; `emit-record`
 populates `context` with the catalog key (`capabilities_schema_version`),
 capability snapshots, probe capability ids, and stack/run info. Probes should

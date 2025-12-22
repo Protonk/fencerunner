@@ -10,9 +10,9 @@ For quick orientation, this is how the tree is organized.
 | --------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `bin/`    | Prebuilt Rust helper binaries (`fencerunner`, `probe-exec`, `probe-matrix`, `emit-record`, `portable-path`, `detect-stack`, etc.) synced from `src/bin/`. |
 | `catalogs/` | Capability catalogs plus an explainer at `catalogs/capabilities.md` (bundled catalog: `macos_codex_v1.json`).                                    |
-| `boundaries/` | Boundary object documentation (`boundaries/boundary_object.md`).                                                                            |
+| `boundary/` | Boundary object schema + documentation (`boundary/boundary_object.md`).                                                                     |
 | `probes/` | Flat directory of `<probe_id>.sh` scripts plus `probes/AGENTS.md` and `probes/probes.md`, the only code that directly exercises the sandboxed runtime. |
-| `schema/` | Machine-readable schemas (`boundary_object_schema.json`, `capability_catalog.schema.json`) plus `schema/README.md` for load/validation flow.    |
+| `schema/` | Machine-readable schemas (`capability_catalog.schema.json`) plus `schema/README.md` for load/validation flow.                                       |
 | `src/`    | Rust sources for the CLI and helpers, including implementations for every binary under `bin/`.                                                      |
 | `target/` | Cargo build artifacts created by `cargo build` or `cargo test`; safe to delete when you need a clean rebuild.                                       |
 | `tests/`  | Rust guard rails (`tests/*.rs`), shared helpers, and fixtures that enforce the contracts under `cargo test`.                                       |
@@ -35,7 +35,7 @@ Once you know which part of the tree you are touching, defer to the `AGENTS.md` 
 
 Narrative guides live alongside the artifacts they explain:
 * `catalogs/capabilities.md` — capability catalog structure and terminology.
-* `boundaries/boundary_object.md` — boundary-object shape and schema expectations.
+* `boundary/boundary_object.md` — boundary-object shape and schema expectations.
 * `probes/probes.md` — probe contract overview and harness flow.
 * `schema/README.md` — schema loading/validation flow and instance mapping.
 

@@ -65,7 +65,7 @@ single command now executes the entire suite.
 5. **Fixtures:** place new shell probes or data under `tests/mocks/`. Document
    expectations in comments and keep them deterministic so CI stays stable.
 6. **Docs:** when a new test enforces a repo-wide promise, update this file and
-   the relevant docs (usually `tests/AGENTS.md`, maybe `boundaries/boundary_object.md`,
+   the relevant docs (usually `tests/AGENTS.md`, maybe `boundary/boundary_object.md`,
    `catalogs/capabilities.md`, or `probes/probes.md`) so future
    agents understand the coverage.
 
@@ -84,7 +84,7 @@ contract without an obvious row, add both the row and the tests.
 
 ## When failures occur
 
-- **Schema or catalog diffs:** compare the emitted JSON against `boundaries/boundary_object.md`
+- **Schema or catalog diffs:** compare the emitted JSON against `boundary/boundary_object.md`
   or the capability catalog. Update schemas and regenerate helpers before
   re-running.
 - **CLI guard rails:** reproduce locally with the same helper command printed by

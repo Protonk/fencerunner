@@ -2,7 +2,7 @@
 //!
 //! Shared between the emit/listen binaries and the test suite. The structures
 //! mirror the minimal boundary-object schema in
-//! `schema/boundary_object_schema.json` so helpers can round-trip JSON without
+//! `boundary/boundary_object_schema.json` so helpers can round-trip JSON without
 //! ad-hoc maps. Optional context/payload blocks allow probes to attach richer
 //! metadata without changing the required shape.
 

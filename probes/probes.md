@@ -48,9 +48,9 @@ This file serves as documentation. For authoritative, test-enforced Probe and Pr
 
 ## What a probe emits
 
-Every probe emits one [boundary object](../boundaries/boundary_object.md) that
+Every probe emits one [boundary object](../boundary/boundary_object.md) that
 conforms to the active boundary-object schema (defaults resolve to
-`schema/boundary_object_schema.json`). Required data includes:
+`boundary/boundary_object_schema.json`). Required data includes:
 
 - Probe identity (`probe.id`).
 - Operation metadata (`operation.kind`, `operation.target`, optional
@@ -63,7 +63,7 @@ expects for analysis: `context.run.command`, `context.probe` capability ids,
 snapshots, plus `payload.stdout_snippet`/`payload.stderr_snippet` and structured
 `payload.raw` content when provided.
 
-`boundaries/boundary_object.md` describes every field along with examples. Treat
+`boundary/boundary_object.md` describes every field along with examples. Treat
 missing or malformed JSON as a probe failure—`bin/probe-exec` will not try to
 coerce bad output into a result.
 

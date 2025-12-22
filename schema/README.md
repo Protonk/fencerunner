@@ -1,10 +1,12 @@
 # Schema Contracts
 
-This directory holds the canonical JSON Schema contracts used by the harness.
-Each schema has a fixed contract and a small, explicit load/validate pipeline.
-The catalog schema is versioned (`schema_version` const); the boundary object
-schema is intentionally minimal and unversioned. This document summarizes the
-pattern -> loader -> validator -> instance path for each contract.
+This directory holds the catalog JSON Schema contract used by the harness.
+The boundary object schema lives alongside its documentation under
+`boundary/`, but both contracts share the same load/validate pipeline described
+here. The catalog schema is versioned (`schema_version` const); the boundary
+object schema is intentionally minimal and unversioned. This document
+summarizes the pattern -> loader -> validator -> instance path for each
+contract.
 
 ## Terms
 
@@ -34,7 +36,7 @@ Instance:
 ## Boundary object schema
 
 Pattern:
-- `schema/boundary_object_schema.json` (minimal required fields for a probe run)
+- `boundary/boundary_object_schema.json` (minimal required fields for a probe run)
 
 Loader:
 - `src/boundary/mod.rs` -> `BoundarySchema::load`
@@ -45,7 +47,7 @@ Validator:
   `bin/emit-record`, `bin/probe-listen`, and tests)
 
 Instance:
-- Default schema: `schema/boundary_object_schema.json`
+- Default schema: `boundary/boundary_object_schema.json`
 - Emitted boundary objects: NDJSON from probes (`bin/emit-record`)
 - Overrides: `--boundary` or `BOUNDARY_PATH`
 

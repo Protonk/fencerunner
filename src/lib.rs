@@ -4,7 +4,7 @@
 //! how the layers stack. Each public function exists because a binary
 //! depends on it; treat them as contracts and
 //! keep behavior aligned with the narrative in README.md plus the domain
-//! guides under catalogs/, boundaries/, and probes/.
+//! guides under catalogs/, boundary/, and probes/.
 
 use anyhow::{Context, Result, bail};
 use serde_json::Value;
@@ -43,8 +43,8 @@ const ROOT_SENTINEL: &str = "bin/.gitkeep";
 const MAKEFILE: &str = "Makefile";
 const ENV_CATALOG_PATH: &str = "CATALOG_PATH";
 const ENV_BOUNDARY_SCHEMA_PATH: &str = "BOUNDARY_PATH";
-pub const DEFAULT_BOUNDARY_SCHEMA_PATH: &str = "schema/boundary_object_schema.json";
-pub const CANONICAL_BOUNDARY_SCHEMA_PATH: &str = "schema/boundary_object_schema.json";
+pub const DEFAULT_BOUNDARY_SCHEMA_PATH: &str = "boundary/boundary_object_schema.json";
+pub const CANONICAL_BOUNDARY_SCHEMA_PATH: &str = "boundary/boundary_object_schema.json";
 
 /// Default paths for catalog and boundary schemas, resolved relative to a repo root.
 #[derive(Debug, Clone)]

@@ -4,7 +4,7 @@
 contracts promised in README/CONTRIBUTING/AGENTS and should make those layers
 obvious: discover the repo, load the catalog, resolve probes inside the trusted
 tree, emit/parse boundary-object records (default schema path
-`schema/boundary_object_schema.json`), and share runtime helpers with the
+`boundary/boundary_object_schema.json`), and share runtime helpers with the
 binaries under `src/bin/`.
 
 ## Map of responsibilities
@@ -12,8 +12,8 @@ binaries under `src/bin/`.
   and the small helper APIs the binaries depend on. Keep public surface small
   and documented here or in the target module.
 - `boundary/` — boundary-object types and serde. Schema changes start in
-  `schema/boundary_object_schema.json` and the narrative guide in
-  `boundaries/boundary_object.md`, then land here with tests.
+  `boundary/boundary_object_schema.json` and the narrative guide in
+  `boundary/boundary_object.md`, then land here with tests.
 - `catalog/` — capability catalog parsing and indexing. Pure Rust; no shelling
   out. Must stay aligned with `schema/capability_catalog.schema.json` and the
   bundled catalogs under `catalogs/`.

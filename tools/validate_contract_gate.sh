@@ -905,7 +905,7 @@ run_dynamic_gate() {
   local path_prefix="${shadow_root}/bin:${PATH}"
 
   local default_catalog="${repo_root}/catalogs/macos_codex_v1.json"
-  local default_boundary="${repo_root}/schema/boundary_object_schema.json"
+  local default_boundary="${repo_root}/boundary/boundary_object_schema.json"
   local catalog_path="${capabilities_json:-${CATALOG_PATH:-${default_catalog}}}"
   local adapter_path="${capabilities_adapter:-${repo_root}/tools/adapt_capabilities.sh}"
   local boundary_path="${BOUNDARY_PATH:-${default_boundary}}"
