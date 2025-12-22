@@ -129,7 +129,7 @@ and a boundary object schema (what a probe run must record).
 
 The bundled capability catalog (`catalogs/macos_codex_v1.json`) is a
 `sandbox_catalog_v1` instance: it declares the catalog’s key and scope, a
-category/layer taxonomy, a docs bibliography, and a set of capability entries
+category/layer taxonomy, a sources bibliography, and a set of capability entries
 with stable ids, descriptions, and operation mappings (plus optional
 notes/sources).
 
@@ -183,4 +183,4 @@ Before you change behavior, skim:
 - the `AGENTS.md` for the directory you are touching, and
 - the relevant guide for that area (`catalogs/capabilities.md`, `boundary/boundary_object.md`, or `probes/probes.md`).
 
-Those files explain the contracts that code and tests are expected to uphold. The tests in `tests/` are intentionally opinionated and high‑coverage: keeping them green is the easiest way to ensure usage remains compatible with the contracts described above.
+Those files explain the contracts that code and tests are expected to uphold. The tests in `tests/` are intentionally opinionated and high‑coverage: keeping them green is the easiest way to ensure usage aligns with the contracts described above.

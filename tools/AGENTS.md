@@ -16,8 +16,8 @@ Before changing or adding tooling:
 - Ship hermetic behaviors. Keep awk/sed/python snippets inline (as the adapter
   does) so contributors can audit the script without hunting external files.
   Probes themselves should not depend on external JSON tooling.
-- Validate inputs early and emit actionable errors (include file paths the way
-   the current tools do).
+- Validate inputs early and emit actionable errors (include file paths in
+  errors to match the rest of the tools).
 - Document your intent at the top of the script with a guard-rail summary so
   future agents understand the blast radius and know which invariants the tool
   defends.

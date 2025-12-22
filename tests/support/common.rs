@@ -213,7 +213,7 @@ pub fn sample_capability_index(entries: &[(&str, &str, &str)]) -> Result<Capabil
             "schema_version": "sandbox_catalog_v1",
             "catalog": {"key": "sample_catalog_v1", "title": "sample catalog"},
             "scope": {"description": "test", "policy_layers": policy_layers, "categories": categories},
-            "docs": {},
+            "sources": {},
             "capabilities": capabilities
         }),
     )?;

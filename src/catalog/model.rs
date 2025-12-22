@@ -3,7 +3,7 @@
 //! The types mirror the catalog schema so helpers and tests can reason about
 //! capability metadata without ad-hoc JSON handling. Use `CapabilityIndex` for
 //! validation and id lookup; use these structs when the full catalog surface is
-//! required (docs, categories, policy layers).
+//! needed (sources, categories, policy layers).
 
 use crate::catalog::identity::{
     CapabilityCategory, CapabilityId, CapabilityLayer, CapabilitySnapshot, CatalogKey,
@@ -22,7 +22,8 @@ pub struct CapabilityCatalog {
     pub schema_version: String,
     pub catalog: CatalogMetadata,
     pub scope: Scope,
-    pub docs: BTreeMap<String, DocRef>,
+    #[serde(default)]
+    pub sources: BTreeMap<String, SourceRef>,
     pub capabilities: Vec<Capability>,
     #[serde(default)]
     pub extensions: BTreeMap<String, Value>,
@@ -68,8 +69,8 @@ pub struct PolicyLayer {
 }
 
 #[derive(Clone, Debug, Deserialize)]
-/// Document reference pulled into the catalog for traceability.
-pub struct DocRef {
+/// Source reference pulled into the catalog for traceability.
+pub struct SourceRef {
     pub title: String,
     #[serde(default)]
     pub url: Option<String>,

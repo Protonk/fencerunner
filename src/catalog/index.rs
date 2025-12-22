@@ -25,7 +25,7 @@ const CATALOG_SCHEMA_REQUIRED_POINTERS: [&str; 6] = [
     "/properties/schema_version/const",
     "/properties/catalog",
     "/properties/scope",
-    "/properties/docs",
+    "/properties/sources",
     "/properties/capabilities",
     "/properties/extensions",
 ];
@@ -76,7 +76,7 @@ impl CapabilityIndex {
         self.by_id.keys()
     }
 
-    /// Access the underlying catalog (categories, docs, etc.).
+    /// Access the underlying catalog (categories, sources, etc.).
     pub fn catalog(&self) -> &CapabilityCatalog {
         &self.catalog
     }
@@ -176,7 +176,7 @@ fn build_index(catalog: &CapabilityCatalog) -> Result<BTreeMap<CapabilityId, Cap
         bail!("catalog scope must define at least one category");
     }
 
-    let doc_keys: BTreeSet<String> = catalog.docs.keys().cloned().collect();
+    let source_keys: BTreeSet<String> = catalog.sources.keys().cloned().collect();
 
     let mut map = BTreeMap::new();
     for cap in &catalog.capabilities {
@@ -201,9 +201,9 @@ fn build_index(catalog: &CapabilityCatalog) -> Result<BTreeMap<CapabilityId, Cap
             );
         }
         for source in &cap.sources {
-            if !doc_keys.contains(&source.doc) {
+            if !source_keys.contains(&source.doc) {
                 bail!(
-                    "capability {} references unknown doc '{}'",
+                    "capability {} references unknown source '{}'",
                     cap.id.0,
                     source.doc
                 );

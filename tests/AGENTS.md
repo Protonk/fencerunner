@@ -3,7 +3,7 @@
 This document is the contract for anyone touching the test harness. Whether you
 are a human developer or an automated agent, treat this as the playbook for
 keeping the board green. Every change must leave `cargo test` passing, because a
-single command now executes the entire suite.
+single command executes the entire suite.
 
 ## Mission control
 
@@ -40,7 +40,7 @@ single command now executes the entire suite.
   `cargo test --test cli fencerunner_bundle_runs_capability_subset`) to iterate on a failing case.
   Use `-- --nocapture` when you need stdout/stderr from helpers.
 - **Probe contract loop:** `tools/validate_contract_gate.sh --probe <id|path>` (or
-  `bin/probe-contract-gate --probe <id|path>`) is still the fastest way to vet a single probe. The
+  `bin/probe-contract-gate --probe <id|path>`) is the fastest way to vet a single probe. The
   integration suite asserts those gates stay wired up.
 - **Schema debugging:** the `boundary_object_schema` test writes the failing JSON
   payload to `tmp/` with the test name. Open that file before re-running to see
@@ -97,6 +97,6 @@ contract without an obvious row, add both the row and the tests.
   offending script. Edit in a tight loop until the probe passes the contract
   gate--only then do you run the full suite.
 
-Keeping this file current is part of the contract. If you add a new class of
+Keeping this file accurate is part of the contract. If you add a new class of
 checks, describe them here so the next agent knows exactly how the test suite
 covers our promises.

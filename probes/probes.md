@@ -25,8 +25,8 @@ This file serves as documentation. For authoritative, test-enforced Probe and Pr
   `primary_capability_id` (with optional `secondary_capability_ids`). The ids
   come from the active capability catalog (bundled `catalogs/macos_codex_v1.json`
   by default, or whatever `--catalog` / `CATALOG_PATH` points to) and are
-  validated at emit time through the Rust capability index (the legacy adapter
-  in `tools/adapt_capabilities.sh` remains for automation).
+  validated at emit time through the Rust capability index. The adapter in
+  `tools/adapt_capabilities.sh` is available for automation.
 - **Helpers:** Prefer the compiled helpers in `bin/` over ad-hoc logic.
   Path canonicalization routes through `bin/portable-path`; JSON extraction
   (when you must parse another program’s JSON) goes through `bin/json-extract`.
@@ -87,7 +87,7 @@ coerce bad output into a result.
 ## Probe contract gate
 
 The **probe contract gate** is the harness-level guard that decides whether a
-probe is acceptable. It is implemented in shell and Rust and currently has two
+probe is acceptable. It is implemented in shell and Rust and has two
 subsidiary checks—static and dynamic gating—but the top-level concept is “does
 this probe obey the contract?” regardless of how the answer is computed.
 

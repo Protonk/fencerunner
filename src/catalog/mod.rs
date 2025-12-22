@@ -16,7 +16,8 @@ pub use identity::{
 };
 pub use index::CapabilityIndex;
 pub use model::{
-    Capability, CapabilityCatalog, CapabilitySource, CatalogMetadata, DocRef, Operations, Scope,
+    Capability, CapabilityCatalog, CapabilitySource, CatalogMetadata, Operations, Scope,
+    SourceRef,
 };
 pub use repository::CatalogRepository;
 

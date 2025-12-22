@@ -37,7 +37,7 @@ const CATALOG_SCHEMA_REQUIRED_POINTERS: [&str; 6] = [
     "/properties/schema_version/const",
     "/properties/catalog",
     "/properties/scope",
-    "/properties/docs",
+    "/properties/sources",
     "/properties/capabilities",
     "/properties/extensions",
 ];

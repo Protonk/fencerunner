@@ -10,7 +10,7 @@ examples.
 
 A boundary object is one JSON record emitted for each probe run. The record is
 validated against the schema and then streamed as NDJSON by the harness. The
-schema is intentionally minimal so probes can vary widely while still producing
+schema is intentionally minimal so probes can vary widely while producing
 structured output.
 
 ## Minimal required shape
@@ -47,7 +47,7 @@ Everything else is optional and lives under `operation.args`, `result.details`,
     transient infra failure).
 - `result.details` (optional): additional structured metadata about the
   outcome. Fields are optional and include:
-  - `exit_code`: integer exit status of the command used to perform the
+  - `exit_code`: integer exit status of the command that performed the
     operation.
   - `errno`: errno mnemonic when available (`EACCES`, `EPERM`, etc.).
   - `message`: short human summary.
@@ -61,7 +61,7 @@ Everything else is optional and lives under `operation.args`, `result.details`,
 populates a stable context shape so records are self-describing:
 
 - `context.run`: `{workspace_root, command}`
-- `context.stack`: output from `bin/detect-stack` (currently `os`)
+- `context.stack`: output from `bin/detect-stack` (`os`)
 - `context.probe`: `{primary_capability_id, secondary_capability_ids}`
 - `context.capabilities_schema_version`: catalog key used for lookups
 - `context.capability_context`: snapshot of primary/secondary capability
@@ -69,7 +69,7 @@ populates a stable context shape so records are self-describing:
 
 The schema does not require these fields, but the harness relies on them for
 analysis and test coverage. If you add new context keys, keep them under
-`context` so the core contract remains stable.
+`context` so the core contract is stable.
 
 ### `payload`
 

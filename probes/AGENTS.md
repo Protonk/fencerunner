@@ -49,7 +49,7 @@ about coverage without depending on directory names.
 
 Probes may delegate narrowly scoped work to compiled helpers under
 `bin/` (synced from `src/bin/` by `make build`). Keep the probe as the
-orchestrator: pass explicit arguments, enforce a timeout, and still emit the
+orchestrator: pass explicit arguments, enforce a timeout, and emit the
 single JSON record via `bin/emit-record`. Helpers must stay quiet on stdout,
 run in the foreground, and use stable, documented exit codes (0 success, 1
 invalid args, 2 internal error, 3 timeout). Keep helper CLIs small and
@@ -92,9 +92,9 @@ Call `bin/emit-record` exactly once with:
 See `boundary/boundary_object.md` for a complete field description. The
 boundary object schema allows optional `context`/`payload` blocks; `emit-record`
 populates `context` with the catalog key (`capabilities_schema_version`),
-capability snapshots, probe capability ids, and stack/run info. Probes should
-continue to declare capability IDs only; the harness resolves those IDs to
-snapshots without hard-coding a specific catalog.
+capability snapshots, probe capability ids, and stack/run info. Probes declare
+capability IDs only; the harness resolves those IDs to snapshots without
+hard-coding a specific catalog.
 
 ### Minimal example
 

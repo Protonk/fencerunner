@@ -151,7 +151,7 @@ mod tests {
                     "policy_layers": {"os_sandbox": "sandbox"},
                     "categories": {"filesystem": "fs"}
                 },
-                "docs": {},
+                "sources": {},
                 "capabilities": [{
                     "id": "cap_fs_read_workspace_tree",
                     "category": "filesystem",

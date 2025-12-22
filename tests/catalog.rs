@@ -83,7 +83,7 @@ fn capability_index_enforces_schema_version() -> Result<()> {
         &json!({
             "schema_version": "unexpected",
             "scope": {"description": "test", "policy_layers": {}, "categories": {}},
-            "docs": {},
+            "sources": {},
             "capabilities": []
         }),
     )?;
@@ -105,7 +105,7 @@ fn capability_index_accepts_allowed_schema_version_override() -> Result<()> {
                 "policy_layers": {"os_sandbox": "fixture layer"},
                 "categories": {"filesystem": "fixture"}
             },
-            "docs": {},
+            "sources": {},
             "capabilities": [{
                 "id": "cap_fs_custom",
                 "category": "filesystem",
@@ -137,7 +137,7 @@ fn capability_index_rejects_schema_with_wrong_title() -> Result<()> {
             "schema_version": {"const": "sandbox_catalog_v1"},
             "catalog": {},
             "scope": {},
-            "docs": {},
+            "sources": {},
             "capabilities": {},
             "extensions": {}
         }
@@ -152,7 +152,7 @@ fn capability_index_rejects_schema_with_wrong_title() -> Result<()> {
             "policy_layers": {"os_sandbox": "fixture layer"},
             "categories": {"filesystem": "fixture"}
         },
-        "docs": {},
+        "sources": {},
         "capabilities": [{
             "id": "cap_fixture",
             "category": "filesystem",
@@ -180,7 +180,7 @@ fn capability_index_accepts_sources_map() -> Result<()> {
                 "policy_layers": {"os_sandbox": "sandbox"},
                 "categories": {"filesystem": "fs"}
             },
-            "docs": {
+            "sources": {
                 "apple_sandbox_guide": {"title": "Apple Sandbox Guide"}
             },
             "capabilities": [{
