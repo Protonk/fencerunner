@@ -40,10 +40,7 @@ fn run() -> Result<()> {
 
     let capability_catalog_path =
         resolve_catalog_path(&repo_root, args.catalog_path.as_deref().map(Path::new));
-    let boundary_schema_path = resolve_boundary_schema_path(
-        &repo_root,
-        args.boundary_schema_path.as_deref().map(Path::new),
-    )?;
+    let boundary_schema_path = resolve_boundary_schema_path(&repo_root)?;
     let capability_index = CapabilityIndex::load(&capability_catalog_path).with_context(|| {
         format!(
             "loading capability catalog from {}",
@@ -177,7 +174,6 @@ fn run() -> Result<()> {
 /// expected to normalize outcomes themselves before calling this binary.
 struct CliArgs {
     catalog_path: Option<String>,
-    boundary_schema_path: Option<String>,
     probe_name: String,
     operation_kind: String,
     target: String,
@@ -204,10 +200,6 @@ impl CliArgs {
                 "--catalog" => {
                     let value = next_value(&mut args, "--catalog")?;
                     config.catalog_path = Some(value);
-                }
-                "--boundary" => {
-                    let value = next_value(&mut args, "--boundary")?;
-                    config.boundary_schema_path = Some(value);
                 }
                 "--probe-name" | "--probe-id" => {
                     config.probe_name = Some(next_value(&mut args, arg.as_str())?)
@@ -348,7 +340,6 @@ impl CliArgs {
 #[derive(Default)]
 struct PartialArgs {
     catalog_path: Option<String>,
-    boundary_schema_path: Option<String>,
     probe_name: Option<String>,
     operation_kind: Option<String>,
     target: Option<String>,
@@ -368,7 +359,6 @@ impl PartialArgs {
     fn build(self) -> Result<CliArgs> {
         let PartialArgs {
             catalog_path,
-            boundary_schema_path,
             probe_name,
             operation_kind,
             target,
@@ -386,7 +376,6 @@ impl PartialArgs {
 
         Ok(CliArgs {
             catalog_path,
-            boundary_schema_path,
             probe_name: Self::require("--probe-name", probe_name)?,
             operation_kind: Self::require("--operation-kind", operation_kind)?,
             target: Self::require("--target", target)?,

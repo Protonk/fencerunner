@@ -259,7 +259,7 @@ mod tests {
                 },
                 "scope": {
                     "description": "test",
-                    "policy_layers": [{"id": "os_sandbox", "description": "sandbox"}],
+                    "policy_layers": {"os_sandbox": "sandbox"},
                     "categories": {"filesystem": "fs"}
                 },
                 "docs": {},

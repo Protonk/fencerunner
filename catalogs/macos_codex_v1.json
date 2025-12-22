@@ -14,16 +14,10 @@
   "scope": {
     "description": "Observed macOS sandbox and agent runtime behaviors as exercised by this harness.",
     "notes": "Probes focus on observable sandbox behaviors; this catalog is not a complete Seatbelt reference and will evolve over time.\n",
-    "policy_layers": [
-      {
-        "id": "os_sandbox",
-        "description": "18 capabilities for Seatbelt / macOS sandbox behavior as seen by child processes."
-      },
-      {
-        "id": "agent_runtime",
-        "description": "4 capabilities for Codex agent orchestration and approvals policy around sandboxed runs."
-      }
-    ],
+    "policy_layers": {
+      "os_sandbox": "18 capabilities for Seatbelt / macOS sandbox behavior as seen by child processes.",
+      "agent_runtime": "4 capabilities for Codex agent orchestration and approvals policy around sandboxed runs."
+    },
     "categories": {
       "filesystem": "6 capabilities for access to workspace trees, system roots, user content, and symlink behavior.",
       "process": "3 capabilities for process creation, execution, and sandbox escalation behavior.",

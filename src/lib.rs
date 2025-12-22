@@ -42,7 +42,6 @@ pub use probe_metadata::{ProbeMetadata, collect_probe_scripts};
 const ROOT_SENTINEL: &str = "bin/.gitkeep";
 const MAKEFILE: &str = "Makefile";
 const ENV_CATALOG_PATH: &str = "CATALOG_PATH";
-const ENV_BOUNDARY_SCHEMA_PATH: &str = "BOUNDARY_PATH";
 pub const DEFAULT_BOUNDARY_SCHEMA_PATH: &str = "boundary/boundary_object_schema.json";
 pub const CANONICAL_BOUNDARY_SCHEMA_PATH: &str = "boundary/boundary_object_schema.json";
 
@@ -116,28 +115,12 @@ pub fn resolve_catalog_path(repo_root: &Path, cli_override: Option<&Path>) -> Pa
     resolve_repo_data_path(repo_root, cli_override, ENV_CATALOG_PATH, &default_catalog)
 }
 
-/// Resolve the boundary schema path using CLI/env overrides or the default.
-pub fn resolve_boundary_schema_path(
-    repo_root: &Path,
-    cli_override: Option<&Path>,
-) -> Result<PathBuf> {
+/// Resolve the boundary schema path using the repo default.
+pub fn resolve_boundary_schema_path(repo_root: &Path) -> Result<PathBuf> {
     let default_boundary = default_boundary_schema_path(repo_root);
-    let resolved = if let Some(path) = cli_override {
-        repo_relative(repo_root, path)
-    } else if let Ok(env_path) = env::var(ENV_BOUNDARY_SCHEMA_PATH) {
-        if env_path.is_empty() {
-            default_boundary.clone()
-        } else {
-            repo_relative(repo_root, Path::new(&env_path))
-        }
-    } else {
-        default_boundary.clone()
-    };
-
-    BoundarySchema::load(&resolved)
-        .with_context(|| format!("loading boundary schema {}", resolved.display()))?;
-
-    Ok(resolved)
+    BoundarySchema::load(&default_boundary)
+        .with_context(|| format!("loading boundary schema {}", default_boundary.display()))?;
+    Ok(default_boundary)
 }
 
 fn resolve_repo_data_path(

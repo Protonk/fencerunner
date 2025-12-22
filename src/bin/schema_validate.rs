@@ -30,9 +30,6 @@ struct Cli {
     /// Optional catalog path (catalog validation only).
     #[arg(long)]
     catalog: Option<PathBuf>,
-    /// Optional boundary schema path (boundary validation only).
-    #[arg(long)]
-    boundary: Option<PathBuf>,
 }
 
 const CATALOG_SCHEMA_TITLE: &str = "Sandbox capability catalog (v1)";
@@ -195,9 +192,7 @@ fn main() -> Result<()> {
             validate_catalog(&input, &catalog_path)?;
         }
         "boundary" => {
-            let boundary_path = cli
-                .boundary
-                .unwrap_or_else(|| default_boundary_schema_path(&repo_root));
+            let boundary_path = default_boundary_schema_path(&repo_root);
             validate_boundary(&input, &boundary_path)?;
         }
         other => bail!("unknown mode '{}'", other),

@@ -11,8 +11,7 @@ use fencerunner::fence_run_support::{
     workspace_plan_from_override, workspace_tmpdir_plan,
 };
 use fencerunner::{
-    ProbeMetadata, find_repo_root, resolve_boundary_schema_path, resolve_catalog_path,
-    resolve_probe,
+    ProbeMetadata, find_repo_root, resolve_catalog_path, resolve_probe,
 };
 use std::env;
 use std::ffi::OsString;
@@ -31,7 +30,6 @@ fn run() -> Result<()> {
     let args = CliArgs::parse()?;
     let repo_root = find_repo_root()?;
     let catalog_path = resolve_catalog_path(&repo_root, args.catalog_path.as_deref());
-    let boundary_path = resolve_boundary_schema_path(&repo_root, args.boundary_path.as_deref())?;
     let workspace_root = canonicalize_path(&repo_root);
     let workspace_plan = determine_workspace_plan(&workspace_root, args.workspace_override)?;
     let resolved_probe = resolve_probe(&workspace_root, &args.probe_name)?;
@@ -47,7 +45,6 @@ fn run() -> Result<()> {
         workspace_tmpdir.path.as_deref(),
         &command_cwd,
         &catalog_path,
-        &boundary_path,
     )?;
     Ok(())
 }
@@ -55,7 +52,6 @@ fn run() -> Result<()> {
 struct CliArgs {
     workspace_override: Option<WorkspaceOverride>,
     catalog_path: Option<PathBuf>,
-    boundary_path: Option<PathBuf>,
     probe_name: String,
 }
 
@@ -64,7 +60,6 @@ impl CliArgs {
         let mut args_iter = env::args().skip(1);
         let mut workspace_override = None;
         let mut catalog_path = None;
-        let mut boundary_path = None;
         let mut positionals = Vec::new();
 
         while let Some(arg) = args_iter.next() {
@@ -76,11 +71,6 @@ impl CliArgs {
             if arg.starts_with("--catalog=") {
                 let value = arg.split_once('=').map(|(_, v)| v).unwrap_or("");
                 catalog_path = Some(PathBuf::from(value));
-                continue;
-            }
-            if arg.starts_with("--boundary=") {
-                let value = arg.split_once('=').map(|(_, v)| v).unwrap_or("");
-                boundary_path = Some(PathBuf::from(value));
                 continue;
             }
 
@@ -98,13 +88,6 @@ impl CliArgs {
                         usage();
                     });
                     catalog_path = Some(PathBuf::from(value));
-                }
-                "--boundary" => {
-                    let value = args_iter.next().unwrap_or_else(|| {
-                        eprintln!("Missing path for --boundary");
-                        usage();
-                    });
-                    boundary_path = Some(PathBuf::from(value));
                 }
                 "-h" | "--help" => usage(),
                 _ if arg.starts_with("--") => {
@@ -126,7 +109,6 @@ impl CliArgs {
         Ok(Self {
             workspace_override,
             catalog_path,
-            boundary_path,
             probe_name: positionals[0].clone(),
         })
     }
@@ -134,7 +116,7 @@ impl CliArgs {
 
 fn usage() -> ! {
     eprintln!(
-        "Usage: probe-exec [--workspace-root PATH] [--catalog PATH] [--boundary PATH] PROBE_NAME\n\nOverrides:\n  --workspace-root PATH     Export PATH via FENCE_WORKSPACE_ROOT (defaults to repo root).\n                            Pass an empty string to defer to emit-record's git/pwd fallback.\n  --catalog PATH            Override capability catalog path (or set CATALOG_PATH).\n  --boundary PATH           Override boundary-object schema path (or set BOUNDARY_PATH).\n\nEnvironment:\n  FENCE_WORKSPACE_ROOT      When set, takes precedence over the default repo root export."
+        "Usage: probe-exec [--workspace-root PATH] [--catalog PATH] PROBE_NAME\n\nOverrides:\n  --workspace-root PATH     Export PATH via FENCE_WORKSPACE_ROOT (defaults to repo root).\n                            Pass an empty string to defer to emit-record's git/pwd fallback.\n  --catalog PATH            Override capability catalog path (or set CATALOG_PATH).\n\nEnvironment:\n  FENCE_WORKSPACE_ROOT      When set, takes precedence over the default repo root export."
     );
     std::process::exit(1);
 }
@@ -214,12 +196,10 @@ fn run_command(
     workspace_tmpdir: Option<&Path>,
     command_cwd: &Path,
     catalog_path: &Path,
-    boundary_path: &Path,
 ) -> Result<()> {
     let mut command = Command::new(probe_path);
     command.current_dir(command_cwd);
     command.env("CATALOG_PATH", catalog_path);
-    command.env("BOUNDARY_PATH", boundary_path);
     if let Some(value) = workspace_plan.export_value.as_ref() {
         command.env("FENCE_WORKSPACE_ROOT", value);
     }

@@ -96,7 +96,7 @@ The primary entry point is the `fencerunner` binary (synced into `bin/fencerunne
 
 - `schema-validate`  
   Validate JSON as a catalog (`--mode catalog`) or boundary (`--mode boundary`)
-  against the bundled schemas or paths provided via `--catalog` / `--boundary`.
+  against the bundled schemas (catalog overrides via `--catalog`).
 
 ## Probes: how you measure a sandbox
 
@@ -153,15 +153,14 @@ as a small, schema‑checked statement of attempted operation and observed
 outcome (with bounded context), so downstream consumers treat the JSON record—
 not ad‑hoc logs, timing, or side effects—as the interface.
 
-The harness always requires a catalog and a boundary object schema, but you can
-swap them out without changing code:
+The harness always requires a catalog and a boundary object schema. Catalogs
+are swappable; the boundary schema is fixed.
 
 - Use `--catalog <path>` or `CATALOG_PATH` to point helpers at a different
   catalog file. Defaults fall back to the bundled `catalogs/macos_codex_v1.json`
   when no overrides are provided.
-- Use `--boundary <path>` or `BOUNDARY_PATH` to point helpers at an alternate
-  boundary schema. Defaults resolve to `boundary/boundary_object_schema.json`;
-  emitted records are validated against that schema at emit/listen time.
+- Boundary schema defaults to `boundary/boundary_object_schema.json`; emitted
+  records are validated against that schema at emit/listen time.
 
 The Rust layer (`src/catalog`, `src/boundary`) validates catalogs and boundary
 objects at load and emit time, and the integration tests under `tests/` assert

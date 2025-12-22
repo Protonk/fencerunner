@@ -15,7 +15,6 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::env;
 use std::fmt;
 use std::io::{self, BufRead, BufReader, IsTerminal};
-use std::path::{Path, PathBuf};
 
 fn main() {
     if let Err(err) = run() {
@@ -25,9 +24,9 @@ fn main() {
 }
 
 fn run() -> Result<()> {
-    let cli = Cli::parse()?;
-    let repo_root = find_repo_root().ok();
-    let schema_path = resolve_listen_schema_path(repo_root.as_deref(), cli.boundary_schema_path)?;
+    let _cli = Cli::parse()?;
+    let repo_root = find_repo_root()?;
+    let schema_path = resolve_boundary_schema_path(&repo_root)?;
     let boundary_schema = BoundarySchema::load(&schema_path)
         .with_context(|| format!("loading boundary schema from {}", schema_path.display()))?;
     let stdin = io::stdin();
@@ -218,73 +217,29 @@ pub enum ListenError {
     Write(fmt::Error),
 }
 
-struct Cli {
-    boundary_schema_path: Option<PathBuf>,
-}
+struct Cli;
 
 impl Cli {
     fn parse() -> Result<Self> {
         let mut args = env::args_os();
         let _program = args.next();
-        let mut boundary_schema_path = None;
-
         while let Some(arg) = args.next() {
             let arg_str = arg
                 .to_str()
                 .ok_or_else(|| anyhow!("invalid UTF-8 in argument"))?;
             match arg_str {
-                "--boundary" => {
-                    let value = args
-                        .next()
-                        .ok_or_else(|| anyhow!("--boundary requires a value"))?;
-                    boundary_schema_path = Some(PathBuf::from(
-                        value
-                            .into_string()
-                            .map_err(|_| anyhow!("--boundary must be valid UTF-8"))?,
-                    ));
-                }
                 "--help" | "-h" => usage(0),
                 other => bail!("unknown argument: {other}"),
             }
         }
 
-        Ok(Self {
-            boundary_schema_path,
-        })
-    }
-}
-
-fn resolve_listen_schema_path(
-    repo_root: Option<&Path>,
-    override_path: Option<PathBuf>,
-) -> Result<PathBuf> {
-    if let Some(path) = override_path {
-        return Ok(repo_relative(repo_root, &path));
-    }
-    if let Ok(env_path) = env::var("BOUNDARY_PATH") {
-        return Ok(repo_relative(repo_root, Path::new(&env_path)));
-    }
-    if let Some(root) = repo_root {
-        return resolve_boundary_schema_path(root, None);
-    }
-    bail!(
-        "Unable to resolve boundary schema path. Set --boundary, BOUNDARY_PATH, or run from a probe repository."
-    )
-}
-
-fn repo_relative(base: Option<&Path>, candidate: &Path) -> PathBuf {
-    if candidate.is_absolute() {
-        candidate.to_path_buf()
-    } else if let Some(root) = base {
-        root.join(candidate)
-    } else {
-        candidate.to_path_buf()
+        Ok(Self)
     }
 }
 
 fn usage(code: i32) -> ! {
     eprintln!(
-        "Usage: fencerunner --listen [--boundary PATH]\n\nOptions:\n  --boundary PATH           Override boundary-object schema path (or set BOUNDARY_PATH).\n  --help                    Show this help text."
+        "Usage: fencerunner --listen\n\nOptions:\n  --help                    Show this help text."
     );
     std::process::exit(code);
 }
@@ -306,7 +261,7 @@ mod tests {
 
     fn boundary_schema() -> BoundarySchema {
         let repo_root = fencerunner::find_repo_root().expect("repo root");
-        let path = resolve_boundary_schema_path(&repo_root, None).expect("resolve boundary schema");
+        let path = resolve_boundary_schema_path(&repo_root).expect("resolve boundary schema");
         BoundarySchema::load(&path).expect("load boundary schema")
     }
 

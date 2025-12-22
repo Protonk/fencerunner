@@ -8,8 +8,7 @@
 use anyhow::{Context, Result, anyhow, bail};
 use fencerunner::{
     CapabilityId, CapabilityIndex, Probe, find_repo_root, list_probes,
-    resolve_boundary_schema_path, resolve_catalog_path, resolve_helper_binary, resolve_probe,
-    split_list,
+    resolve_catalog_path, resolve_helper_binary, resolve_probe, split_list,
 };
 use serde_json::Value;
 use std::{
@@ -29,12 +28,10 @@ fn run() -> Result<()> {
     let cli = Cli::parse()?;
     let repo_root = find_repo_root()?;
     let catalog_path = resolve_catalog_path(&repo_root, cli.catalog_path.as_deref());
-    let boundary_schema_path =
-        resolve_boundary_schema_path(&repo_root, cli.boundary_path.as_deref())?;
     let probes = resolve_probes(&repo_root, &catalog_path, &cli)?;
     let mut errors: Vec<String> = Vec::new();
     for probe in &probes {
-        if let Err(err) = run_probe(&repo_root, probe, &catalog_path, &boundary_schema_path) {
+        if let Err(err) = run_probe(&repo_root, probe, &catalog_path) {
             let message = format!("probe {} failed: {err:#}", probe.id);
             eprintln!("probe-matrix: {message}");
             errors.push(message);
@@ -90,7 +87,6 @@ fn run_probe(
     repo_root: &Path,
     probe: &Probe,
     catalog_path: &Path,
-    boundary_path: &Path,
 ) -> Result<()> {
     let runner = resolve_helper_binary(repo_root, "probe-exec")?;
     let output = Command::new(&runner)
@@ -99,7 +95,6 @@ fn run_probe(
         .stdout(Stdio::piped())
         .stderr(Stdio::inherit())
         .env("CATALOG_PATH", catalog_path)
-        .env("BOUNDARY_PATH", boundary_path)
         .output()
         .with_context(|| format!("Failed to execute {}", runner.display()))?;
 
@@ -142,7 +137,6 @@ fn probes_for_capability(repo_root: &Path, capability: &CapabilityId) -> Result<
 struct Cli {
     selection: Selection,
     catalog_path: Option<PathBuf>,
-    boundary_path: Option<PathBuf>,
 }
 
 impl Cli {
@@ -151,7 +145,6 @@ impl Cli {
         let _program = args.next();
         let mut selection: Option<Selection> = None;
         let mut catalog_path = None;
-        let mut boundary_path = None;
 
         while let Some(arg) = args.next() {
             let arg_str = arg
@@ -170,7 +163,6 @@ impl Cli {
                     selection = set_selection(selection, Selection::Probe(value))?;
                 }
                 "--catalog" => catalog_path = Some(next_path("--catalog", &mut args)?),
-                "--boundary" => boundary_path = Some(next_path("--boundary", &mut args)?),
                 "--help" | "-h" => usage(0),
                 other => bail!("unknown argument: {other}"),
             }
@@ -179,7 +171,6 @@ impl Cli {
         Ok(Self {
             selection: selection.unwrap_or(Selection::All { explicit: false }),
             catalog_path,
-            boundary_path,
         })
     }
 }
@@ -232,7 +223,7 @@ enum Selection {
 
 fn usage(code: i32) -> ! {
     eprintln!(
-        "Usage: probe-matrix (--bang | --bundle <capability-id> | --probe <probe-id>) [--catalog PATH] [--boundary PATH]\n\nCommands:\n  --bang                 Run every probe once.\n  --bundle <capability>  Run probes whose primary capability matches <capability>.\n  --probe <id>           Run a single probe by id.\n\nOptions:\n  --catalog PATH         Override capability catalog path (or set CATALOG_PATH).\n  --boundary PATH        Override boundary-object schema path (or set BOUNDARY_PATH).\n  --help                 Show this help text."
+        "Usage: probe-matrix (--bang | --bundle <capability-id> | --probe <probe-id>) [--catalog PATH]\n\nCommands:\n  --bang                 Run every probe once.\n  --bundle <capability>  Run probes whose primary capability matches <capability>.\n  --probe <id>           Run a single probe by id.\n\nOptions:\n  --catalog PATH         Override capability catalog path (or set CATALOG_PATH).\n  --help                 Show this help text."
     );
     std::process::exit(code);
 }

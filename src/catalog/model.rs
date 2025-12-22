@@ -9,7 +9,7 @@ use crate::catalog::identity::{
     CapabilityCategory, CapabilityId, CapabilityLayer, CapabilitySnapshot, CatalogKey,
 };
 use anyhow::Result;
-use serde::Deserialize;
+use serde::{Deserialize, Deserializer};
 use serde_json::Value;
 use std::collections::BTreeMap;
 use std::fs;
@@ -49,7 +49,7 @@ pub struct Scope {
     pub description: String,
     #[serde(default)]
     pub notes: Option<String>,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "deserialize_policy_layers")]
     pub policy_layers: Vec<PolicyLayer>,
     pub categories: BTreeMap<String, String>,
     #[serde(default)]
@@ -97,7 +97,7 @@ pub struct Capability {
     pub labels: Vec<String>,
     #[serde(default)]
     pub notes: Option<String>,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "deserialize_sources")]
     pub sources: Vec<CapabilitySource>,
     #[serde(default)]
     pub extensions: BTreeMap<String, Value>,
@@ -124,6 +124,69 @@ pub struct CapabilitySource {
     pub url_hint: Option<String>,
     #[serde(default)]
     pub extensions: BTreeMap<String, Value>,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(untagged)]
+enum PolicyLayersInput {
+    List(Vec<PolicyLayer>),
+    Map(BTreeMap<String, String>),
+}
+
+fn deserialize_policy_layers<'de, D>(deserializer: D) -> Result<Vec<PolicyLayer>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let input = Option::<PolicyLayersInput>::deserialize(deserializer)?;
+    Ok(match input {
+        None => Vec::new(),
+        Some(PolicyLayersInput::List(list)) => list,
+        Some(PolicyLayersInput::Map(map)) => map
+            .into_iter()
+            .map(|(id, description)| PolicyLayer {
+                id,
+                description,
+                extensions: BTreeMap::new(),
+            })
+            .collect(),
+    })
+}
+
+#[derive(Clone, Debug, Deserialize)]
+struct SourceDetail {
+    #[serde(default)]
+    section: Option<String>,
+    #[serde(default)]
+    url_hint: Option<String>,
+    #[serde(default)]
+    extensions: BTreeMap<String, Value>,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(untagged)]
+enum SourcesInput {
+    List(Vec<CapabilitySource>),
+    Map(BTreeMap<String, SourceDetail>),
+}
+
+fn deserialize_sources<'de, D>(deserializer: D) -> Result<Vec<CapabilitySource>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let input = Option::<SourcesInput>::deserialize(deserializer)?;
+    Ok(match input {
+        None => Vec::new(),
+        Some(SourcesInput::List(list)) => list,
+        Some(SourcesInput::Map(map)) => map
+            .into_iter()
+            .map(|(doc, detail)| CapabilitySource {
+                doc,
+                section: detail.section,
+                url_hint: detail.url_hint,
+                extensions: detail.extensions,
+            })
+            .collect(),
+    })
 }
 
 impl Capability {

@@ -18,7 +18,7 @@ The catalog schema lives at `catalogs/capability_catalog.schema.json` (current s
 Top-level fields:
 - `schema_version` — catalog schema version (`sandbox_catalog_v1`).
 - `catalog` — metadata about the catalog instance (`key`, `title`, optional `description`/`labels`/`notes`).
-- `scope` — description of what the catalog covers plus `policy_layers`, `categories`, and optional `limitations`/`notes`.
+- `scope` — description of what the catalog covers plus `policy_layers`, `categories`, and optional `limitations`/`notes`. `policy_layers` and `categories` are maps keyed by id.
 - `docs` — bibliography map used by capability sources.
 - `capabilities` — array of capability entries.
 - `extensions` — optional object for forward-compatible metadata.
@@ -42,7 +42,7 @@ Fields:
 - `agent_controls` — `agent-policy:*` tags describing agent-level knobs.
 - `labels` — optional string tags to mark environment or client-specific bits.
 - `notes` — probe-author hints or contextual commentary.
-- `sources` — citations `{doc, section?, url_hint?}` pointing back to `docs`.
+- `sources` — citations either as an array of `{doc, section?, url_hint?}` objects or a map keyed by doc id with `{section?, url_hint?}` values.
 - `extensions` — optional object for forward-compatible metadata.
 
 ## Example entry
@@ -119,7 +119,6 @@ Validator:
 Instance:
 - Default schema: `boundary/boundary_object_schema.json`
 - Emitted boundary objects: NDJSON from probes (`bin/emit-record`)
-- Overrides: `--boundary` or `BOUNDARY_PATH`
 
 ### Manual validation
 

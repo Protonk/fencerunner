@@ -152,8 +152,7 @@ fn boundary_object_schema() -> Result<()> {
 
     static BOUNDARY_OBJECT_SCHEMA: OnceLock<BoundarySchema> = OnceLock::new();
     let schema = BOUNDARY_OBJECT_SCHEMA.get_or_init(|| {
-        let schema_path =
-            resolve_boundary_schema_path(&repo_root, None).expect("resolve boundary schema");
+        let schema_path = resolve_boundary_schema_path(&repo_root).expect("resolve boundary schema");
         BoundarySchema::load(&schema_path).expect("load boundary schema")
     });
     schema.validate(&value)?;

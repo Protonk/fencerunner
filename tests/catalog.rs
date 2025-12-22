@@ -82,7 +82,7 @@ fn capability_index_enforces_schema_version() -> Result<()> {
         &mut file,
         &json!({
             "schema_version": "unexpected",
-            "scope": {"description": "test", "policy_layers": [], "categories": {}},
+            "scope": {"description": "test", "policy_layers": {}, "categories": {}},
             "docs": {},
             "capabilities": []
         }),
@@ -102,7 +102,7 @@ fn capability_index_accepts_allowed_schema_version_override() -> Result<()> {
             "catalog": {"key": "custom_catalog_v1", "title": "custom catalog"},
             "scope": {
                 "description": "test",
-                "policy_layers": [{"id": "os_sandbox", "description": "fixture layer"}],
+                "policy_layers": {"os_sandbox": "fixture layer"},
                 "categories": {"filesystem": "fixture"}
             },
             "docs": {},
@@ -149,7 +149,7 @@ fn capability_index_rejects_schema_with_wrong_title() -> Result<()> {
         "catalog": {"key": "fixture", "title": "fixture"},
         "scope": {
             "description": "fixture",
-            "policy_layers": [{"id": "os_sandbox", "description": "fixture layer"}],
+            "policy_layers": {"os_sandbox": "fixture layer"},
             "categories": {"filesystem": "fixture"}
         },
         "docs": {},
@@ -164,5 +164,42 @@ fn capability_index_rejects_schema_with_wrong_title() -> Result<()> {
     fs::write(&catalog_path, serde_json::to_vec(&catalog)?)?;
 
     assert!(CapabilityIndex::load(&catalog_path).is_err());
+    Ok(())
+}
+
+#[test]
+fn capability_index_accepts_sources_map() -> Result<()> {
+    let mut file = NamedTempFile::new()?;
+    serde_json::to_writer(
+        &mut file,
+        &json!({
+            "schema_version": "sandbox_catalog_v1",
+            "catalog": {"key": "sample_catalog_v1", "title": "sample catalog"},
+            "scope": {
+                "description": "test",
+                "policy_layers": {"os_sandbox": "sandbox"},
+                "categories": {"filesystem": "fs"}
+            },
+            "docs": {
+                "apple_sandbox_guide": {"title": "Apple Sandbox Guide"}
+            },
+            "capabilities": [{
+                "id": "cap_fs_read_workspace_tree",
+                "category": "filesystem",
+                "layer": "os_sandbox",
+                "description": "fixture",
+                "operations": {"allow": [], "deny": []},
+                "sources": {
+                    "apple_sandbox_guide": {"section": "2"}
+                }
+            }]
+        }),
+    )?;
+
+    let index = CapabilityIndex::load(file.path())?;
+    let capability = &index.catalog().capabilities[0];
+    assert_eq!(capability.sources.len(), 1);
+    assert_eq!(capability.sources[0].doc, "apple_sandbox_guide");
+    assert_eq!(capability.sources[0].section.as_deref(), Some("2"));
     Ok(())
 }

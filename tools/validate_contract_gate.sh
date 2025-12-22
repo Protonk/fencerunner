@@ -860,11 +860,14 @@ run_dynamic_gate() {
 
   # Build a minimal shadow repo layout so probe helpers and find_repo_root
   # behave as they would inside the real repository.
-  mkdir -p "${shadow_root}/bin" "${shadow_root}/probes" "${shadow_root}/tmp"
+  mkdir -p "${shadow_root}/bin" "${shadow_root}/probes" "${shadow_root}/tmp" "${shadow_root}/boundary"
   # Provide repo root sentinels expected by find_repo_root.
   if [[ -f "${repo_root}/bin/.gitkeep" ]]; then
     cp "${repo_root}/bin/.gitkeep" "${shadow_root}/bin/.gitkeep"
   fi
+
+  cp "${repo_root}/boundary/boundary_object_schema.json" \
+    "${shadow_root}/boundary/boundary_object_schema.json"
   if [[ -f "${repo_root}/Makefile" ]]; then
     ln -s "${repo_root}/Makefile" "${shadow_root}/Makefile" 2>/dev/null || cp "${repo_root}/Makefile" "${shadow_root}/Makefile"
   fi
@@ -905,10 +908,8 @@ run_dynamic_gate() {
   local path_prefix="${shadow_root}/bin:${PATH}"
 
   local default_catalog="${repo_root}/catalogs/macos_codex_v1.json"
-  local default_boundary="${repo_root}/boundary/boundary_object_schema.json"
   local catalog_path="${capabilities_json:-${CATALOG_PATH:-${default_catalog}}}"
   local adapter_path="${capabilities_adapter:-${repo_root}/tools/adapt_capabilities.sh}"
-  local boundary_path="${BOUNDARY_PATH:-${default_boundary}}"
 
   # Environment mirrors the real runner but points to shadow paths and the
   # stub state directory.
@@ -919,7 +920,6 @@ run_dynamic_gate() {
     PROBE_CONTRACT_GATE_STATE_DIR="${stub_state}"
     PROBE_CONTRACT_CAPABILITIES_JSON="${catalog_path}"
     PROBE_CONTRACT_CAPABILITIES_ADAPTER="${adapter_path}"
-    BOUNDARY_PATH="${boundary_path}"
     JSON_EXTRACT_BIN="${json_extract_bin}"
     REAL_EMIT_RECORD="${repo_root}/bin/emit-record}")
 

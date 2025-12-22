@@ -202,9 +202,9 @@ pub fn sample_capability_index(entries: &[(&str, &str, &str)]) -> Result<Capabil
             .or_insert_with(|| "fixture".to_string());
         layers.insert(layer.to_string());
     }
-    let policy_layers: Vec<Value> = layers
+    let policy_layers: BTreeMap<String, String> = layers
         .into_iter()
-        .map(|layer| json!({"id": layer, "description": "fixture layer"}))
+        .map(|layer| (layer, "fixture layer".to_string()))
         .collect();
 
     serde_json::to_writer(

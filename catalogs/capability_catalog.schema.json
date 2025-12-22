@@ -27,15 +27,6 @@
       "type": "object",
       "additionalProperties": true
     },
-    "string_list": {
-      "type": "array",
-      "items": {"type": "string"}
-    },
-    "string_list_unique": {
-      "type": "array",
-      "items": {"type": "string"},
-      "uniqueItems": true
-    },
     "catalog": {
       "type": "object",
       "required": ["key", "title"],
@@ -47,7 +38,11 @@
         },
         "title": {"type": "string"},
         "description": {"type": "string"},
-        "labels": {"$ref": "#/$defs/string_list_unique"},
+        "labels": {
+          "type": "array",
+          "items": {"type": "string"},
+          "uniqueItems": true
+        },
         "notes": {"type": "string"},
         "extensions": {"$ref": "#/$defs/extensions"}
       }
@@ -60,24 +55,14 @@
         "description": {"type": "string"},
         "notes": {"type": "string"},
         "policy_layers": {
-          "type": "array",
-          "items": {"$ref": "#/$defs/policy_layer"}
+          "type": "object",
+          "additionalProperties": {"type": "string"}
         },
         "categories": {
           "type": "object",
           "additionalProperties": {"type": "string"}
         },
         "limitations": {"type": "string"},
-        "extensions": {"$ref": "#/$defs/extensions"}
-      }
-    },
-    "policy_layer": {
-      "type": "object",
-      "required": ["id", "description"],
-      "additionalProperties": false,
-      "properties": {
-        "id": {"type": "string"},
-        "description": {"type": "string"},
         "extensions": {"$ref": "#/$defs/extensions"}
       }
     },
@@ -110,10 +95,20 @@
         "layer": {"type": "string"},
         "description": {"type": "string"},
         "status": {"type": "string"},
-        "labels": {"$ref": "#/$defs/string_list_unique"},
+        "labels": {
+          "type": "array",
+          "items": {"type": "string"},
+          "uniqueItems": true
+        },
         "operations": {"$ref": "#/$defs/operations"},
-        "meta_ops": {"$ref": "#/$defs/string_list"},
-        "agent_controls": {"$ref": "#/$defs/string_list"},
+        "meta_ops": {
+          "type": "array",
+          "items": {"type": "string"}
+        },
+        "agent_controls": {
+          "type": "array",
+          "items": {"type": "string"}
+        },
         "notes": {"type": "string"},
         "sources": {"$ref": "#/$defs/capability_sources"},
         "extensions": {"$ref": "#/$defs/extensions"}
@@ -123,14 +118,28 @@
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "allow": {"$ref": "#/$defs/string_list"},
-        "deny": {"$ref": "#/$defs/string_list"},
+        "allow": {
+          "type": "array",
+          "items": {"type": "string"}
+        },
+        "deny": {
+          "type": "array",
+          "items": {"type": "string"}
+        },
         "extensions": {"$ref": "#/$defs/extensions"}
       }
     },
     "capability_sources": {
-      "type": "array",
-      "items": {"$ref": "#/$defs/capability_source"}
+      "oneOf": [
+        {
+          "type": "array",
+          "items": {"$ref": "#/$defs/capability_source"}
+        },
+        {
+          "type": "object",
+          "additionalProperties": {"$ref": "#/$defs/capability_source_detail"}
+        }
+      ]
     },
     "capability_source": {
       "type": "object",
@@ -138,6 +147,15 @@
       "additionalProperties": false,
       "properties": {
         "doc": {"type": "string"},
+        "section": {"type": "string"},
+        "url_hint": {"type": "string"},
+        "extensions": {"$ref": "#/$defs/extensions"}
+      }
+    },
+    "capability_source_detail": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
         "section": {"type": "string"},
         "url_hint": {"type": "string"},
         "extensions": {"$ref": "#/$defs/extensions"}

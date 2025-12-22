@@ -66,7 +66,7 @@ impl Cli {
                 command.get_or_insert(CommandTarget::RunMatrix);
                 trailing_args.push(arg);
             }
-            "--bundle" | "--probe" | "--catalog" | "--boundary" => {
+            "--bundle" | "--probe" | "--catalog" => {
                 command.get_or_insert(CommandTarget::RunMatrix);
                 trailing_args.push(arg.clone());
                 let Some(value) = args.next() else {
@@ -100,7 +100,7 @@ impl Cli {
 
 fn usage(code: i32) -> ! {
     eprintln!(
-        "Usage: fencerunner (--bang | --bundle <capability-id> | --probe <probe-id> | --listen) [args]\n\nCommands:\n  --bang               Run every probe once and emit boundary records (NDJSON).\n  --bundle <cap-id>    Run probes whose primary capability matches <cap-id>.\n  --probe <probe-id>   Run a single probe by id.\n  --listen, -l         Read boundary-object JSON from stdin and print a human summary.\n\nOptions:\n  --catalog <path>     Override capability catalog path (or set CATALOG_PATH).\n  --boundary <path>    Override boundary-object schema path (or set BOUNDARY_PATH).\n\nExamples:\n  fencerunner --bang | fencerunner --listen\n  fencerunner --probe fs_read_workspace_readme\n  fencerunner --bundle cap_fs_read_workspace_tree"
+        "Usage: fencerunner (--bang | --bundle <capability-id> | --probe <probe-id> | --listen) [args]\n\nCommands:\n  --bang               Run every probe once and emit boundary records (NDJSON).\n  --bundle <cap-id>    Run probes whose primary capability matches <cap-id>.\n  --probe <probe-id>   Run a single probe by id.\n  --listen, -l         Read boundary-object JSON from stdin and print a human summary.\n\nOptions:\n  --catalog <path>     Override capability catalog path (or set CATALOG_PATH).\n\nExamples:\n  fencerunner --bang | fencerunner --listen\n  fencerunner --probe fs_read_workspace_readme\n  fencerunner --bundle cap_fs_read_workspace_tree"
     );
     std::process::exit(code);
 }
