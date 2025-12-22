@@ -25,8 +25,9 @@ pub mod runtime;
 pub(crate) mod schema_loader;
 
 pub use boundary::{
-    BoundaryObject, BoundaryReadError, BoundarySchema, CapabilityContext, OperationInfo, Payload,
-    ProbeInfo, ResultInfo, RunInfo, StackInfo, read_boundary_objects,
+    BoundaryObject, BoundaryReadError, BoundarySchema, CapabilityContext, ContextInfo,
+    OperationInfo, ProbeContext, ProbeInfo, ResultDetails, ResultInfo, RunInfo, StackInfo,
+    read_boundary_objects,
 };
 pub use catalog::{
     Capability, CapabilityCatalog, CapabilityCategory, CapabilityId, CapabilityIndex,
@@ -42,12 +43,12 @@ const ROOT_SENTINEL: &str = "bin/.gitkeep";
 const MAKEFILE: &str = "Makefile";
 const ENV_CATALOG_PATH: &str = "CATALOG_PATH";
 const ENV_BOUNDARY_SCHEMA_PATH: &str = "BOUNDARY_PATH";
-pub const DEFAULT_BOUNDARY_SCHEMA_PATH: &str = "boundaries/cfbo-v1.json";
+pub const DEFAULT_BOUNDARY_SCHEMA_PATH: &str = "schema/boundary_object_schema.json";
 pub const CANONICAL_BOUNDARY_SCHEMA_PATH: &str = "schema/boundary_object_schema.json";
 
-/// Default paths for catalog and boundary descriptors, resolved relative to a repo root.
+/// Default paths for catalog and boundary schemas, resolved relative to a repo root.
 #[derive(Debug, Clone)]
-pub struct DefaultDescriptorPaths {
+pub struct DefaultSchemaPaths {
     pub catalog: PathBuf,
     pub boundary: PathBuf,
 }
@@ -115,12 +116,12 @@ pub fn resolve_catalog_path(repo_root: &Path, cli_override: Option<&Path>) -> Pa
     resolve_repo_data_path(repo_root, cli_override, ENV_CATALOG_PATH, &default_catalog)
 }
 
-/// Resolve the boundary descriptor path using CLI/env overrides or the default.
+/// Resolve the boundary schema path using CLI/env overrides or the default.
 pub fn resolve_boundary_schema_path(
     repo_root: &Path,
     cli_override: Option<&Path>,
 ) -> Result<PathBuf> {
-    let default_boundary = default_boundary_descriptor_path(repo_root);
+    let default_boundary = default_boundary_schema_path(repo_root);
     let resolved = if let Some(path) = cli_override {
         repo_relative(repo_root, path)
     } else if let Ok(env_path) = env::var(ENV_BOUNDARY_SCHEMA_PATH) {
@@ -164,19 +165,19 @@ fn repo_relative(repo_root: &Path, candidate: &Path) -> PathBuf {
     }
 }
 
-/// Return the default capability catalog descriptor.
+/// Return the default capability catalog path.
 pub fn default_catalog_path(repo_root: &Path) -> PathBuf {
     repo_root.join(DEFAULT_CATALOG_PATH)
 }
 
-/// Return the default boundary descriptor.
-pub fn default_boundary_descriptor_path(repo_root: &Path) -> PathBuf {
+/// Return the default boundary schema.
+pub fn default_boundary_schema_path(repo_root: &Path) -> PathBuf {
     repo_root.join(DEFAULT_BOUNDARY_SCHEMA_PATH)
 }
 
-/// Resolve default descriptors from baked-in paths.
-pub fn default_descriptor_paths(repo_root: &Path) -> DefaultDescriptorPaths {
-    DefaultDescriptorPaths {
+/// Resolve default schema paths from baked-in locations.
+pub fn default_schema_paths(repo_root: &Path) -> DefaultSchemaPaths {
+    DefaultSchemaPaths {
         catalog: repo_root.join(DEFAULT_CATALOG_PATH),
         boundary: repo_root.join(DEFAULT_BOUNDARY_SCHEMA_PATH),
     }
@@ -372,7 +373,12 @@ mod tests {
         let array_input = format!("[{0},{0}]", serialized);
         let array_records = parse_json_stream(&array_input).expect("array parses");
         assert_eq!(array_records.len(), 2);
-        assert_eq!(array_records[1].run.command, "/bin/true");
+        let command = array_records[1]
+            .context
+            .as_ref()
+            .and_then(|ctx| ctx.run.as_ref())
+            .map(|run| run.command.as_str());
+        assert_eq!(command, Some("/bin/true"));
     }
 
     #[test]
@@ -386,48 +392,46 @@ mod tests {
 
     fn sample_record_json() -> serde_json::Value {
         json!({
-            "schema_version": "boundary_event_v1",
-            "schema_key": "example_boundary_key",
-            "capabilities_schema_version": "example_catalog_key",
-            "stack": {
-                "sandbox_mode": null,
-                "os": "Darwin"
-            },
             "probe": {
-                "id": "probe_id",
-                "version": "1",
-                "primary_capability_id": "cap_fs_read_workspace_tree",
-                "secondary_capability_ids": []
-            },
-            "run": {
-                "workspace_root": "/tmp",
-                "command": "/bin/true"
+                "id": "probe_id"
             },
             "operation": {
-                "category": "fs",
-                "verb": "read",
+                "kind": "fs.read",
                 "target": "/tmp",
                 "args": {}
             },
             "result": {
-                "observed_result": "success",
-                "raw_exit_code": 0,
-                "errno": null,
-                "message": null,
-                "error_detail": null
+                "outcome": "success",
+                "details": {
+                    "exit_code": 0
+                }
+            },
+            "context": {
+                "capabilities_schema_version": "example_catalog_key",
+                "stack": {
+                    "os": "Darwin"
+                },
+                "probe": {
+                    "primary_capability_id": "cap_fs_read_workspace_tree",
+                    "secondary_capability_ids": []
+                },
+                "run": {
+                    "workspace_root": "/tmp",
+                    "command": "/bin/true"
+                },
+                "capability_context": {
+                    "primary": {
+                        "id": "cap_fs_read_workspace_tree",
+                        "category": "filesystem",
+                        "layer": "os_sandbox"
+                    },
+                    "secondary": []
+                }
             },
             "payload": {
                 "stdout_snippet": null,
                 "stderr_snippet": null,
                 "raw": {}
-            },
-            "capability_context": {
-                "primary": {
-                    "id": "cap_fs_read_workspace_tree",
-                    "category": "filesystem",
-                    "layer": "os_sandbox"
-                },
-                "secondary": []
             }
         })
     }

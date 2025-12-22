@@ -1,9 +1,10 @@
 # Schema Contracts
 
 This directory holds the canonical JSON Schema contracts used by the harness.
-Each schema has a fixed pattern (schema_version const) and a small, explicit
-load/validate pipeline. This document summarizes the pattern -> loader ->
-validator -> instance path for each contract.
+Each schema has a fixed contract and a small, explicit load/validate pipeline.
+The catalog schema is versioned (`schema_version` const); the boundary object
+schema is intentionally minimal and unversioned. This document summarizes the
+pattern -> loader -> validator -> instance path for each contract.
 
 ## Terms
 
@@ -30,26 +31,21 @@ Instance:
 - Default catalog: `catalogs/macos_codex_v1.json`
 - Overrides: `--catalog` or `CATALOG_PATH`
 
-## Boundary descriptors and boundary objects (boundary_event_v1)
+## Boundary object schema
 
 Pattern:
-- Descriptor contract: `schema/boundary_object_schema.json`
-- Embedded boundary schema pattern: `boundary_event_v1` (schema_version const
-  inside the descriptor's boundary_schema)
+- `schema/boundary_object_schema.json` (minimal required fields for a probe run)
 
 Loader:
 - `src/boundary/mod.rs` -> `BoundarySchema::load`
 - Path resolution via `resolve_boundary_schema_path` in `src/lib.rs`
 
 Validator:
-- Descriptor JSON must pass `schema/boundary_object_schema.json`
-- Embedded boundary_schema is compiled; `schema_key` const must match the
-  descriptor key
 - Boundary objects are validated by `BoundarySchema::validate` (used by
   `bin/emit-record`, `bin/probe-listen`, and tests)
 
 Instance:
-- Default descriptor: `boundaries/cfbo-v1.json`
+- Default schema: `schema/boundary_object_schema.json`
 - Emitted boundary objects: NDJSON from probes (`bin/emit-record`)
 - Overrides: `--boundary` or `BOUNDARY_PATH`
 
@@ -60,5 +56,5 @@ Instance:
 
 ## Guard rails
 
-- `tests/schema.rs` asserts descriptor and catalog schemas stay aligned with
-  their instances.
+- `tests/schema.rs` asserts boundary object and catalog schemas stay aligned
+  with their instances.

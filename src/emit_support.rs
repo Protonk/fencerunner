@@ -236,10 +236,10 @@ fn enforce_payload_size(payload: &Value) -> Result<()> {
     Ok(())
 }
 
-pub fn validate_status(status: &str) -> Result<()> {
-    match status {
+pub fn validate_outcome(outcome: &str) -> Result<()> {
+    match outcome {
         "success" | "denied" | "partial" | "error" => Ok(()),
-        other => bail!("Unknown status: {other} (expected success|denied|partial|error)"),
+        other => bail!("Unknown outcome: {other} (expected success|denied|partial|error)"),
     }
 }
 

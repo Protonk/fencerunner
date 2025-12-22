@@ -70,16 +70,14 @@ fi
 
 "${emit_record_bin}" \
   --probe-name "${probe_name}" \
-  --probe-version "1" \
   --primary-capability-id "${primary_capability_id}" \
   --command "${command_executed}" \
-  --category "fs" \
-  --verb "write" \
+  --operation-kind "fs.write" \
   --target "${target_path}" \
-  --status "${status}" \
+  --outcome "${status}" \
   --errno "${errno_value}" \
   --message "${message}" \
-  --raw-exit-code "${raw_exit_code}" \
+  --exit-code "${raw_exit_code}" \
   --payload-stdout "${stdout_text}" \
   --payload-stderr "${stderr_text}" \
   --payload-raw-field "target_path" "${target_path}" \

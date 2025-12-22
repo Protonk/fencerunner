@@ -8,13 +8,16 @@
 use anyhow::{Context, Result, anyhow, bail};
 use fencerunner::emit_support::{
     JsonObjectBuilder, PayloadArgs, TextSource, normalize_secondary_ids, not_empty,
-    validate_capability_id, validate_status,
+    validate_capability_id, validate_outcome,
 };
 use fencerunner::{
-    BoundarySchema, CapabilityId, CapabilityIndex, CapabilitySnapshot, StackInfo, find_repo_root,
-    resolve_boundary_schema_path, resolve_catalog_path, resolve_helper_binary, split_list,
+    BoundaryObject, BoundarySchema, CapabilityContext, CapabilityId, CapabilityIndex, ContextInfo,
+    OperationInfo, ProbeContext, ProbeInfo, ResultDetails, ResultInfo, RunInfo, StackInfo,
+    find_repo_root, resolve_boundary_schema_path, resolve_catalog_path, resolve_helper_binary,
+    split_list,
 };
-use serde_json::{Value, json};
+use serde_json::Value;
+use std::collections::BTreeMap;
 use std::env;
 use std::ffi::OsString;
 use std::fmt::Write;
@@ -37,6 +40,10 @@ fn run() -> Result<()> {
 
     let capability_catalog_path =
         resolve_catalog_path(&repo_root, args.catalog_path.as_deref().map(Path::new));
+    let boundary_schema_path = resolve_boundary_schema_path(
+        &repo_root,
+        args.boundary_schema_path.as_deref().map(Path::new),
+    )?;
     let capability_index = CapabilityIndex::load(&capability_catalog_path).with_context(|| {
         format!(
             "loading capability catalog from {}",
@@ -50,98 +57,116 @@ fn run() -> Result<()> {
         );
     }
 
+    let CliArgs {
+        probe_name,
+        operation_kind,
+        target,
+        outcome,
+        errno,
+        message,
+        exit_code,
+        error_detail,
+        payload,
+        operation_args,
+        primary_capability_id,
+        secondary_capability_ids,
+        command,
+        ..
+    } = args;
+
     validate_capability_id(
         &capability_index,
-        &args.primary_capability_id,
+        &primary_capability_id,
         "primary capability id",
     )?;
     let secondary_capability_ids =
-        normalize_secondary_ids(&capability_index, &args.secondary_capability_ids)?;
+        normalize_secondary_ids(&capability_index, &secondary_capability_ids)?;
 
     let capabilities_schema_version = capability_index.key().clone();
 
-    let payload = args.payload.build()?;
-    let operation_args = args.operation_args.build("operation args")?;
+    let payload = payload.build()?;
+    let operation_args = if operation_args.is_empty() {
+        None
+    } else {
+        Some(operation_args.build("operation args")?)
+    };
 
     let stack_raw = run_command_json(&detect_stack, &[])
         .with_context(|| format!("Failed to execute {}", detect_stack.display()))?;
-    let stack: StackInfo = serde_json::from_value(stack_raw.clone())
+    let stack: StackInfo = serde_json::from_value(stack_raw)
         .context("detect-stack emitted JSON that does not match the current stack schema")?;
-    let stack_json = serde_json::to_value(stack)?;
 
     let workspace_root = resolve_workspace_root()?;
 
-    let result_json = json!({
-        "observed_result": args.status,
-        "raw_exit_code": args.raw_exit_code,
-        "errno": args.errno,
-        "message": args.message,
-        "error_detail": args.error_detail,
-    });
+    let details = if exit_code.is_some()
+        || errno.is_some()
+        || message.is_some()
+        || error_detail.is_some()
+    {
+        Some(ResultDetails {
+            exit_code,
+            errno,
+            message,
+            error_detail,
+        })
+    } else {
+        None
+    };
 
     let primary_capability = capability_index
-        .capability(&args.primary_capability_id)
+        .capability(&primary_capability_id)
         .ok_or_else(|| {
             anyhow!(
                 "Unable to resolve capability metadata for {}",
-                args.primary_capability_id.0
+                primary_capability_id.0
             )
         })?;
     let secondary_capabilities =
         resolve_secondary_capabilities(&capability_index, &secondary_capability_ids)?;
     let primary_capability_snapshot = primary_capability.snapshot();
-    let secondary_capability_snapshots: Vec<CapabilitySnapshot> = secondary_capabilities
+    let secondary_capability_snapshots = secondary_capabilities
         .iter()
         .map(|cap| cap.snapshot())
         .collect();
 
-    let boundary_schema_path = resolve_boundary_schema_path(
-        &repo_root,
-        args.boundary_schema_path.as_deref().map(Path::new),
-    )?;
     let boundary_schema = BoundarySchema::load(&boundary_schema_path).with_context(|| {
         format!(
             "loading boundary schema from {}",
             boundary_schema_path.display()
         )
     })?;
-    let schema_key = boundary_schema.schema_key().ok_or_else(|| {
-        anyhow!(
-            "boundary schema at {} is missing a schema_key; provide a descriptor file",
-            boundary_schema_path.display()
-        )
-    })?;
 
-    let record = json!({
-        "schema_version": boundary_schema.schema_version(),
-        "schema_key": schema_key,
-        "capabilities_schema_version": capabilities_schema_version,
-        "stack": stack_json,
-        "probe": {
-            "id": args.probe_name,
-            "version": args.probe_version,
-            "primary_capability_id": args.primary_capability_id,
-            "secondary_capability_ids": secondary_capability_ids,
+    let record = BoundaryObject {
+        probe: ProbeInfo { id: probe_name },
+        operation: OperationInfo {
+            kind: operation_kind,
+            target,
+            args: operation_args,
         },
-        "run": {
-            "workspace_root": workspace_root,
-            "command": args.command,
-        },
-        "operation": {
-            "category": args.category,
-            "verb": args.verb,
-            "target": args.target,
-            "args": operation_args,
-        },
-        "result": result_json,
-        "payload": payload,
-        "capability_context": {
-            "primary": primary_capability_snapshot,
-            "secondary": secondary_capability_snapshots,
-        }
-    });
+        result: ResultInfo { outcome, details },
+        context: Some(ContextInfo {
+            run: Some(RunInfo {
+                workspace_root,
+                command,
+            }),
+            stack: Some(stack),
+            capabilities_schema_version: Some(capabilities_schema_version),
+            capability_context: Some(CapabilityContext {
+                primary: primary_capability_snapshot,
+                secondary: secondary_capability_snapshots,
+            }),
+            probe: Some(ProbeContext {
+                primary_capability_id,
+                secondary_capability_ids,
+            }),
+            extra: BTreeMap::new(),
+        }),
+        payload: Some(payload),
+        extensions: None,
+    };
 
-    boundary_schema.validate(&record)?;
+    let record_json = serde_json::to_value(&record)?;
+    boundary_schema.validate(&record_json)?;
     println!("{}", serde_json::to_string(&record)?);
     Ok(())
 }
@@ -154,14 +179,12 @@ struct CliArgs {
     catalog_path: Option<String>,
     boundary_schema_path: Option<String>,
     probe_name: String,
-    probe_version: String,
-    category: String,
-    verb: String,
+    operation_kind: String,
     target: String,
-    status: String,
+    outcome: String,
     errno: Option<String>,
     message: Option<String>,
-    raw_exit_code: Option<i64>,
+    exit_code: Option<i64>,
     error_detail: Option<String>,
     payload: PayloadArgs,
     operation_args: JsonObjectBuilder,
@@ -189,19 +212,17 @@ impl CliArgs {
                 "--probe-name" | "--probe-id" => {
                     config.probe_name = Some(next_value(&mut args, arg.as_str())?)
                 }
-                "--probe-version" => {
-                    config.probe_version = Some(next_value(&mut args, "--probe-version")?)
+                "--operation-kind" => {
+                    config.operation_kind = Some(next_value(&mut args, "--operation-kind")?)
                 }
-                "--category" => config.category = Some(next_value(&mut args, "--category")?),
-                "--verb" => config.verb = Some(next_value(&mut args, "--verb")?),
                 "--target" => config.target = Some(next_value(&mut args, "--target")?),
-                "--status" => config.status = Some(next_value(&mut args, "--status")?),
+                "--outcome" => config.outcome = Some(next_value(&mut args, "--outcome")?),
                 "--errno" => config.errno = Some(next_value(&mut args, "--errno")?),
                 "--message" => config.message = Some(next_value(&mut args, "--message")?),
-                "--raw-exit-code" => {
-                    config.raw_exit_code = Some(parse_i64(
-                        next_value(&mut args, "--raw-exit-code")?,
-                        "raw-exit-code",
+                "--exit-code" => {
+                    config.exit_code = Some(parse_i64(
+                        next_value(&mut args, "--exit-code")?,
+                        "exit-code",
                     )?)
                 }
                 "--error-detail" => {
@@ -319,7 +340,7 @@ impl CliArgs {
         }
 
         let args = config.build()?;
-        validate_status(&args.status)?;
+        validate_outcome(&args.outcome)?;
         Ok(args)
     }
 }
@@ -329,14 +350,12 @@ struct PartialArgs {
     catalog_path: Option<String>,
     boundary_schema_path: Option<String>,
     probe_name: Option<String>,
-    probe_version: Option<String>,
-    category: Option<String>,
-    verb: Option<String>,
+    operation_kind: Option<String>,
     target: Option<String>,
-    status: Option<String>,
+    outcome: Option<String>,
     errno: Option<String>,
     message: Option<String>,
-    raw_exit_code: Option<i64>,
+    exit_code: Option<i64>,
     error_detail: Option<String>,
     payload: PayloadArgs,
     operation_args: JsonObjectBuilder,
@@ -351,14 +370,12 @@ impl PartialArgs {
             catalog_path,
             boundary_schema_path,
             probe_name,
-            probe_version,
-            category,
-            verb,
+            operation_kind,
             target,
-            status,
+            outcome,
             errno,
             message,
-            raw_exit_code,
+            exit_code,
             error_detail,
             payload,
             operation_args,
@@ -371,14 +388,12 @@ impl PartialArgs {
             catalog_path,
             boundary_schema_path,
             probe_name: Self::require("--probe-name", probe_name)?,
-            probe_version: Self::require("--probe-version", probe_version)?,
-            category: Self::require("--category", category)?,
-            verb: Self::require("--verb", verb)?,
+            operation_kind: Self::require("--operation-kind", operation_kind)?,
             target: Self::require("--target", target)?,
-            status: Self::require("--status", status)?,
+            outcome: Self::require("--outcome", outcome)?,
             errno: errno.filter(not_empty),
             message: message.filter(not_empty),
-            raw_exit_code,
+            exit_code,
             error_detail: error_detail.filter(not_empty),
             payload,
             operation_args,
@@ -523,7 +538,5 @@ fn print_usage() {
 }
 
 fn usage() -> &'static str {
-    "Usage: emit-record --probe-name NAME --probe-version VERSION \
-  --primary-capability-id CAP_ID --command COMMAND \
-  --category CATEGORY --verb VERB --target TARGET --status STATUS [options]\n\nOptions:\n  --errno ERRNO\n  --message MESSAGE\n  --raw-exit-code CODE\n  --error-detail TEXT\n  --secondary-capability-id CAP_ID   # repeat for multiple entries\n  --payload-file PATH (JSON object)\n  --payload-stdout TEXT | --payload-stdout-file PATH\n  --payload-stderr TEXT | --payload-stderr-file PATH\n  --payload-raw JSON_OBJECT | --payload-raw-file PATH\n  --payload-raw-field KEY VALUE\n  --payload-raw-field-json KEY JSON_VALUE\n  --payload-raw-null KEY\n  --payload-raw-list KEY \"a,b,c\"\n  --operation-args JSON_OBJECT | --operation-args-file PATH\n  --operation-arg KEY VALUE\n  --operation-arg-json KEY JSON_VALUE\n  --operation-arg-null KEY\n  --operation-arg-list KEY \"a,b,c\"\n"
+    "Usage: emit-record --probe-name NAME --primary-capability-id CAP_ID \\\n+  --command COMMAND --operation-kind KIND --target TARGET \\\n+  --outcome OUTCOME [options]\n\nOptions:\n  --errno ERRNO\n  --message MESSAGE\n  --exit-code CODE\n  --error-detail TEXT\n  --secondary-capability-id CAP_ID   # repeat for multiple entries\n  --payload-file PATH (JSON object)\n  --payload-stdout TEXT | --payload-stdout-file PATH\n  --payload-stderr TEXT | --payload-stderr-file PATH\n  --payload-raw JSON_OBJECT | --payload-raw-file PATH\n  --payload-raw-field KEY VALUE\n  --payload-raw-field-json KEY JSON_VALUE\n  --payload-raw-null KEY\n  --payload-raw-list KEY \"a,b,c\"\n  --operation-args JSON_OBJECT | --operation-args-file PATH\n  --operation-arg KEY VALUE\n  --operation-arg-json KEY JSON_VALUE\n  --operation-arg-null KEY\n  --operation-arg-list KEY \"a,b,c\"\n"
 }

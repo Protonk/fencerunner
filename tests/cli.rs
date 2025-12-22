@@ -91,7 +91,12 @@ fn fencerunner_probe_runs_single_probe() -> Result<()> {
     let (record, _) = parse_boundary_object(lines[0].as_bytes())?;
     assert_eq!(record.probe.id, fixture.probe_id());
     assert!(
-        record.run.command.contains("fixture-line"),
+        record
+            .context
+            .as_ref()
+            .and_then(|ctx| ctx.run.as_ref())
+            .map(|run| run.command.contains("fixture-line"))
+            .unwrap_or(false),
         "expected fixture command to mention fixture-line"
     );
 
@@ -127,7 +132,13 @@ fn fencerunner_bundle_runs_capability_subset() -> Result<()> {
         if record.probe.id == fixture.probe_id() {
             saw_fixture = true;
         }
-        assert!(!record.run.command.is_empty());
+        let has_command = record
+            .context
+            .as_ref()
+            .and_then(|ctx| ctx.run.as_ref())
+            .map(|run| !run.command.is_empty())
+            .unwrap_or(false);
+        assert!(has_command);
     }
     assert!(
         saw_fixture,
@@ -367,30 +378,18 @@ fn fencerunner_exports_root_to_helpers() -> Result<()> {
 }
 
 #[test]
-fn detect_stack_reports_expected_sandbox_modes() -> Result<()> {
+fn detect_stack_reports_os() -> Result<()> {
     let repo_root = repo_root();
     let detect_stack = helper_binary(&repo_root, "detect-stack");
 
     let stack_output = run_command(Command::new(&detect_stack))?;
     let stack_json: Value = serde_json::from_slice(&stack_output.stdout)?;
+    assert!(stack_json.get("sandbox_mode").is_none());
     assert!(
         stack_json
-            .get("sandbox_mode")
-            .map(|v| v.is_null())
-            .unwrap_or(true)
-    );
-
-    let override_val = "custom-mode";
-    let mut override_cmd = Command::new(&detect_stack);
-    override_cmd.env("FENCE_SANDBOX_MODE", override_val);
-    let full = run_command(override_cmd)?;
-    let full_json: Value = serde_json::from_slice(&full.stdout)?;
-    assert_eq!(
-        full_json
-            .get("sandbox_mode")
-            .and_then(|v| v.as_str())
-            .unwrap_or_default(),
-        override_val
+            .get("os")
+            .and_then(Value::as_str)
+            .is_some()
     );
     Ok(())
 }

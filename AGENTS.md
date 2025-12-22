@@ -10,7 +10,7 @@ For quick orientation, this is how the tree is organized.
 | --------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `bin/`    | Prebuilt Rust helper binaries (`fencerunner`, `probe-exec`, `probe-matrix`, `emit-record`, `portable-path`, `detect-stack`, etc.) synced from `src/bin/`. |
 | `catalogs/` | Capability catalogs plus an explainer at `catalogs/capabilities.md` (bundled catalog: `macos_codex_v1.json`).                                    |
-| `boundaries/` | Boundary schema descriptors (bundled descriptor: `cfbo-v1.json`) and `boundaries/boundary_object.md` documentation.                          |
+| `boundaries/` | Boundary object documentation (`boundaries/boundary_object.md`).                                                                            |
 | `probes/` | Flat directory of `<probe_id>.sh` scripts plus `probes/AGENTS.md` and `probes/probes.md`, the only code that directly exercises the sandboxed runtime. |
 | `schema/` | Machine-readable schemas (`boundary_object_schema.json`, `capability_catalog.schema.json`) plus `schema/README.md` for load/validation flow.    |
 | `src/`    | Rust sources for the CLI and helpers, including implementations for every binary under `bin/`.                                                      |
@@ -35,7 +35,7 @@ Once you know which part of the tree you are touching, defer to the `AGENTS.md` 
 
 Narrative guides live alongside the artifacts they explain:
 * `catalogs/capabilities.md` — capability catalog structure and terminology.
-* `boundaries/boundary_object.md` — boundary-event pattern and schema descriptor details.
+* `boundaries/boundary_object.md` — boundary-object shape and schema expectations.
 * `probes/probes.md` — probe contract overview and harness flow.
 * `schema/README.md` — schema loading/validation flow and instance mapping.
 

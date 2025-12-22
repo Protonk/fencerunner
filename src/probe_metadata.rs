@@ -19,7 +19,6 @@ use std::path::{Path, PathBuf};
 pub struct ProbeMetadata {
     pub script: PathBuf,
     pub probe_name: Option<String>,
-    pub probe_version: Option<String>,
     pub primary_capability: Option<CapabilityId>,
     pub secondary_capabilities: Vec<CapabilityId>,
 }
@@ -35,7 +34,6 @@ impl ProbeMetadata {
         Ok(Self {
             script: fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf()),
             probe_name: parse_assignment(&contents, "probe_name"),
-            probe_version: parse_assignment(&contents, "probe_version"),
             primary_capability: parse_assignment(&contents, "primary_capability_id")
                 .map(CapabilityId),
             secondary_capabilities: parse_secondary_capabilities(&contents),

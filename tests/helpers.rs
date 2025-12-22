@@ -15,25 +15,31 @@ use std::process::Command;
 use support::{helper_binary, make_executable, repo_root, run_command};
 use tempfile::TempDir;
 
-use common::{TempRepo, parse_boundary_object};
+use common::{FixtureProbe, TempRepo, parse_boundary_object, repo_guard};
 
 #[test]
-fn proc_paging_stress_probe_emits_expected_record() -> Result<()> {
+fn paging_stress_probe_emits_expected_record() -> Result<()> {
     let repo_root = repo_root();
-    let _guard = common::repo_guard();
+    let _guard = repo_guard();
+    let fixture =
+        FixtureProbe::install_from_fixture(&repo_root, "paging_stress.sh", "tests_paging_stress")?;
     let probe_run = helper_binary(&repo_root, "probe-exec");
 
     let mut cmd = Command::new(&probe_run);
-    cmd.arg("proc_paging_stress")
+    cmd.arg(fixture.probe_id())
         .env("TEST_PREFER_TARGET", "1");
     let output = run_command(cmd)?;
     let (record, value) = parse_boundary_object(&output.stdout)?;
-    assert_eq!(record.probe.id, "proc_paging_stress");
+    assert_eq!(record.probe.id, fixture.probe_id());
     assert_eq!(
-        record.probe.primary_capability_id.0,
-        "cap_proc_fork_and_child_spawn"
+        record
+            .context
+            .as_ref()
+            .and_then(|ctx| ctx.probe.as_ref())
+            .map(|probe| probe.primary_capability_id.0.as_str()),
+        Some("cap_proc_fork_and_child_spawn")
     );
-    assert_eq!(record.result.observed_result, "success");
+    assert_eq!(record.result.outcome, "success");
     assert_eq!(
         value
             .pointer("/payload/raw/helper_timeout")

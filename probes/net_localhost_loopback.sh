@@ -108,16 +108,14 @@ fi
 
 "${emit_record_bin}" \
   --probe-name "${probe_name}" \
-  --probe-version "1" \
   --primary-capability-id "${primary_capability_id}" \
   --command "${command_executed}" \
-  --category "net" \
-  --verb "connect" \
+  --operation-kind "net.connect" \
   --target "127.0.0.1" \
-  --status "${status}" \
+  --outcome "${status}" \
   --errno "${errno_value}" \
   --message "${message}" \
-  --raw-exit-code "${raw_exit_code}" \
+  --exit-code "${raw_exit_code}" \
   --payload-stdout "${stdout_text}" \
   --payload-stderr "${stderr_text}" \
   --payload-raw "${raw_json}" \

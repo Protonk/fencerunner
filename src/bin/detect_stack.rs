@@ -1,8 +1,7 @@
 //! Collects host/sandbox metadata for inclusion in boundary objects.
 //!
 //! The binary is intentionally dependency-free and lightweight because probes
-//! invoke it for every record. It captures any sandbox override and emits a
-//! JSON `StackInfo` snapshot.
+//! invoke it for every record. It emits a JSON `StackInfo` snapshot.
 
 use anyhow::Result;
 use serde::Serialize;
@@ -18,13 +17,9 @@ fn main() {
 
 fn run() -> Result<()> {
     ensure_no_args();
-    let sandbox_mode = env_non_empty("FENCE_SANDBOX_MODE");
     let os_info = detect_uname(&["-srm"]).unwrap_or_else(|| fallback_os_info());
 
-    let info = StackInfo {
-        sandbox_mode,
-        os: os_info,
-    };
+    let info = StackInfo { os: os_info };
 
     println!("{}", serde_json::to_string(&info)?);
     Ok(())
@@ -32,7 +27,6 @@ fn run() -> Result<()> {
 
 #[derive(Serialize)]
 struct StackInfo {
-    sandbox_mode: Option<String>,
     os: String,
 }
 
@@ -61,13 +55,6 @@ fn detect_uname(args: &[&str]) -> Option<String> {
 
 fn fallback_os_info() -> String {
     format!("{} {}", env::consts::OS, env::consts::ARCH)
-}
-
-fn env_non_empty(name: &str) -> Option<String> {
-    match env::var(name) {
-        Ok(value) if !value.is_empty() => Some(value),
-        _ => None,
-    }
 }
 
 fn usage_and_exit() -> ! {

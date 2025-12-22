@@ -22,10 +22,10 @@ single command now executes the entire suite.
 
 | Path | Purpose | Notes |
 | --- | --- | --- |
-| `tests/schema.rs` | Boundary + catalog schema guards. | Boundary descriptor validation and serde round-trips for boundary/capability types. |
+| `tests/schema.rs` | Boundary + catalog schema guards. | Boundary schema validation and serde round-trips for boundary/capability types. |
 | `tests/catalog.rs` | Catalog repository + lookup invariants. | Catalog loading, schema_version enforcement, and lookup context checks. |
 | `tests/probe_execution.rs` | Probe execution + workspace planning. | `probe-exec` smokes, probe resolution fences, workspace overrides/tmpdir behavior. |
-| `tests/contracts.rs` | Contract gates + emit-record rules. | Static/dynamic gates, emit-record flag enforcement, status/secondary normalization. |
+| `tests/contracts.rs` | Contract gates + emit-record rules. | Static/dynamic gates, emit-record flag enforcement, outcome/secondary normalization. |
 | `tests/cli.rs` | CLI and harness behavior. | `fencerunner`/`probe-matrix` ergonomics, helper resolution, env propagation, sandbox detection. |
 | `tests/helpers.rs` | Helper binaries + utility probes. | `json-extract`, `portable-path`, paging-stress, compiled probe smokes, builder helpers. |
 | `tests/support/common.rs` | Cross-test fixtures. | Shared probe fixtures (`FixtureProbe`), repo/workspace guards, and sample boundary/capability builders used by multiple targets. |
@@ -73,11 +73,11 @@ single command now executes the entire suite.
 
 | Contract surface | Representative tests |
 | --- | --- |
-| Boundary object schema + payload semantics (schema.rs) | `boundary_object_schema`, `boundary_schema_matches_contract`, `boundary_object_round_trips_structs`, `capabilities_schema_version_serializes_in_json` |
+| Boundary object schema + payload semantics (schema.rs) | `boundary_object_schema`, `boundary_object_round_trips_structs`, `capabilities_schema_version_serializes_in_json` |
 | Capability catalog + context wiring (catalog.rs) | `load_real_catalog_smoke`, `repository_lookup_context_matches_capabilities`, `capability_index_*` |
-| Helper binaries & CLI ergonomics (cli.rs, helpers.rs) | `json_extract_*`, `portable_path_relpath_*`, `detect_stack_reports_expected_sandbox_modes`, `paging_stress_*`, `payload_builder_rejects_large_payloads`, `contract_gate_*`, `probe_matrix_*`, `fencerunner_*` |
+| Helper binaries & CLI ergonomics (cli.rs, helpers.rs) | `json_extract_*`, `portable_path_relpath_*`, `detect_stack_reports_os`, `paging_stress_*`, `payload_builder_rejects_large_payloads`, `contract_gate_*`, `probe_matrix_*`, `fencerunner_*` |
 | Workspace + sandbox guarantees (probe_execution.rs) | `workspace_root_fallback`, `workspace_tmpdir_*`, `probe_resolution_guards`, `resolve_probe_metadata_prefers_script_values` |
-| Probe contracts & fixtures (contracts.rs) | `harness_smoke_probe_fixture`, `dynamic_probe_contract_accepts_fixture`, `static_probe_contract_*`, `contract_gate_dynamic_flags_*`, `contract_gate_dynamic_rejects_payload_over_limit`, `proc_paging_stress_probe_emits_expected_record` |
+| Probe contracts & fixtures (contracts.rs) | `harness_smoke_probe_fixture`, `dynamic_probe_contract_accepts_fixture`, `static_probe_contract_*`, `contract_gate_dynamic_flags_*`, `contract_gate_dynamic_rejects_payload_over_limit`, `paging_stress_probe_emits_expected_record` |
 
 Use this table to decide where to plug a new test. If your change touches a
 contract without an obvious row, add both the row and the tests.

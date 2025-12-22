@@ -59,16 +59,14 @@ fi
 
 "${emit_record_bin}" \
   --probe-name "${probe_name}" \
-  --probe-version "1" \
   --primary-capability-id "${primary_capability_id}" \
   --command "${command_executed}" \
-  --category "sysctl" \
-  --verb "read" \
+  --operation-kind "sysctl.read" \
   --target "${sysctl_key}" \
-  --status "${status}" \
+  --outcome "${status}" \
   --errno "${errno_value}" \
   --message "${message}" \
-  --raw-exit-code "${raw_exit_code}" \
+  --exit-code "${raw_exit_code}" \
   --payload-stdout "${stdout_text}" \
   --payload-stderr "${stderr_text}" \
   --payload-raw-field "sysctl_bin" "${sysctl_bin}" \

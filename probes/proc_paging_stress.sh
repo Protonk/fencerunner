@@ -162,16 +162,14 @@ EOF
 
 "${emit_record_bin}" \
   --probe-name "${probe_name}" \
-  --probe-version "1" \
   --primary-capability-id "${primary_capability_id}" \
   --command "${command_executed}" \
-  --category "proc" \
-  --verb "exec" \
+  --operation-kind "proc.exec" \
   --target "${paging_stress_bin}" \
-  --status "${status}" \
+  --outcome "${status}" \
   --errno "${errno_value}" \
   --message "${message}" \
-  --raw-exit-code "${raw_exit_code}" \
+  --exit-code "${raw_exit_code}" \
   --payload-stdout "${stdout_text}" \
   --payload-stderr "${stderr_text}" \
   --payload-raw-field-json "helper_timeout" "${helper_timeout}" \

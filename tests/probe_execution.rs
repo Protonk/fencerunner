@@ -39,16 +39,18 @@ fn harness_smoke_probe_fixture() -> Result<()> {
     let (record, value) = parse_boundary_object(&output.stdout)?;
 
     assert_eq!(record.probe.id, fixture.probe_id());
-    assert_eq!(record.operation.category, "fs");
-    assert_eq!(record.result.observed_result, "success");
+    assert_eq!(record.operation.kind, "fs.read");
+    assert_eq!(record.result.outcome, "success");
     assert_eq!(
         value.pointer("/payload/raw/probe").and_then(Value::as_str),
         Some("fixture")
     );
-    assert_eq!(
-        record.run.workspace_root.as_deref(),
-        Some(repo_root.to_str().expect("repo root utf-8"))
-    );
+    let workspace_root = record
+        .context
+        .as_ref()
+        .and_then(|ctx| ctx.run.as_ref())
+        .and_then(|run| run.workspace_root.as_deref());
+    assert_eq!(workspace_root, Some(repo_root.to_str().expect("repo root utf-8")));
 
     Ok(())
 }
@@ -72,9 +74,10 @@ fn workspace_root_fallback() -> Result<()> {
     let (record, _) = parse_boundary_object(&output.stdout)?;
     let expected_workspace = fs::canonicalize(temp_run_dir.path())?;
     let actual_root = record
-        .run
-        .workspace_root
-        .as_deref()
+        .context
+        .as_ref()
+        .and_then(|ctx| ctx.run.as_ref())
+        .and_then(|run| run.workspace_root.as_deref())
         .expect("workspace_root recorded");
     let actual_workspace = fs::canonicalize(Path::new(actual_root))?;
     assert_eq!(actual_workspace, expected_workspace);
@@ -227,7 +230,6 @@ fn resolve_probe_metadata_prefers_script_values() -> Result<()> {
         &script,
         r#"#!/usr/bin/env bash
 probe_name="custom_probe"
-probe_version="2"
 primary_capability_id="cap_fs_read_workspace_tree"
         "#,
     )?;
@@ -239,7 +241,6 @@ primary_capability_id="cap_fs_read_workspace_tree"
     };
     let resolved = resolve_probe_metadata(&probe, parsed)?;
     assert_eq!(resolved.id, "custom_probe");
-    assert_eq!(resolved.version, "2");
     assert_eq!(resolved.primary_capability.0, "cap_fs_read_workspace_tree");
     Ok(())
 }

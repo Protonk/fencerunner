@@ -10,6 +10,7 @@ use fencerunner::{
     BoundaryObject, BoundaryReadError, BoundarySchema, find_repo_root, read_boundary_objects,
     resolve_boundary_schema_path,
 };
+use serde_json::Value;
 use std::collections::{BTreeMap, BTreeSet};
 use std::env;
 use std::fmt;
@@ -83,7 +84,7 @@ fn summarize_records(records: &[BoundaryObject]) -> ListenStats {
     for record in records {
         *stats
             .results
-            .entry(record.result.observed_result.clone())
+            .entry(record.result.outcome.clone())
             .or_insert(0) += 1;
     }
 
@@ -117,33 +118,36 @@ fn render_record(idx: usize, record: &BoundaryObject, writer: &mut impl fmt::Wri
     writeln!(
         writer,
         "[#{}] {:<7} probe={}",
-        idx, record.result.observed_result, record.probe.id
+        idx, record.result.outcome, record.probe.id
     )?;
-    let capability = &record.capability_context.primary;
-    writeln!(
-        writer,
-        "  capability: {} ({}, {})",
-        capability.id.0,
-        capability.category.as_str(),
-        capability.layer.as_str()
-    )?;
-    writeln!(
-        writer,
-        "  op:        {} {}",
-        record.operation.verb, record.operation.target
-    )?;
+    if let Some(capability) = record
+        .context
+        .as_ref()
+        .and_then(|ctx| ctx.capability_context.as_ref())
+        .map(|ctx| &ctx.primary)
+    {
+        writeln!(
+            writer,
+            "  capability: {} ({}, {})",
+            capability.id.0,
+            capability.category.as_str(),
+            capability.layer.as_str()
+        )?;
+    }
+    writeln!(writer, "  op:        {} {}", record.operation.kind, record.operation.target)?;
     if let Some(message) = record
         .result
-        .message
-        .as_deref()
+        .details
+        .as_ref()
+        .and_then(|details| details.message.as_deref())
         .map(str::trim)
         .filter(|msg| !msg.is_empty())
     {
         writeln!(writer, "  message:   {}", message)?;
     }
 
-    write_snippet(writer, "stdout", record.payload.stdout_snippet.as_deref())?;
-    write_snippet(writer, "stderr", record.payload.stderr_snippet.as_deref())?;
+    write_snippet(writer, "stdout", payload_snippet(&record.payload, "stdout_snippet"))?;
+    write_snippet(writer, "stderr", payload_snippet(&record.payload, "stderr_snippet"))?;
     writeln!(writer)?;
     Ok(())
 }
@@ -170,6 +174,14 @@ fn write_snippet(writer: &mut impl fmt::Write, label: &str, snippet: Option<&str
         writeln!(writer, "    …")?;
     }
     Ok(())
+}
+
+fn payload_snippet<'a>(payload: &'a Option<Value>, key: &str) -> Option<&'a str> {
+    payload
+        .as_ref()
+        .and_then(Value::as_object)
+        .and_then(|obj| obj.get(key))
+        .and_then(Value::as_str)
 }
 
 fn truncate_line(line: &str) -> String {
@@ -285,7 +297,11 @@ mod tests {
     use super::*;
     use fencerunner::{
         CapabilityCategory, CapabilityContext, CapabilityId, CapabilityLayer, CapabilitySnapshot,
+        ContextInfo, OperationInfo, ProbeContext, ProbeInfo, ResultDetails, ResultInfo, RunInfo,
+        StackInfo,
     };
+    use serde_json::json;
+    use std::collections::BTreeMap;
     use std::io::{BufReader, Cursor};
 
     fn boundary_schema() -> BoundarySchema {
@@ -323,7 +339,11 @@ mod tests {
         assert!(output.contains("total records  : 0"));
 
         let mut record = minimal_record();
-        record.payload.stdout_snippet = Some(String::new());
+        record.payload = Some(json!({
+            "stdout_snippet": "",
+            "stderr_snippet": null,
+            "raw": {}
+        }));
         let ndjson = serde_json::to_string(&record).unwrap();
         let mut buffer = String::new();
         render_listen_output(
@@ -347,57 +367,58 @@ mod tests {
     }
 
     fn minimal_record() -> BoundaryObject {
-        let schema = boundary_schema();
         BoundaryObject {
-            schema_version: schema.schema_version().to_string(),
-            schema_key: schema.schema_key().map(str::to_string),
-            capabilities_schema_version: Some(default_catalog_key()),
-            stack: fencerunner::StackInfo {
-                sandbox_mode: Some("workspace-write".to_string()),
-                os: "Darwin".to_string(),
-            },
-            probe: fencerunner::ProbeInfo {
+            probe: ProbeInfo {
                 id: "sample_probe".to_string(),
-                version: "1".to_string(),
-                primary_capability_id: CapabilityId("cap_sample".to_string()),
-                secondary_capability_ids: Vec::new(),
             },
-            run: fencerunner::RunInfo {
-                workspace_root: Some("/tmp".to_string()),
-                command: "echo sample".to_string(),
-            },
-            operation: fencerunner::OperationInfo {
-                category: "fs".to_string(),
-                verb: "read".to_string(),
+            operation: OperationInfo {
+                kind: "fs.read".to_string(),
                 target: "/tmp/sample".to_string(),
-                args: serde_json::json!({}),
+                args: Some(json!({})),
             },
-            result: fencerunner::ResultInfo {
-                observed_result: "success".to_string(),
-                raw_exit_code: Some(0),
-                errno: None,
-                message: Some("sample message".to_string()),
-                error_detail: None,
+            result: ResultInfo {
+                outcome: "success".to_string(),
+                details: Some(ResultDetails {
+                    exit_code: Some(0),
+                    message: Some("sample message".to_string()),
+                    ..ResultDetails::default()
+                }),
             },
-            payload: fencerunner::Payload {
-                stdout_snippet: Some("hello".to_string()),
-                stderr_snippet: None,
-                raw: serde_json::json!({}),
-            },
-            capability_context: CapabilityContext {
-                primary: CapabilitySnapshot {
-                    id: CapabilityId("cap_sample".to_string()),
-                    category: CapabilityCategory::Filesystem,
-                    layer: CapabilityLayer::OsSandbox,
-                },
-                secondary: Vec::new(),
-            },
+            context: Some(ContextInfo {
+                run: Some(RunInfo {
+                    workspace_root: Some("/tmp".to_string()),
+                    command: "echo sample".to_string(),
+                }),
+                stack: Some(StackInfo {
+                    os: "Darwin".to_string(),
+                }),
+                capabilities_schema_version: Some(default_catalog_key()),
+                capability_context: Some(CapabilityContext {
+                    primary: CapabilitySnapshot {
+                        id: CapabilityId("cap_sample".to_string()),
+                        category: CapabilityCategory::Filesystem,
+                        layer: CapabilityLayer::OsSandbox,
+                    },
+                    secondary: Vec::new(),
+                }),
+                probe: Some(ProbeContext {
+                    primary_capability_id: CapabilityId("cap_sample".to_string()),
+                    secondary_capability_ids: Vec::new(),
+                }),
+                extra: BTreeMap::new(),
+            }),
+            payload: Some(json!({
+                "stdout_snippet": "hello",
+                "stderr_snippet": null,
+                "raw": {}
+            })),
+            extensions: None,
         }
     }
 
     fn minimal_record_with_result(result: &str) -> String {
         let mut record = minimal_record();
-        record.result.observed_result = result.to_string();
+        record.result.outcome = result.to_string();
         serde_json::to_string(&record).unwrap()
     }
 

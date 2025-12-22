@@ -1,29 +1,25 @@
 #![cfg(unix)]
 
-// Schema and serialization guard rails: boundary object shape, boundary descriptor
-// contract, and capability snapshot serde coverage.
+// Schema and serialization guard rails: boundary object shape and capability
+// snapshot serde coverage.
 mod support;
 #[path = "support/common.rs"]
 mod common;
 
 use anyhow::{Context, Result, bail};
 use fencerunner::{
-    BoundaryObject, BoundarySchema, CANONICAL_BOUNDARY_SCHEMA_PATH, CapabilityCategory,
-    CapabilityContext, CapabilityId, CapabilityLayer, CapabilitySnapshot, CatalogKey,
-    default_boundary_descriptor_path, default_catalog_path, resolve_boundary_schema_path,
+    BoundaryObject, BoundarySchema, CapabilityCategory, CapabilityContext, CapabilityId,
+    CapabilityLayer, CapabilitySnapshot, CatalogKey, default_catalog_path,
+    resolve_boundary_schema_path,
 };
 use jsonschema::JSONSchema;
 use serde_json::{Value, json};
 use std::fs::File;
-use std::sync::Arc;
 use std::sync::OnceLock;
 use support::{helper_binary, repo_root, run_command};
 use tempfile::NamedTempFile;
 
-use common::{
-    boundary_schema_key, boundary_schema_version, default_catalog_key, parse_boundary_object,
-    sample_boundary_object,
-};
+use common::{default_catalog_key, parse_boundary_object, sample_boundary_object};
 
 // Ensures boundary objects emitted via emit-record satisfy the boundary schema and
 // contain the required contextual metadata.
@@ -44,21 +40,17 @@ fn boundary_object_schema() -> Result<()> {
     emit_cmd
         .arg("--probe-name")
         .arg("schema_test_fixture")
-        .arg("--probe-version")
-        .arg("1")
         .arg("--primary-capability-id")
         .arg("cap_fs_read_workspace_tree")
         .arg("--command")
         .arg("printf fixture")
-        .arg("--category")
-        .arg("fs")
-        .arg("--verb")
-        .arg("read")
+        .arg("--operation-kind")
+        .arg("fs.read")
         .arg("--target")
         .arg("/dev/null")
-        .arg("--status")
+        .arg("--outcome")
         .arg("success")
-        .arg("--raw-exit-code")
+        .arg("--exit-code")
         .arg("0")
         .arg("--message")
         .arg("fixture")
@@ -71,58 +63,8 @@ fn boundary_object_schema() -> Result<()> {
 
     let (record, value) = parse_boundary_object(&output.stdout)?;
 
-    assert_eq!(record.schema_version, boundary_schema_version());
-    assert_eq!(
-        record.schema_key.as_deref(),
-        boundary_schema_key().as_deref()
-    );
-    let schema_key = value
-        .get("schema_key")
-        .and_then(Value::as_str)
-        .expect("schema_key present");
-    assert!(
-        schema_key
-            .chars()
-            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '.' | '-')),
-        "schema_key must match ^[A-Za-z0-9_.-]+$"
-    );
-    let cap_schema = value
-        .get("capabilities_schema_version")
-        .and_then(Value::as_str)
-        .expect("capabilities_schema_version present");
-    assert!(
-        cap_schema
-            .chars()
-            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '.' | '-')),
-        "capabilities_schema_version must match ^[A-Za-z0-9_.-]+$"
-    );
-
-    assert!(value.get("stack").map(|s| s.is_object()).unwrap_or(false));
     assert_eq!(record.probe.id, "schema_test_fixture");
-    assert_eq!(record.probe.version, "1");
-    assert_eq!(
-        record.probe.primary_capability_id.0,
-        "cap_fs_read_workspace_tree"
-    );
-    assert!(
-        value
-            .get("probe")
-            .and_then(|probe| probe.get("secondary_capability_ids"))
-            .map(|ids| ids.is_array())
-            .unwrap_or(false)
-    );
-
-    assert!(record.run.workspace_root.is_some());
-    assert!(
-        value
-            .get("run")
-            .and_then(|run| run.get("command"))
-            .and_then(Value::as_str)
-            .is_some()
-    );
-
-    assert_eq!(record.operation.category, "fs");
-    assert_eq!(record.operation.verb, "read");
+    assert_eq!(record.operation.kind, "fs.read");
     assert_eq!(record.operation.target, "/dev/null");
     assert!(
         value
@@ -133,17 +75,40 @@ fn boundary_object_schema() -> Result<()> {
     );
 
     assert!(matches!(
-        record.result.observed_result.as_str(),
+        record.result.outcome.as_str(),
         "success" | "denied" | "partial" | "error"
     ));
-    let result_obj = value.get("result").expect("result present");
-    for key in ["raw_exit_code", "errno", "message", "error_detail"] {
-        assert!(result_obj.get(key).is_some(), "result missing {key}");
-    }
+    let details = record.result.details.as_ref().expect("details present");
+    assert_eq!(details.exit_code, Some(0));
+    assert_eq!(details.message.as_deref(), Some("fixture"));
+    assert!(details.errno.is_none());
+    assert!(details.error_detail.is_none());
+
+    let cap_schema = value
+        .pointer("/context/capabilities_schema_version")
+        .and_then(Value::as_str)
+        .expect("capabilities_schema_version present");
     assert!(
-        result_obj.get("duration_ms").is_none(),
-        "result should not include duration_ms"
+        cap_schema
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '.' | '-')),
+        "capabilities_schema_version must match ^[A-Za-z0-9_.-]+$"
     );
+    assert!(
+        value
+            .pointer("/context/stack")
+            .map(|s| s.is_object())
+            .unwrap_or(false)
+    );
+    assert!(
+        value
+            .pointer("/context/run/command")
+            .and_then(Value::as_str)
+            .is_some()
+    );
+    if let Some(ids) = value.pointer("/context/probe/secondary_capability_ids") {
+        assert!(ids.is_array());
+    }
 
     assert_eq!(
         value
@@ -165,7 +130,7 @@ fn boundary_object_schema() -> Result<()> {
     );
 
     let capability_context = value
-        .get("capability_context")
+        .pointer("/context/capability_context")
         .expect("capability_context present");
     assert!(capability_context.is_object());
     let primary_ctx = capability_context
@@ -181,12 +146,9 @@ fn boundary_object_schema() -> Result<()> {
             "primary context missing {key}"
         );
     }
-    assert!(
-        capability_context
-            .get("secondary")
-            .map(|sec| sec.is_array())
-            .unwrap_or(false)
-    );
+    if let Some(secondary) = capability_context.get("secondary") {
+        assert!(secondary.is_array());
+    }
 
     static BOUNDARY_OBJECT_SCHEMA: OnceLock<BoundarySchema> = OnceLock::new();
     let schema = BOUNDARY_OBJECT_SCHEMA.get_or_init(|| {
@@ -227,70 +189,35 @@ fn capability_catalog_schema() -> Result<()> {
     Ok(())
 }
 
-// Confirms the bundled boundary schema descriptor satisfies the descriptor contract
-// and exposes the expected embedded schema metadata.
-#[test]
-fn boundary_schema_matches_contract() -> Result<()> {
-    let repo_root = repo_root();
-    let descriptor_path = default_boundary_descriptor_path(&repo_root);
-    let canonical_path = repo_root.join(CANONICAL_BOUNDARY_SCHEMA_PATH);
-
-    let descriptor_value: Value = serde_json::from_reader(File::open(&descriptor_path)?)?;
-    let contract_value: Value = serde_json::from_reader(File::open(&canonical_path)?)?;
-
-    let contract_arc = Arc::new(contract_value);
-    let contract_static: &'static Value = unsafe { &*(Arc::as_ptr(&contract_arc)) };
-    let compiled_contract = JSONSchema::compile(contract_static)?;
-    if let Err(errors) = compiled_contract.validate(&descriptor_value) {
-        let details = errors
-            .map(|err| err.to_string())
-            .collect::<Vec<_>>()
-            .join("\n");
-        bail!("boundary descriptor failed contract validation:\n{details}");
-    }
-
-    assert!(
-        descriptor_value.get("boundary_schema").is_some(),
-        "boundary descriptor should embed a boundary_schema"
-    );
-
-    let descriptor_schema = BoundarySchema::load(&descriptor_path)?;
-    assert_eq!(
-        descriptor_schema.schema_key(),
-        Some("cfbo-v1"),
-        "descriptor should surface its schema key"
-    );
-    assert_eq!(
-        descriptor_schema.schema_version(),
-        "boundary_event_v1",
-        "descriptor should expose the embedded boundary-event version"
-    );
-    Ok(())
-}
-
 #[test]
 fn boundary_object_round_trips_structs() -> Result<()> {
     let bo = sample_boundary_object();
     let value = serde_json::to_value(&bo)?;
-    assert_eq!(
-        value.get("schema_version").and_then(|v| v.as_str()),
-        Some(boundary_schema_version().as_str())
-    );
     let back: BoundaryObject = serde_json::from_value(value)?;
-    assert_eq!(back.schema_version, boundary_schema_version());
-    assert_eq!(back.run.command, "echo test");
-    assert_eq!(back.capability_context.primary.id.0, "cap_id");
+    assert_eq!(back.operation.kind, "fs.read");
+    assert_eq!(back.result.outcome, "success");
+    let run_command = back
+        .context
+        .as_ref()
+        .and_then(|ctx| ctx.run.as_ref())
+        .map(|run| run.command.as_str());
+    assert_eq!(run_command, Some("echo test"));
+    let primary_id = back
+        .context
+        .as_ref()
+        .and_then(|ctx| ctx.capability_context.as_ref())
+        .map(|ctx| ctx.primary.id.0.as_str());
+    assert_eq!(primary_id, Some("cap_id"));
     Ok(())
 }
 
 #[test]
 fn capabilities_schema_version_serializes_in_json() -> Result<()> {
-    let mut bo = sample_boundary_object();
-    bo.capabilities_schema_version = Some(default_catalog_key());
+    let bo = sample_boundary_object();
     let value = serde_json::to_value(&bo)?;
     assert_eq!(
         value
-            .get("capabilities_schema_version")
+            .pointer("/context/capabilities_schema_version")
             .and_then(|v| v.as_str()),
         Some(default_catalog_key().0.as_str())
     );

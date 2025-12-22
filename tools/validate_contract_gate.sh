@@ -518,35 +518,31 @@ capabilities_json=""
 capabilities_adapter=""
 
 probe_name=""
-probe_version=""
 primary_capability_id=""
 command_value=""
-category=""
-verb=""
+operation_kind=""
 target=""
-status_value=""
+outcome_value=""
 errno_value=""
 message_value=""
 payload_file=""
 operation_args=""
 operation_args_file=""
-raw_exit_code=""
+exit_code=""
 payload_seen="false"
 payload_inline_seen="false"
 operation_args_seen="false"
 
 probe_name_set="false"
-probe_version_set="false"
 primary_capability_id_set="false"
 command_set="false"
-category_set="false"
-verb_set="false"
+operation_kind_set="false"
 target_set="false"
-status_set="false"
+outcome_set="false"
 payload_file_set="false"
 operation_args_set="false"
 operation_args_file_set="false"
-raw_exit_code_set="false"
+exit_code_set="false"
 
 assign_flag() {
   # Centralized enforcement for "set once" and "not empty" semantics.
@@ -572,14 +568,9 @@ while [[ $# -gt 0 ]]; do
   # Parse emit-record flags. The stub mirrors emit-record's CLI surface so
   # probes can be validated without running the real helper.
   case "$1" in
-    --probe-name)
+    --probe-name|--probe-id)
       [[ $# -ge 2 ]] || fail "--probe-name requires a value"
       assign_flag probe_name probe_name_set "--probe-name" "$2" "no-empty"
-      shift 2
-      ;;
-    --probe-version)
-      [[ $# -ge 2 ]] || fail "--probe-version requires a value"
-      assign_flag probe_version probe_version_set "--probe-version" "$2" "no-empty"
       shift 2
       ;;
     --primary-capability-id)
@@ -597,14 +588,9 @@ while [[ $# -gt 0 ]]; do
       assign_flag command_value command_set "--command" "$2" "no-empty"
       shift 2
       ;;
-    --category)
-      [[ $# -ge 2 ]] || fail "--category requires a value"
-      assign_flag category category_set "--category" "$2" "no-empty"
-      shift 2
-      ;;
-    --verb)
-      [[ $# -ge 2 ]] || fail "--verb requires a value"
-      assign_flag verb verb_set "--verb" "$2" "no-empty"
+    --operation-kind)
+      [[ $# -ge 2 ]] || fail "--operation-kind requires a value"
+      assign_flag operation_kind operation_kind_set "--operation-kind" "$2" "no-empty"
       shift 2
       ;;
     --target)
@@ -612,9 +598,9 @@ while [[ $# -gt 0 ]]; do
       assign_flag target target_set "--target" "$2" "no-empty"
       shift 2
       ;;
-    --status)
-      [[ $# -ge 2 ]] || fail "--status requires a value"
-      assign_flag status_value status_set "--status" "$2" "no-empty"
+    --outcome)
+      [[ $# -ge 2 ]] || fail "--outcome requires a value"
+      assign_flag outcome_value outcome_set "--outcome" "$2" "no-empty"
       shift 2
       ;;
     --errno)
@@ -724,9 +710,9 @@ while [[ $# -gt 0 ]]; do
       operation_args_seen="true"
       shift 3
       ;;
-    --raw-exit-code)
-      [[ $# -ge 2 ]] || fail "--raw-exit-code requires a value"
-      assign_flag raw_exit_code raw_exit_code_set "--raw-exit-code" "$2" "no-empty"
+    --exit-code)
+      [[ $# -ge 2 ]] || fail "--exit-code requires a value"
+      assign_flag exit_code exit_code_set "--exit-code" "$2" "no-empty"
       shift 2
       ;;
     --*)
@@ -748,14 +734,11 @@ require_flag_value() {
 }
 
 require_flag_value "${probe_name}" "--probe-name"
-require_flag_value "${probe_version}" "--probe-version"
 require_flag_value "${primary_capability_id}" "--primary-capability-id"
 require_flag_value "${command_value}" "--command"
-require_flag_value "${category}" "--category"
-require_flag_value "${verb}" "--verb"
+require_flag_value "${operation_kind}" "--operation-kind"
 require_flag_value "${target}" "--target"
-require_flag_value "${status_value}" "--status"
-require_flag_value "${raw_exit_code}" "--raw-exit-code"
+require_flag_value "${outcome_value}" "--outcome"
 
 if [[ -n "${required_probe_name}" && "${probe_name}" != "${required_probe_name}" ]]; then
   fail "--probe-name '${probe_name}' does not match expected '${required_probe_name}'"
@@ -765,21 +748,16 @@ if [[ -n "${required_primary_capability_id}" && "${primary_capability_id}" != "$
   fail "--primary-capability-id '${primary_capability_id}' does not match expected '${required_primary_capability_id}'"
 fi
 
-if [[ "${payload_seen}" != "true" && -z "${payload_file}" ]]; then
-  # Every record must include a payload; emit-record enforces this too.
-  fail "payload flags are required"
-fi
-
-case "${status_value}" in
+case "${outcome_value}" in
   success|denied|partial|error)
     ;;
   *)
-    fail "--status '${status_value}' is not in the allowed set"
+    fail "--outcome '${outcome_value}' is not in the allowed set"
     ;;
 esac
 
-if ! [[ "${raw_exit_code}" =~ ^-?[0-9]+$ ]]; then
-  fail "--raw-exit-code '${raw_exit_code}' is not an integer"
+if [[ -n "${exit_code}" && ! "${exit_code}" =~ ^-?[0-9]+$ ]]; then
+  fail "--exit-code '${exit_code}' is not an integer"
 fi
 
 if [[ -n "${payload_file}" && "${payload_inline_seen}" == "true" ]]; then
@@ -798,11 +776,6 @@ if [[ -n "${payload_file}" ]]; then
 fi
 
 check_payload_size
-
-if [[ "${operation_args_seen}" != "true" ]]; then
-  # Operation args are required even if empty; probes must state intent.
-  fail "operation args flags are required"
-fi
 
 if [[ -n "${capabilities_json}" && -n "${capabilities_adapter}" && -x "${capabilities_adapter}" && -f "${capabilities_json}" ]]; then
   # Optionally validate capability IDs against the catalog if an adapter is
@@ -932,7 +905,7 @@ run_dynamic_gate() {
   local path_prefix="${shadow_root}/bin:${PATH}"
 
   local default_catalog="${repo_root}/catalogs/macos_codex_v1.json"
-  local default_boundary="${repo_root}/boundaries/cfbo-v1.json"
+  local default_boundary="${repo_root}/schema/boundary_object_schema.json"
   local catalog_path="${capabilities_json:-${CATALOG_PATH:-${default_catalog}}}"
   local adapter_path="${capabilities_adapter:-${repo_root}/tools/adapt_capabilities.sh}"
   local boundary_path="${BOUNDARY_PATH:-${default_boundary}}"

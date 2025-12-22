@@ -19,7 +19,7 @@ resolution strict and honor `--workspace-root`/`FENCE_WORKSPACE_ROOT`.
 ## Record helpers (boundary emission/introspection)
 
 ### `emit-record`
-Builds boundary-event JSON from probe CLI flags. Validate inputs aggressively,
+Builds boundary-object JSON from probe CLI flags. Validate inputs aggressively,
 rely on the in-repo catalog, and shell out only to `detect-stack`. stdout
 should only carry the final JSON record.
 

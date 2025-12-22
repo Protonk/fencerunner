@@ -1,127 +1,139 @@
-//! Serializable types for boundary-event records.
+//! Serializable types for boundary-object records.
 //!
 //! Shared between the emit/listen binaries and the test suite. The structures
-//! mirror the active boundary-object schema (default: embedded in
-//! `boundaries/cfbo-v1.json`, validated by `schema/boundary_object_schema.json`) so helpers can round-trip JSON without
-//! re-parsing ad-hoc maps. When attaching capability context, callers are
-//! expected to use snapshots from the capability catalog resolved at runtime.
+//! mirror the minimal boundary-object schema in
+//! `schema/boundary_object_schema.json` so helpers can round-trip JSON without
+//! ad-hoc maps. Optional context/payload blocks allow probes to attach richer
+//! metadata without changing the required shape.
 
 use crate::catalog::{Capability, CapabilityId, CapabilitySnapshot, CatalogKey, CatalogRepository};
 use anyhow::{Context, Result, bail};
 use jsonschema::JSONSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use std::collections::BTreeMap;
 use std::fmt;
 use std::fs::File;
 use std::io::BufRead;
 use std::path::Path;
-use std::sync::{Arc, OnceLock};
+use std::sync::Arc;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-/// Full boundary object captured for a single probe execution.
+#[serde(deny_unknown_fields)]
+/// Boundary object captured for a single probe execution.
 ///
-/// This struct encodes the boundary-event contract: stack metadata captured at
-/// runtime plus the probe/run/operation/result blocks emitted by
-/// `bin/emit-record`. `capabilities_schema_version` is expected to be set for
-/// new records, but remains optional here so legacy boundary objects can still
-/// be parsed.
+/// Only `probe`, `operation`, and `result` are required; additional metadata
+/// may be carried under `context`, `payload`, or `extensions`.
 pub struct BoundaryObject {
-    pub schema_version: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub schema_key: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub capabilities_schema_version: Option<CatalogKey>,
-    pub stack: StackInfo,
     pub probe: ProbeInfo,
-    pub run: RunInfo,
     pub operation: OperationInfo,
     pub result: ResultInfo,
-    pub payload: Payload,
-    pub capability_context: CapabilityContext,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub context: Option<ContextInfo>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub payload: Option<Value>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub extensions: Option<Value>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-/// Environment metadata emitted by `detect-stack`.
-///
-/// All fields are optional except `os`, which always carries a platform
-/// description so downstream consumers can correlate results with host
-/// characteristics.
-pub struct StackInfo {
-    #[serde(default)]
-    pub sandbox_mode: Option<String>,
-    pub os: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-/// Identifiers that tie the record back to a probe script and capability.
+#[serde(deny_unknown_fields)]
+/// Identifiers that tie the record back to a probe script.
 pub struct ProbeInfo {
     pub id: String,
-    pub version: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+/// Operation the probe attempted to perform.
+pub struct OperationInfo {
+    pub kind: String,
+    pub target: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub args: Option<Value>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+/// Normalized outcome reported by the probe.
+pub struct ResultInfo {
+    pub outcome: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub details: Option<ResultDetails>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(deny_unknown_fields)]
+/// Optional details about the result (exit codes, error messages, etc.).
+pub struct ResultDetails {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub exit_code: Option<i64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub errno: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub message: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub error_detail: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+/// Optional context attached to a boundary object.
+///
+/// Known fields are modeled explicitly; unknown entries are preserved in
+/// `extra` so the record can be round-tripped without loss.
+pub struct ContextInfo {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub run: Option<RunInfo>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stack: Option<StackInfo>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub capabilities_schema_version: Option<CatalogKey>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub capability_context: Option<CapabilityContext>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub probe: Option<ProbeContext>,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    #[serde(flatten)]
+    pub extra: BTreeMap<String, Value>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+/// Capability identifiers associated with a probe.
+pub struct ProbeContext {
     pub primary_capability_id: CapabilityId,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub secondary_capability_ids: Vec<CapabilityId>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 /// Execution context for a specific probe run.
 ///
 /// `workspace_root` is optional because emit-record falls back to git/pwd
 /// detection when no override is provided.
 pub struct RunInfo {
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub workspace_root: Option<String>,
     pub command: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-/// Operation the probe attempted to perform.
-///
-/// `args` defaults to an empty object to match the schema requirement that the
-/// field always be a JSON object (never `null`).
-pub struct OperationInfo {
-    pub category: String,
-    pub verb: String,
-    pub target: String,
-    #[serde(default = "empty_object")]
-    pub args: Value,
+#[serde(deny_unknown_fields)]
+/// Environment metadata emitted by `detect-stack`.
+pub struct StackInfo {
+    pub os: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-/// Normalized outcome reported by the probe.
-pub struct ResultInfo {
-    pub observed_result: String,
-    #[serde(default)]
-    pub raw_exit_code: Option<i64>,
-    #[serde(default)]
-    pub errno: Option<String>,
-    #[serde(default)]
-    pub message: Option<String>,
-    #[serde(default)]
-    pub error_detail: Option<String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-/// Probe-provided payload snippets and structured output.
-///
-/// `raw` is a free-form JSON object; it defaults to `{}` rather than `null` so
-/// schema validation can rely on object semantics.
-pub struct Payload {
-    #[serde(default)]
-    pub stdout_snippet: Option<String>,
-    #[serde(default)]
-    pub stderr_snippet: Option<String>,
-    #[serde(default = "empty_object")]
-    pub raw: Value,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 /// Capability snapshots captured alongside the record.
 ///
 /// Snapshots denormalize catalog metadata so boundary objects remain
 /// self-describing even if the catalog evolves after the run.
 pub struct CapabilityContext {
     pub primary: CapabilitySnapshot,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub secondary: Vec<CapabilitySnapshot>,
 }
 
@@ -147,18 +159,20 @@ impl BoundaryObject {
         primary: &Capability,
         secondary: &[&Capability],
     ) -> Self {
-        self.capabilities_schema_version = Some(catalog_key);
-        self.capability_context = CapabilityContext {
+        let context = self.ensure_context();
+        context.capabilities_schema_version = Some(catalog_key);
+        context.capability_context = Some(CapabilityContext {
             primary: primary.snapshot(),
             secondary: secondary.iter().map(|c| c.snapshot()).collect(),
-        };
+        });
         self
     }
 
-    /// Convenience accessor for the primary capability id recorded in the
-    /// context snapshot.
-    pub fn primary_capability_id(&self) -> &CapabilityId {
-        &self.capability_context.primary.id
+    fn ensure_context(&mut self) -> &mut ContextInfo {
+        if self.context.is_none() {
+            self.context = Some(ContextInfo::default());
+        }
+        self.context.as_mut().expect("context exists")
     }
 }
 
@@ -174,15 +188,16 @@ impl CatalogRepository {
         &'a self,
         bo: &BoundaryObject,
     ) -> Option<(&'a Capability, Vec<&'a Capability>)> {
-        let catalog_key = bo.capabilities_schema_version.as_ref()?;
+        let context = bo.context.as_ref()?;
+        let catalog_key = context.capabilities_schema_version.as_ref()?;
+        let snapshot = context.capability_context.as_ref()?;
         let catalog = self.get(catalog_key)?;
         let primary = catalog
             .capabilities
             .iter()
-            .find(|c| c.id == bo.capability_context.primary.id)?;
+            .find(|c| c.id == snapshot.primary.id)?;
 
-        let secondary = bo
-            .capability_context
+        let secondary = snapshot
             .secondary
             .iter()
             .filter_map(|snap| catalog.capabilities.iter().find(|c| c.id == snap.id))
@@ -192,120 +207,9 @@ impl CatalogRepository {
     }
 }
 
-fn empty_object() -> Value {
-    // The boundary schema requires `args`/`raw` to be JSON objects; default to
-    // an empty map so callers never emit `null`.
-    Value::Object(Default::default())
-}
-
-fn validate_descriptor_key(key: &str) -> Result<()> {
-    if key.is_empty() {
-        bail!("boundary descriptor key must not be empty");
-    }
-    if !key
-        .chars()
-        .all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '.' | '-'))
-    {
-        bail!("boundary descriptor key must match ^[A-Za-z0-9_.-]+$, got {key}");
-    }
-    Ok(())
-}
-
-#[derive(Debug)]
-struct BoundaryDescriptor {
-    key: String,
-    boundary_schema: Value,
-}
-
-#[derive(Debug)]
-struct BoundaryDescriptorContract {
-    #[allow(dead_code)]
-    raw: Arc<Value>,
-    compiled: JSONSchema,
-}
-
-fn boundary_descriptor_contract() -> Result<&'static BoundaryDescriptorContract> {
-    static CONTRACT: OnceLock<anyhow::Result<BoundaryDescriptorContract>> = OnceLock::new();
-    match CONTRACT.get_or_init(|| {
-        let path =
-            Path::new(env!("CARGO_MANIFEST_DIR")).join(crate::CANONICAL_BOUNDARY_SCHEMA_PATH);
-        let value: Value = serde_json::from_reader(
-            File::open(&path)
-                .with_context(|| format!("opening descriptor schema {}", path.display()))?,
-        )
-        .with_context(|| format!("parsing descriptor schema {}", path.display()))?;
-        let raw = Arc::new(value);
-        let raw_static: &'static Value = unsafe { &*(Arc::as_ptr(&raw)) };
-        let compiled = JSONSchema::compile(raw_static)
-            .with_context(|| format!("compiling descriptor schema {}", path.display()))?;
-        Ok(BoundaryDescriptorContract { raw, compiled })
-    }) {
-        Ok(contract) => Ok(contract),
-        Err(err) => Err(anyhow::anyhow!(err.to_string())),
-    }
-}
-
-fn parse_boundary_descriptor(path: &Path) -> Result<BoundaryDescriptor> {
-    let descriptor_file = File::open(path)
-        .with_context(|| format!("opening boundary descriptor {}", path.display()))?;
-    let descriptor_value: Value = serde_json::from_reader(descriptor_file)
-        .with_context(|| format!("parsing boundary descriptor {}", path.display()))?;
-    let contract = boundary_descriptor_contract()?;
-
-    if let Err(errors) = contract.compiled.validate(&descriptor_value) {
-        let details = errors
-            .map(|err| err.to_string())
-            .collect::<Vec<_>>()
-            .join("\n");
-        bail!(
-            "boundary descriptor {} failed validation:\n{}",
-            path.display(),
-            details
-        );
-    }
-
-    let key = descriptor_value
-        .get("key")
-        .and_then(Value::as_str)
-        .ok_or_else(|| anyhow::anyhow!("boundary descriptor {} missing key", path.display()))?
-        .to_string();
-    validate_descriptor_key(&key)?;
-
-    let boundary_schema = descriptor_value
-        .get("boundary_schema")
-        .cloned()
-        .ok_or_else(|| {
-            anyhow::anyhow!(
-                "boundary descriptor {} missing boundary_schema",
-                path.display()
-            )
-        })?;
-
-    Ok(BoundaryDescriptor {
-        key,
-        boundary_schema,
-    })
-}
-
-fn extract_schema_version(schema: &Value) -> Option<String> {
-    let version = schema
-        .pointer("/properties/schema_version/const")
-        .and_then(Value::as_str)?;
-    if version
-        .chars()
-        .all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '.' | '-'))
-    {
-        Some(version.to_string())
-    } else {
-        None
-    }
-}
-
 #[derive(Debug)]
 /// Loaded boundary-object schema with a cached JSONSchema validator.
 pub struct BoundarySchema {
-    schema_version: String,
-    schema_key: Option<String>,
     compiled: JSONSchema,
     #[allow(dead_code)]
     raw: Arc<Value>,
@@ -314,38 +218,16 @@ pub struct BoundarySchema {
 impl BoundarySchema {
     /// Load a boundary-object schema from disk and compile it.
     pub fn load(path: &Path) -> Result<Self> {
-        let descriptor = parse_boundary_descriptor(path)?;
-        let schema_version =
-            extract_schema_version(&descriptor.boundary_schema).ok_or_else(|| {
-                anyhow::anyhow!(
-                    "boundary schema embedded in {} missing schema_version const",
-                    path.display()
-                )
-            })?;
-        if let Some(schema_key_const) = descriptor
-            .boundary_schema
-            .pointer("/properties/schema_key/const")
-            .and_then(Value::as_str)
-        {
-            if schema_key_const != descriptor.key {
-                bail!(
-                    "boundary schema in {} declares schema_key const '{}' but descriptor key is '{}'",
-                    path.display(),
-                    schema_key_const,
-                    descriptor.key
-                );
-            }
-        }
-        let raw = Arc::new(descriptor.boundary_schema);
+        let value: Value = serde_json::from_reader(
+            File::open(path).with_context(|| format!("opening boundary schema {}", path.display()))?,
+        )
+        .with_context(|| format!("parsing boundary schema {}", path.display()))?;
+
+        let raw = Arc::new(value);
         let raw_static: &'static Value = unsafe { &*(Arc::as_ptr(&raw)) };
         let compiled = JSONSchema::compile(raw_static)
-            .with_context(|| format!("compiling boundary schema embedded in {}", path.display()))?;
-        Ok(Self {
-            schema_version,
-            schema_key: Some(descriptor.key),
-            compiled,
-            raw,
-        })
+            .with_context(|| format!("compiling boundary schema {}", path.display()))?;
+        Ok(Self { compiled, raw })
     }
 
     /// Exposes the raw schema value backing the compiled validator.
@@ -353,32 +235,8 @@ impl BoundarySchema {
         &self.raw
     }
 
-    /// Extracted schema version (from `properties.schema_version.const`).
-    pub fn schema_version(&self) -> &str {
-        &self.schema_version
-    }
-
-    /// Boundary schema key declared by the descriptor, if available.
-    pub fn schema_key(&self) -> Option<&str> {
-        self.schema_key.as_deref()
-    }
-
     /// Validate a JSON value against the compiled schema.
     pub fn validate(&self, value: &Value) -> Result<()> {
-        if let Some(expected_key) = &self.schema_key {
-            match value.get("schema_key").and_then(Value::as_str) {
-                Some(actual) if actual == expected_key => {}
-                Some(actual) => bail!(
-                    "boundary object schema_key '{}' does not match expected '{}'",
-                    actual,
-                    expected_key
-                ),
-                None => bail!(
-                    "boundary object missing schema_key (expected {})",
-                    expected_key
-                ),
-            }
-        }
         if let Err(errors) = self.compiled.validate(value) {
             let mut details = Vec::new();
             for err in errors {
@@ -465,12 +323,12 @@ mod tests {
 
         let has_success = records
             .iter()
-            .any(|record| record.result.observed_result == "success");
+            .any(|record| record.result.outcome == "success");
         assert!(has_success, "expected at least one success record");
 
         let has_non_success = records
             .iter()
-            .any(|record| record.result.observed_result != "success");
+            .any(|record| record.result.outcome != "success");
         assert!(
             has_non_success,
             "expected at least one non-success record for variety"
@@ -510,53 +368,35 @@ mod tests {
         }
     }
 
-    fn sample_record(probe_id: &str, observed_result: &str) -> String {
-        let schema_version = current_schema_version();
-        let schema_key = current_schema_key();
-        let catalog_key = current_catalog_key();
+    fn sample_record(probe_id: &str, outcome: &str) -> String {
         json!({
-            "schema_version": schema_version,
-            "schema_key": schema_key,
-            "capabilities_schema_version": catalog_key,
-            "stack": {
-                "sandbox_mode": null,
-                "os": "Darwin 23.4.0 arm64"
-            },
             "probe": {
-                "id": probe_id,
-                "version": "1",
-                "primary_capability_id": "cap_sample",
-                "secondary_capability_ids": []
-            },
-            "run": {
-                "workspace_root": "/tmp/sample",
-                "command": "/bin/true"
+                "id": probe_id
             },
             "operation": {
-                "category": "fs",
-                "verb": "read",
+                "kind": "fs.read",
                 "target": "sample",
                 "args": {}
             },
             "result": {
-                "observed_result": observed_result,
-                "raw_exit_code": 0,
-                "errno": null,
-                "message": null,
-                "error_detail": null
+                "outcome": outcome,
+                "details": {
+                    "exit_code": 0
+                }
+            },
+            "context": {
+                "run": {
+                    "workspace_root": "/tmp/sample",
+                    "command": "/bin/true"
+                },
+                "stack": {
+                    "os": "Darwin 23.4.0 arm64"
+                }
             },
             "payload": {
                 "stdout_snippet": null,
                 "stderr_snippet": null,
                 "raw": {}
-            },
-            "capability_context": {
-                "primary": {
-                    "id": "cap_sample",
-                    "category": "fs",
-                    "layer": "os_sandbox"
-                },
-                "secondary": []
             }
         })
         .to_string()
@@ -570,33 +410,5 @@ mod tests {
         ];
         let ndjson = records.join("\n");
         BufReader::new(Cursor::new(ndjson.into_bytes()))
-    }
-
-    fn current_schema_version() -> String {
-        let repo = crate::find_repo_root().expect("repo root available");
-        let path = crate::default_boundary_descriptor_path(&repo);
-        BoundarySchema::load(&path)
-            .expect("boundary schema loads")
-            .schema_version()
-            .to_string()
-    }
-
-    fn current_schema_key() -> String {
-        let repo = crate::find_repo_root().expect("repo root available");
-        let path = crate::default_boundary_descriptor_path(&repo);
-        BoundarySchema::load(&path)
-            .expect("boundary schema loads")
-            .schema_key()
-            .map(str::to_string)
-            .expect("boundary schema key")
-    }
-
-    fn current_catalog_key() -> CatalogKey {
-        let repo = crate::find_repo_root().expect("repo root available");
-        let path = crate::default_catalog_path(&repo);
-        crate::load_catalog_from_path(&path)
-            .expect("catalog loads")
-            .catalog
-            .key
     }
 }

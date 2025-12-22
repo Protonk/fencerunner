@@ -3,10 +3,10 @@
 
 use anyhow::{Context, Result, bail};
 use fencerunner::{
-    BoundaryObject, BoundarySchema, CapabilityCategory, CapabilityContext, CapabilityId,
-    CapabilityIndex, CapabilityLayer, CapabilitySnapshot, CatalogKey, OperationInfo, Payload,
-    ProbeInfo, ResultInfo, RunInfo, StackInfo, default_catalog_path, load_catalog_from_path,
-    resolve_boundary_schema_path,
+    BoundaryObject, CapabilityCategory, CapabilityContext, CapabilityId, CapabilityIndex,
+    CapabilityLayer, CapabilitySnapshot, CatalogKey, ContextInfo, OperationInfo, ProbeContext,
+    ProbeInfo, ResultDetails, ResultInfo, RunInfo, StackInfo, default_catalog_path,
+    load_catalog_from_path,
 };
 use serde_json::{Value, json};
 use std::collections::{BTreeMap, BTreeSet};
@@ -36,6 +36,28 @@ impl FixtureProbe {
         }
         fs::copy(&source, &dest)
             .with_context(|| format!("failed to copy fixture to {}", dest.display()))?;
+        let mut perms = fs::metadata(&dest)?.permissions();
+        perms.set_mode(0o755);
+        fs::set_permissions(&dest, perms)?;
+        Ok(Self {
+            path: dest,
+            name: name.to_string(),
+        })
+    }
+
+    pub fn install_from_fixture(repo_root: &Path, fixture: &str, name: &str) -> Result<Self> {
+        let source = repo_root.join("tests/mocks").join(fixture);
+        let dest = repo_root.join("probes").join(format!("{name}.sh"));
+        if dest.exists() {
+            bail!("fixture already exists at {}", dest.display());
+        }
+        fs::copy(&source, &dest).with_context(|| {
+            format!(
+                "failed to copy fixture {} to {}",
+                source.display(),
+                dest.display()
+            )
+        })?;
         let mut perms = fs::metadata(&dest)?.permissions();
         perms.set_mode(0o755);
         fs::set_permissions(&dest, perms)?;
@@ -215,81 +237,55 @@ pub fn default_catalog_key() -> CatalogKey {
     .clone()
 }
 
-pub fn boundary_schema_version() -> String {
-    static VERSION: OnceLock<String> = OnceLock::new();
-    VERSION
-        .get_or_init(|| {
-            let path = resolve_boundary_schema_path(&repo_root(), None)
-                .expect("resolve boundary schema path");
-            BoundarySchema::load(&path)
-                .expect("load boundary schema")
-                .schema_version()
-                .to_string()
-        })
-        .clone()
-}
-
-pub fn boundary_schema_key() -> Option<String> {
-    static KEY: OnceLock<Option<String>> = OnceLock::new();
-    KEY.get_or_init(|| {
-        let path =
-            resolve_boundary_schema_path(&repo_root(), None).expect("resolve boundary schema path");
-        BoundarySchema::load(&path)
-            .expect("load boundary schema")
-            .schema_key()
-            .map(str::to_string)
-    })
-    .clone()
-}
-
 pub fn empty_json_object() -> Value {
     Value::Object(Default::default())
 }
 
 pub fn sample_boundary_object() -> BoundaryObject {
     BoundaryObject {
-        schema_version: boundary_schema_version(),
-        schema_key: boundary_schema_key(),
-        capabilities_schema_version: Some(default_catalog_key()),
-        stack: StackInfo {
-            sandbox_mode: Some("workspace-write".to_string()),
-            os: "Darwin".to_string(),
-        },
         probe: ProbeInfo {
             id: "probe".to_string(),
-            version: "1".to_string(),
-            primary_capability_id: CapabilityId("cap_id".to_string()),
-            secondary_capability_ids: vec![],
-        },
-        run: RunInfo {
-            workspace_root: Some("/tmp".to_string()),
-            command: "echo test".to_string(),
         },
         operation: OperationInfo {
-            category: "fs".to_string(),
-            verb: "read".to_string(),
+            kind: "fs.read".to_string(),
             target: "/dev/null".to_string(),
-            args: empty_json_object(),
+            args: Some(empty_json_object()),
         },
         result: ResultInfo {
-            observed_result: "success".to_string(),
-            raw_exit_code: Some(0),
-            errno: None,
-            message: None,
-            error_detail: None,
+            outcome: "success".to_string(),
+            details: Some(ResultDetails {
+                exit_code: Some(0),
+                ..ResultDetails::default()
+            }),
         },
-        payload: Payload {
-            stdout_snippet: None,
-            stderr_snippet: None,
-            raw: empty_json_object(),
-        },
-        capability_context: CapabilityContext {
-            primary: CapabilitySnapshot {
-                id: CapabilityId("cap_id".to_string()),
-                category: CapabilityCategory::Other("cat".to_string()),
-                layer: CapabilityLayer::Other("layer".to_string()),
-            },
-            secondary: Vec::new(),
-        },
+        context: Some(ContextInfo {
+            run: Some(RunInfo {
+                workspace_root: Some("/tmp".to_string()),
+                command: "echo test".to_string(),
+            }),
+            stack: Some(StackInfo {
+                os: "Darwin".to_string(),
+            }),
+            capabilities_schema_version: Some(default_catalog_key()),
+            capability_context: Some(CapabilityContext {
+                primary: CapabilitySnapshot {
+                    id: CapabilityId("cap_id".to_string()),
+                    category: CapabilityCategory::Other("cat".to_string()),
+                    layer: CapabilityLayer::Other("layer".to_string()),
+                },
+                secondary: Vec::new(),
+            }),
+            probe: Some(ProbeContext {
+                primary_capability_id: CapabilityId("cap_id".to_string()),
+                secondary_capability_ids: Vec::new(),
+            }),
+            extra: BTreeMap::new(),
+        }),
+        payload: Some(json!({
+            "stdout_snippet": null,
+            "stderr_snippet": null,
+            "raw": {}
+        })),
+        extensions: None,
     }
 }

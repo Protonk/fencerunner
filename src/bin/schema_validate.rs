@@ -2,13 +2,13 @@
 //!
 //! Usage:
 //!   schema-validate --mode catalog --file catalogs/macos_codex_v1.json
-//!   schema-validate --mode boundary --file boundaries/cfbo-v1.json
-//!   schema-validate --mode boundary < payload.json
+//!   schema-validate --mode boundary --file tmp/boundary_record.json
+//!   schema-validate --mode boundary < record.json
 
 use anyhow::{Context, Result, bail};
 use clap::Parser;
 use fencerunner::{
-    BoundarySchema, default_boundary_descriptor_path, default_catalog_path, find_repo_root,
+    BoundarySchema, default_boundary_schema_path, default_catalog_path, find_repo_root,
 };
 use serde_json::Value;
 use std::fs::File;
@@ -26,10 +26,10 @@ struct Cli {
     /// Optional input file; reads stdin when omitted.
     #[arg(long)]
     file: Option<PathBuf>,
-    /// Optional catalog descriptor path (for boundary validation, used to resolve capability keys).
+    /// Optional catalog path (catalog validation only).
     #[arg(long)]
     catalog: Option<PathBuf>,
-    /// Optional boundary descriptor path (for boundary validation).
+    /// Optional boundary schema path (boundary validation only).
     #[arg(long)]
     boundary: Option<PathBuf>,
 }
@@ -90,7 +90,7 @@ fn validate_catalog(input: &Value, catalog_path: &PathBuf) -> Result<()> {
 
 fn validate_boundary(input: &Value, boundary_path: &PathBuf) -> Result<()> {
     let schema = BoundarySchema::load(boundary_path)
-        .with_context(|| format!("loading boundary descriptor {}", boundary_path.display()))?;
+        .with_context(|| format!("loading boundary schema {}", boundary_path.display()))?;
     schema.validate(input)
 }
 
@@ -109,7 +109,7 @@ fn main() -> Result<()> {
         "boundary" => {
             let boundary_path = cli
                 .boundary
-                .unwrap_or_else(|| default_boundary_descriptor_path(&repo_root));
+                .unwrap_or_else(|| default_boundary_schema_path(&repo_root));
             validate_boundary(&input, &boundary_path)?;
         }
         other => bail!("unknown mode '{}'", other),

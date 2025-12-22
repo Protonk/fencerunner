@@ -9,9 +9,9 @@ The catalog schema lives at `schema/capability_catalog.schema.json` (current sch
 ## Catalog keys and repositories
 
 - `schema_version` is the catalog schema version (currently `sandbox_catalog_v1`).
-- `catalog.key` is the **CatalogKey** used across the harness. Boundary objects echo it as `capabilities_schema_version` so downstream readers know which catalog to consult.
+- `catalog.key` is the **CatalogKey** used across the harness. Boundary objects emitted by `emit-record` echo it under `context.capabilities_schema_version` so downstream readers know which catalog to consult.
 - The Rust types under `src/catalog/` load a catalog JSON into a `CapabilityCatalog`, validate it via `CapabilityIndex`, and can optionally register it inside a `CatalogRepository`. The repository is intentionally generic—drop in another catalog JSON with a different `catalog.key`, register it, and the same lookup helpers work. Use `--catalog`/`CATALOG_PATH` to point helpers at a different file; new catalogs must match the canonical schema version.
-- Probes stay insulated from catalog internals: they declare `CapabilityId`s, while the harness resolves those IDs to `CapabilitySnapshot`s when emitting boundary-event records. Guard-rail tests in `tests/schema.rs` and `tests/catalog.rs` (for example, `capability_catalog_schema`, `load_real_catalog_smoke`, and `repository_lookup_context_matches_capabilities`) ensure that catalogs, snapshots, and boundary objects stay in sync.
+- Probes stay insulated from catalog internals: they declare `CapabilityId`s, while the harness resolves those IDs to `CapabilitySnapshot`s when emitting boundary object records. Guard-rail tests in `tests/schema.rs` and `tests/catalog.rs` (for example, `capability_catalog_schema`, `load_real_catalog_smoke`, and `repository_lookup_context_matches_capabilities`) ensure that catalogs, snapshots, and boundary objects stay in sync.
 
 ## Catalog structure
 

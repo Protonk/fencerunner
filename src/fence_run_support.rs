@@ -77,7 +77,6 @@ pub fn workspace_tmpdir_plan(workspace_plan: &WorkspacePlan, repo_root: &Path) -
 
 pub struct ResolvedProbeMetadata {
     pub id: String,
-    pub version: String,
     pub primary_capability: CapabilityId,
 }
 
@@ -86,8 +85,8 @@ pub fn resolve_probe_metadata(
     parsed: ProbeMetadata,
 ) -> Result<ResolvedProbeMetadata> {
     // Keep resolution strict: probes must name a primary capability, and
-    // defaulting to implicit ids/versions is a last resort to preserve
-    // backward compatibility.
+    // Defaulting to implicit ids is a last resort to preserve backward
+    // compatibility.
     let primary_capability = parsed.primary_capability.ok_or_else(|| {
         anyhow!(
             "probe {} is missing primary_capability_id",
@@ -96,7 +95,6 @@ pub fn resolve_probe_metadata(
     })?;
     Ok(ResolvedProbeMetadata {
         id: parsed.probe_name.unwrap_or_else(|| probe.id.clone()),
-        version: parsed.probe_version.unwrap_or_else(|| "1".to_string()),
         primary_capability,
     })
 }

@@ -108,7 +108,6 @@ mod tests {
         let probe = ProbeMetadata {
             script: PathBuf::from("probe.sh"),
             probe_name: Some("probe".to_string()),
-            probe_version: Some("1".to_string()),
             primary_capability: Some(CapabilityId("cap_missing".to_string())),
             secondary_capabilities: Vec::new(),
         };
@@ -125,14 +124,12 @@ mod tests {
             ProbeMetadata {
                 script: PathBuf::from("probe.sh"),
                 probe_name: Some("tests_fixture_probe".to_string()),
-                probe_version: None,
                 primary_capability: None,
                 secondary_capabilities: Vec::new(),
             },
             ProbeMetadata {
                 script: PathBuf::from("probe2.sh"),
                 probe_name: Some("real_probe".to_string()),
-                probe_version: None,
                 primary_capability: None,
                 secondary_capabilities: Vec::new(),
             },

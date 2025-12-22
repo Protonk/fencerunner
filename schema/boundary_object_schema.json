@@ -1,35 +1,102 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "title": "Boundary schema descriptor (v1)",
-  "description": "Descriptor pattern for boundary-event schemas. Instances declare a schema key and embed the boundary-event JSON Schema used to validate emitted records.",
+  "title": "Boundary object schema (minimal)",
+  "description": "Minimal boundary object schema for probe runs: probe identity, attempted operation, and observed result with optional context and payload.",
   "type": "object",
   "additionalProperties": false,
   "required": [
-    "key",
-    "boundary_schema"
+    "probe",
+    "operation",
+    "result"
   ],
   "properties": {
-    "key": {
-      "type": "string",
-      "description": "Boundary schema key (e.g., cfbo-v1) used by emitted records as schema_key.",
-      "pattern": "^[A-Za-z0-9_.-]+$"
-    },
-    "title": {
-      "type": "string"
-    },
-    "description": {
-      "type": "string"
-    },
-    "labels": {
-      "type": "array",
-      "items": {
-        "type": "string"
-      },
-      "uniqueItems": true
-    },
-    "boundary_schema": {
+    "probe": {
       "type": "object",
-      "description": "Embedded JSON Schema describing boundary-event records for this key."
+      "additionalProperties": false,
+      "required": [
+        "id"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_.-]+$"
+        }
+      }
+    },
+    "operation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "target"
+      ],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "description": "Operation kind such as fs.write or net.connect."
+        },
+        "target": {
+          "type": "string",
+          "description": "Primary target of the operation (path, host, command, etc.)."
+        },
+        "args": {
+          "type": "object",
+          "description": "Optional structured arguments for the operation."
+        }
+      }
+    },
+    "result": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "outcome"
+      ],
+      "properties": {
+        "outcome": {
+          "type": "string",
+          "enum": [
+            "success",
+            "denied",
+            "partial",
+            "error"
+          ]
+        },
+        "details": {
+          "$ref": "#/definitions/result_details"
+        }
+      }
+    },
+    "context": {
+      "type": "object",
+      "description": "Optional context block for run, stack, capabilities, or other metadata."
+    },
+    "payload": {
+      "type": "object",
+      "description": "Optional probe-specific payload data."
+    },
+    "extensions": {
+      "type": "object",
+      "description": "Optional extension point for non-standard fields."
+    }
+  },
+  "definitions": {
+    "result_details": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "exit_code": {
+          "type": "integer"
+        },
+        "errno": {
+          "type": "string"
+        },
+        "message": {
+          "type": "string"
+        },
+        "error_detail": {
+          "type": "string"
+        }
+      }
     }
   }
 }

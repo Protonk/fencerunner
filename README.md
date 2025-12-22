@@ -4,7 +4,7 @@
 
 Fencerunner is infrastructure. It does not impose a particular sandbox or policy;
 instead, it gives you a way to **describe capabilities**, **exercise them with tiny
-shell probes**, and **record the results as versioned JSON “boundary objects”**
+shell probes**, and **record the results as schema‑validated JSON “boundary objects”**
 that can be analyzed later.
 
 The top‑level CLI is called `fencerunner`. It discovers probes, runs them in
@@ -28,9 +28,8 @@ At a high level, Fencerunner is built from three ideas:
   maps each one to structured metadata (including relevant low‑level
   operations).
 - **Boundary objects** — a schema‑validated JSON record emitted for each probe
-  run. It captures the attempted operation and observed outcome, and is tagged
-  with a boundary schema key from the active descriptor (default
-  `schema_key: "cfbo-v1"`).
+  run. It captures the attempted operation and observed outcome with optional
+  context and payload metadata.
 
 Together, these map probe results to named capabilities and keep the
 output analyzable over multiple runs. The contract harness is intentionally strict so
@@ -112,19 +111,19 @@ Probes are intentionally boring:
 Each probe declares:
 
 - a `probe.id` (the filename),
-- a `primary_capability_id` and optional `secondary_capability_ids` from the
-  catalog, and
-- a normalized `observed_result` (`success`, `denied`, `partial`, `error`)
-  plus payload snippets that capture what actually happened.
+- a `primary_capability_id` and optional `secondary_capability_ids` in
+  `context.probe`, and
+- a normalized `result.outcome` (`success`, `denied`, `partial`, `error`) plus
+  payload snippets that capture what actually happened.
 
 The probe author contract, examples, and test‑backed rules live in
 [`probes/AGENTS.md`](probes/AGENTS.md). Start there if you are writing or modifying probes.
 
 ## Catalogs and boundary schemas
 
-Fencerunner’s contracts are expressed as versioned JSON artifacts that can be
-swapped independently: a capability catalog (what behaviors exist and what they
-mean) and a boundary schema descriptor (what a probe run must record).
+Fencerunner’s contracts are expressed as JSON artifacts that can be swapped
+independently: a capability catalog (what behaviors exist and what they mean)
+and a boundary object schema (what a probe run must record).
 
 ### Capability catalogs
 
@@ -139,11 +138,14 @@ propositions—stable names with structured meaning—so everyone can agree on w
 a capability refers to without tying that meaning to any particular probe
 implementation or runtime.
 
-### Boundary schema descriptors (and boundary objects)
+### Boundary object schema (and boundary objects)
 
-The bundled boundary descriptor (`boundaries/cfbo-v1.json`) is a schema descriptor
-(key + embedded JSON Schema) that defines the `boundary_event_v1` record shape
-and pins the `schema_key` used to tag emitted boundary objects.
+The bundled boundary object schema (`schema/boundary_object_schema.json`) defines
+the minimal required record shape: probe identity (`probe.id`), attempted
+operation (`operation.kind`, `operation.target`, optional `operation.args`), and
+observed outcome (`result.outcome`, optional `result.details`). Optional
+`context`, `payload`, and `extensions` blocks carry richer metadata without
+changing the core contract.
 
 Conceptually, the boundary object is the contract at the boundary between messy
 execution and reliable interpretation: it forces each probe run to be expressed
@@ -151,16 +153,15 @@ as a small, schema‑checked statement of attempted operation and observed
 outcome (with bounded context), so downstream consumers treat the JSON record—
 not ad‑hoc logs, timing, or side effects—as the interface.
 
-The harness always requires a catalog and a boundary schema descriptor, but you
-can swap them out without changing code:
+The harness always requires a catalog and a boundary object schema, but you can
+swap them out without changing code:
 
 - Use `--catalog <path>` or `CATALOG_PATH` to point helpers at a different
   catalog file. Defaults fall back to the bundled `catalogs/macos_codex_v1.json`
   when no overrides are provided.
 - Use `--boundary <path>` or `BOUNDARY_PATH` to point helpers at an alternate
-  boundary descriptor. Defaults resolve to the bundled `boundaries/cfbo-v1.json`;
-  emitted records carry the `schema_version` and `schema_key` declared by that
-  descriptor’s embedded boundary schema.
+  boundary schema. Defaults resolve to `schema/boundary_object_schema.json`;
+  emitted records are validated against that schema at emit/listen time.
 
 The Rust layer (`src/catalog`, `src/boundary`) validates catalogs and boundary
 objects at load and emit time, and the integration tests under `tests/` assert

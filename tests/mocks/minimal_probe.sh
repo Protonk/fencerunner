@@ -43,14 +43,12 @@ command_executed="printf fixture-line > ${target_file}"
 # Emit the same boundary object a real probe would create.
 "${emit_record_bin}" \
   --probe-name "${probe_name}" \
-  --probe-version "1" \
   --primary-capability-id "${primary_capability_id}" \
   --command "${command_executed}" \
-  --category "fs" \
-  --verb "read" \
+  --operation-kind "fs.read" \
   --target "${target_file}" \
-  --status success \
-  --raw-exit-code 0 \
+  --outcome success \
+  --exit-code 0 \
   --payload-stdout "fixture ok" \
   --payload-stderr "" \
   --payload-raw-field "probe" "fixture" \

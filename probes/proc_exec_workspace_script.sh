@@ -6,7 +6,6 @@ repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." >/dev/null 2>&1 && pwd)
 emit_record_bin="${repo_root}/bin/emit-record"
 
 probe_name="proc_exec_workspace_script"
-probe_version="1"
 primary_capability_id="cap_proc_fork_and_child_spawn"
 secondary_capability_id="cap_fs_write_workspace_tree"
 
@@ -81,17 +80,15 @@ fi
 
 "${emit_record_bin}" \
   --probe-name "${probe_name}" \
-  --probe-version "${probe_version}" \
   --primary-capability-id "${primary_capability_id}" \
   --secondary-capability-id "${secondary_capability_id}" \
   --command "${command_executed}" \
-  --category "proc" \
-  --verb "exec" \
+  --operation-kind "proc.exec" \
   --target "${script_path}" \
-  --status "${status}" \
+  --outcome "${status}" \
   --errno "${errno_value}" \
   --message "${message}" \
-  --raw-exit-code "${raw_exit_code}" \
+  --exit-code "${raw_exit_code}" \
   --payload-stdout "${stdout_text}" \
   --payload-stderr "${stderr_text}" \
   --payload-raw-field "script_path" "${script_path}" \

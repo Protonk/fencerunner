@@ -6,7 +6,7 @@ mod support;
 mod common;
 
 use anyhow::{Context, Result};
-use fencerunner::emit_support::{normalize_secondary_ids, validate_status};
+use fencerunner::emit_support::{normalize_secondary_ids, validate_outcome};
 use std::fs;
 use std::process::Command;
 use support::{helper_binary, repo_root, run_command};
@@ -50,16 +50,14 @@ probe_name="tests_static_contract_broken"
 primary_capability_id="cap_fs_read_workspace_tree"
 "${emit_record_bin}" \
   --probe-name "${probe_name}" \
-  --probe-version "1" \
   --primary-capability-id "${primary_capability_id}" \
   --command "true" \
-  --category "fs" \
-  --verb "read" \
+  --operation-kind "fs.read" \
   --target "/dev/null" \
-  --status "success" \
+  --outcome "success" \
   --errno "" \
   --message "fixture" \
-  --raw-exit-code "0" \
+  --exit-code "0" \
   --payload-file /dev/null \
   --operation-args "{}"
 "#;
@@ -215,14 +213,12 @@ wrong_probe_name="tests_contract_gate_probe_name_mismatch_wrong"
 
 "${emit_record_bin}" \
   --probe-name "${wrong_probe_name}" \
-  --probe-version "1" \
   --primary-capability-id "${primary_capability_id}" \
   --command "true" \
-  --category "fs" \
-  --verb "read" \
+  --operation-kind "fs.read" \
   --target "/dev/null" \
-  --status "success" \
-  --raw-exit-code "0" \
+  --outcome "success" \
+  --exit-code "0" \
   --payload-stdout "" \
   --payload-stderr "" \
   --payload-raw "{}" \
@@ -268,14 +264,12 @@ wrong_primary_capability_id="cap_fs_write_workspace_tree"
 
 "${emit_record_bin}" \
   --probe-name "${probe_name}" \
-  --probe-version "1" \
   --primary-capability-id "${wrong_primary_capability_id}" \
   --command "true" \
-  --category "fs" \
-  --verb "read" \
+  --operation-kind "fs.read" \
   --target "/dev/null" \
-  --status "success" \
-  --raw-exit-code "0" \
+  --outcome "success" \
+  --exit-code "0" \
   --payload-stdout "" \
   --payload-stderr "" \
   --payload-raw "{}" \
@@ -322,14 +316,12 @@ payload_json=$(printf '{"big":"%s"}' "${big_payload}")
 
 "${emit_record_bin}" \
   --probe-name "${probe_name}" \
-  --probe-version "1" \
   --primary-capability-id "${primary_capability_id}" \
   --command "true" \
-  --category "fs" \
-  --verb "read" \
+  --operation-kind "fs.read" \
   --target "/dev/null" \
-  --status "success" \
-  --raw-exit-code "0" \
+  --outcome "success" \
+  --exit-code "0" \
   --payload-raw "${payload_json}" \
   --operation-args "{}"
 "#;
@@ -374,11 +366,11 @@ fn probe_test_contract_gate_succeeds() -> Result<()> {
 // === emit-record builders and payload helpers ===
 
 #[test]
-fn validate_status_allows_known_values() {
+fn validate_outcome_allows_known_values() {
     for value in ["success", "denied", "partial", "error"] {
-        validate_status(value).expect("status should pass");
+        validate_outcome(value).expect("outcome should pass");
     }
-    assert!(validate_status("bogus").is_err());
+    assert!(validate_outcome("bogus").is_err());
 }
 
 #[test]
@@ -422,17 +414,13 @@ fn emit_record_requires_primary_capability() -> Result<()> {
     let output = Command::new(&emit_record)
         .arg("--probe-name")
         .arg("missing_cap")
-        .arg("--probe-version")
-        .arg("1")
         .arg("--command")
         .arg("true")
-        .arg("--category")
-        .arg("fs")
-        .arg("--verb")
-        .arg("read")
+        .arg("--operation-kind")
+        .arg("fs.read")
         .arg("--target")
         .arg("/tmp")
-        .arg("--status")
+        .arg("--outcome")
         .arg("success")
         .arg("--operation-args")
         .arg("{}")
@@ -458,19 +446,15 @@ fn emit_record_rejects_unknown_capability() -> Result<()> {
     let output = Command::new(&emit_record)
         .arg("--probe-name")
         .arg("tests_unknown_cap")
-        .arg("--probe-version")
-        .arg("1")
         .arg("--primary-capability-id")
         .arg("cap_missing")
         .arg("--command")
         .arg("true")
-        .arg("--category")
-        .arg("fs")
-        .arg("--verb")
-        .arg("read")
+        .arg("--operation-kind")
+        .arg("fs.read")
         .arg("--target")
         .arg("/tmp")
-        .arg("--status")
+        .arg("--outcome")
         .arg("success")
         .arg("--operation-args")
         .arg("{}")
@@ -502,19 +486,15 @@ fn emit_record_falls_back_to_pwd_for_workspace_root() -> Result<()> {
         .env("PWD", &pwd)
         .arg("--probe-name")
         .arg("tests_workspace_fallback")
-        .arg("--probe-version")
-        .arg("1")
         .arg("--primary-capability-id")
         .arg("cap_fs_read_workspace_tree")
         .arg("--command")
         .arg("true")
-        .arg("--category")
-        .arg("fs")
-        .arg("--verb")
-        .arg("read")
+        .arg("--operation-kind")
+        .arg("fs.read")
         .arg("--target")
         .arg("/tmp")
-        .arg("--status")
+        .arg("--outcome")
         .arg("success")
         .arg("--operation-args")
         .arg("{}")
@@ -522,7 +502,12 @@ fn emit_record_falls_back_to_pwd_for_workspace_root() -> Result<()> {
         .context("failed to execute emit-record for workspace fallback")?;
     assert!(output.status.success(), "emit-record should succeed");
     let (record, _) = parse_boundary_object(&output.stdout)?;
-    let recorded = record.run.workspace_root.expect("workspace_root present");
+    let recorded = record
+        .context
+        .as_ref()
+        .and_then(|ctx| ctx.run.as_ref())
+        .and_then(|run| run.workspace_root.clone())
+        .expect("workspace_root present");
     assert_eq!(fs::canonicalize(recorded)?, pwd);
     Ok(())
 }

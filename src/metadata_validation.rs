@@ -113,14 +113,14 @@ fn collect_json(dir: &Path, acc: &mut Vec<PathBuf>) -> Result<()> {
 fn extract_capability_ids(value: &Value) -> Vec<CapabilityId> {
     let mut ids = Vec::new();
     if let Some(id) = value
-        .pointer("/probe/primary_capability_id")
+        .pointer("/context/probe/primary_capability_id")
         .and_then(Value::as_str)
     {
         ids.push(CapabilityId(id.to_string()));
     }
 
     if let Some(secondary) = value
-        .pointer("/probe/secondary_capability_ids")
+        .pointer("/context/probe/secondary_capability_ids")
         .and_then(Value::as_array)
     {
         ids.extend(
@@ -132,14 +132,14 @@ fn extract_capability_ids(value: &Value) -> Vec<CapabilityId> {
     }
 
     if let Some(primary_ctx) = value
-        .pointer("/capability_context/primary/id")
+        .pointer("/context/capability_context/primary/id")
         .and_then(Value::as_str)
     {
         ids.push(CapabilityId(primary_ctx.to_string()));
     }
 
     if let Some(secondary_ctx) = value
-        .pointer("/capability_context/secondary")
+        .pointer("/context/capability_context/secondary")
         .and_then(Value::as_array)
     {
         ids.extend(secondary_ctx.iter().filter_map(|entry| {
@@ -156,10 +156,9 @@ fn extract_capability_ids(value: &Value) -> Vec<CapabilityId> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{default_catalog_path, find_repo_root, load_catalog_from_path, BoundarySchema};
+    use crate::{default_catalog_path, find_repo_root, load_catalog_from_path};
     use serde_json::json;
     use std::path::PathBuf;
-    use std::sync::OnceLock;
     use tempfile::NamedTempFile;
 
     #[test]
@@ -168,7 +167,6 @@ mod tests {
         let probe = ProbeMetadata {
             script: PathBuf::from("probe.sh"),
             probe_name: Some("probe".to_string()),
-            probe_version: Some("1".to_string()),
             primary_capability: Some(CapabilityId("cap_missing".to_string())),
             secondary_capabilities: vec![CapabilityId("cap_fs_read_workspace_tree".to_string())],
         };
@@ -183,21 +181,20 @@ mod tests {
         let dir = tempfile::tempdir().expect("temp dir");
         let bo_path = dir.path().join("bo.json");
         let record = json!({
-            "schema_version": boundary_schema_version(),
-            "schema_key": boundary_schema_key(),
-            "capabilities_schema_version": default_catalog_key(),
-            "stack": {"os": "Darwin"},
-            "probe": {
-                "id": "probe",
-                "version": "1",
-                "primary_capability_id": "cap_missing",
-                "secondary_capability_ids": []
-            },
-            "run": {"workspace_root": "/tmp", "command": "true"},
-            "operation": {"category": "fs", "verb": "read", "target": "/tmp", "args": {}},
-            "result": {"observed_result": "success", "raw_exit_code": 0, "errno": null, "message": null, "error_detail": null},
-            "payload": {"stdout_snippet": null, "stderr_snippet": null, "raw": {}},
-            "capability_context": {"primary": {"id": "cap_missing", "category": "filesystem", "layer": "os_sandbox"}, "secondary": []}
+            "probe": {"id": "probe"},
+            "operation": {"kind": "fs.read", "target": "/tmp"},
+            "result": {"outcome": "success"},
+            "context": {
+                "capabilities_schema_version": default_catalog_key(),
+                "probe": {
+                    "primary_capability_id": "cap_missing",
+                    "secondary_capability_ids": []
+                },
+                "capability_context": {
+                    "primary": {"id": "cap_missing", "category": "filesystem", "layer": "os_sandbox"},
+                    "secondary": []
+                }
+            }
         });
         std::fs::write(&bo_path, serde_json::to_string(&record).unwrap()).unwrap();
 
@@ -215,21 +212,20 @@ mod tests {
         std::fs::create_dir_all(&nested).unwrap();
         let bo_path = nested.join("record.json");
         let record = json!({
-            "schema_version": boundary_schema_version(),
-            "schema_key": boundary_schema_key(),
-            "capabilities_schema_version": default_catalog_key(),
-            "stack": {"os": "Darwin"},
-            "probe": {
-                "id": "probe",
-                "version": "1",
-                "primary_capability_id": "cap_fs_read_workspace_tree",
-                "secondary_capability_ids": []
-            },
-            "run": {"workspace_root": "/tmp", "command": "true"},
-            "operation": {"category": "fs", "verb": "read", "target": "/tmp", "args": {}},
-            "result": {"observed_result": "success", "raw_exit_code": 0, "errno": null, "message": null, "error_detail": null},
-            "payload": {"stdout_snippet": null, "stderr_snippet": null, "raw": {}},
-            "capability_context": {"primary": {"id": "cap_fs_read_workspace_tree", "category": "filesystem", "layer": "os_sandbox"}, "secondary": []}
+            "probe": {"id": "probe"},
+            "operation": {"kind": "fs.read", "target": "/tmp"},
+            "result": {"outcome": "success"},
+            "context": {
+                "capabilities_schema_version": default_catalog_key(),
+                "probe": {
+                    "primary_capability_id": "cap_fs_read_workspace_tree",
+                    "secondary_capability_ids": []
+                },
+                "capability_context": {
+                    "primary": {"id": "cap_fs_read_workspace_tree", "category": "filesystem", "layer": "os_sandbox"},
+                    "secondary": []
+                }
+            }
         });
         std::fs::write(&bo_path, serde_json::to_string(&record).unwrap()).unwrap();
 
@@ -239,26 +235,6 @@ mod tests {
             errors.is_empty(),
             "expected no validation errors, got {errors:?}"
         );
-    }
-
-    fn boundary_schema_version() -> String {
-        boundary_schema().schema_version().to_string()
-    }
-
-    fn boundary_schema_key() -> String {
-        boundary_schema()
-            .schema_key()
-            .map(str::to_string)
-            .expect("boundary schema key")
-    }
-
-    fn boundary_schema() -> &'static BoundarySchema {
-        static SCHEMA: OnceLock<BoundarySchema> = OnceLock::new();
-        SCHEMA.get_or_init(|| {
-            let repo = find_repo_root().expect("metadata validation requires repository root");
-            let path = crate::default_boundary_descriptor_path(&repo);
-            BoundarySchema::load(&path).expect("boundary schema loads")
-        })
     }
 
     fn default_catalog_key() -> String {

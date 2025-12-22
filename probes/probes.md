@@ -20,7 +20,7 @@ This file serves as documentation. For authoritative, test-enforced Probe and Pr
 - **Behavior:** Perform one observable operation (write a file, read a sysctl,
   open a socket, spawn a process, etc.) and record what happened. Treat the
   sandbox as a black box; if the action partially succeeds, capture that nuance
-  in the payload and status.
+  in the payload and outcome.
 - **Capabilities:** Every probe declares exactly one
   `primary_capability_id` (with optional `secondary_capability_ids`). The ids
   come from the active capability catalog (bundled `catalogs/macos_codex_v1.json`
@@ -39,8 +39,7 @@ This file serves as documentation. For authoritative, test-enforced Probe and Pr
 `bin/probe-exec` executes probes with a fixed, direct invocation:
 
 1. **Environment setup** – determines the workspace root, sets the probe id,
-   and exports `FENCE_WORKSPACE_ROOT` (and preserves any caller-set
-   `FENCE_SANDBOX_MODE` value). Override the exported workspace via
+   and exports `FENCE_WORKSPACE_ROOT`. Override the exported workspace via
    `--workspace-root PATH` or by setting `FENCE_WORKSPACE_ROOT`; pass an empty
    value to defer to `bin/emit-record`’s `git rev-parse`/`pwd` fallback.
 2. **Result capture** – the probe prints one JSON boundary object to stdout.
@@ -49,19 +48,20 @@ This file serves as documentation. For authoritative, test-enforced Probe and Pr
 
 ## What a probe emits
 
-Every probe emits one [boundary object](../boundaries/boundary_object.md) that conforms to
-the active boundary-object schema (defaults resolve to the bundled descriptor
-in `boundaries/`, which embeds the boundary-event schema and declares a
-`schema_key`). Required data includes:
+Every probe emits one [boundary object](../boundaries/boundary_object.md) that
+conforms to the active boundary-object schema (defaults resolve to
+`schema/boundary_object_schema.json`). Required data includes:
 
-- Probe identity (`probe.id`, `probe.version`,
-  `probe.primary_capability_id`, `probe.secondary_capability_ids`).
-- The exact command executed (`run.command`).
-- Operation metadata (`operation.category`, `verb`, `target`, `args`).
-- Normalized outcome (`result.observed_result`, errno/message, exit codes).
-- Evidence (`payload.stdout_snippet`, `payload.stderr_snippet`,
-  `payload.raw` for structured notes).
-- Capability context snapshots embedded by `bin/emit-record`.
+- Probe identity (`probe.id`).
+- Operation metadata (`operation.kind`, `operation.target`, optional
+  `operation.args`).
+- Normalized outcome (`result.outcome`, optional `result.details`).
+
+`bin/emit-record` fills in the richer context and payload data that the harness
+expects for analysis: `context.run.command`, `context.probe` capability ids,
+`context.capabilities_schema_version` and `context.capability_context`
+snapshots, plus `payload.stdout_snippet`/`payload.stderr_snippet` and structured
+`payload.raw` content when provided.
 
 `boundaries/boundary_object.md` describes every field along with examples. Treat
 missing or malformed JSON as a probe failure—`bin/probe-exec` will not try to
@@ -139,7 +139,7 @@ implemented by `gate_probe` and `run_dynamic_gate` inside
   and checks:
   - all required flags are present and used at most once,
   - payload and operation-args are JSON objects within size limits,
-  - `status` and `raw-exit-code` values are well-formed, and
+  - `outcome` and `exit-code` values are well-formed, and
   - `emit-record` is invoked exactly once with metadata that matches the probe
     script expectations (probe name and primary capability id).
 - The gate fails if the probe never calls `emit-record`, calls it multiple
