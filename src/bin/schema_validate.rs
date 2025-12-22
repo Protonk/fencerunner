@@ -5,12 +5,13 @@
 //!   schema-validate --mode boundary --file tmp/boundary_record.json
 //!   schema-validate --mode boundary < record.json
 
-use anyhow::{Context, Result, bail};
+use anyhow::{Context, Result, anyhow, bail};
 use clap::Parser;
 use fencerunner::{
     BoundarySchema, default_boundary_schema_path, default_catalog_path, find_repo_root,
 };
 use serde_json::Value;
+use std::collections::BTreeSet;
 use std::fs::File;
 use std::io::{Read, stdin};
 use std::path::PathBuf;
@@ -34,6 +35,16 @@ struct Cli {
     boundary: Option<PathBuf>,
 }
 
+const CATALOG_SCHEMA_TITLE: &str = "Sandbox capability catalog (v1)";
+const CATALOG_SCHEMA_REQUIRED_POINTERS: [&str; 6] = [
+    "/properties/schema_version/const",
+    "/properties/catalog",
+    "/properties/scope",
+    "/properties/docs",
+    "/properties/capabilities",
+    "/properties/extensions",
+];
+
 fn read_input(file: Option<PathBuf>) -> Result<Value> {
     let mut buf = String::new();
     if let Some(path) = file {
@@ -50,13 +61,89 @@ fn read_input(file: Option<PathBuf>) -> Result<Value> {
     Ok(value)
 }
 
+fn extract_schema_version(schema: &Value, pointer: &str) -> Option<String> {
+    let version = schema.pointer(pointer).and_then(Value::as_str)?;
+    if version
+        .chars()
+        .all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '.' | '-'))
+    {
+        Some(version.to_string())
+    } else {
+        None
+    }
+}
+
+fn validate_catalog_schema_shape(
+    schema: &Value,
+    schema_path: &PathBuf,
+    allowed: &BTreeSet<String>,
+) -> Result<()> {
+    let title = schema.get("title").and_then(Value::as_str).unwrap_or_default();
+    if title != CATALOG_SCHEMA_TITLE {
+        bail!(
+            "catalog schema title '{}' does not match expected '{}' ({})",
+            title,
+            CATALOG_SCHEMA_TITLE,
+            schema_path.display()
+        );
+    }
+
+    let schema_type = schema.get("type").and_then(Value::as_str).unwrap_or_default();
+    if schema_type != "object" {
+        bail!(
+            "catalog schema type '{}' does not match expected 'object' ({})",
+            schema_type,
+            schema_path.display()
+        );
+    }
+
+    for pointer in CATALOG_SCHEMA_REQUIRED_POINTERS {
+        if schema.pointer(pointer).is_none() {
+            bail!(
+                "catalog schema missing required pointer '{}' ({})",
+                pointer,
+                schema_path.display()
+            );
+        }
+    }
+
+    let schema_version =
+        extract_schema_version(schema, "/properties/schema_version/const").ok_or_else(|| {
+            anyhow!("catalog schema missing schema_version const ({})", schema_path.display())
+        })?;
+    if !allowed.contains(&schema_version) {
+        bail!(
+            "catalog schema_version '{}' not in allowed set {:?} ({})",
+            schema_version,
+            allowed,
+            schema_path.display()
+        );
+    }
+
+    Ok(())
+}
+
+fn resolve_catalog_schema_path(catalog_path: &PathBuf) -> PathBuf {
+    if let Some(parent) = catalog_path.parent() {
+        let candidate = parent.join("capability_catalog.schema.json");
+        if candidate.exists() {
+            return candidate;
+        }
+    }
+
+    if let Some(base) = catalog_path.parent().and_then(|p| p.parent()) {
+        let candidate = base.join("catalogs/capability_catalog.schema.json");
+        if candidate.exists() {
+            return candidate;
+        }
+    }
+
+    PathBuf::from("catalogs/capability_catalog.schema.json")
+}
+
 fn validate_catalog(input: &Value, catalog_path: &PathBuf) -> Result<()> {
     let allowed = fencerunner::catalog::index::allowed_schema_versions();
-    let schema_path = catalog_path
-        .parent()
-        .and_then(|p| p.parent())
-        .map(|base| base.join("schema/capability_catalog.schema.json"))
-        .unwrap_or_else(|| PathBuf::from("schema/capability_catalog.schema.json"));
+    let schema_path = resolve_catalog_schema_path(catalog_path);
 
     let raw_schema: Arc<Value> = Arc::new(
         serde_json::from_reader(
@@ -65,6 +152,7 @@ fn validate_catalog(input: &Value, catalog_path: &PathBuf) -> Result<()> {
         )
         .with_context(|| format!("parsing catalog schema {}", schema_path.display()))?,
     );
+    validate_catalog_schema_shape(&raw_schema, &schema_path, &allowed)?;
     let raw_static: &'static Value = unsafe { &*(Arc::as_ptr(&raw_schema)) };
     let compiled = jsonschema::JSONSchema::compile(raw_static)
         .with_context(|| format!("compiling catalog schema {}", schema_path.display()))?;

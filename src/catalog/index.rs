@@ -20,6 +20,15 @@ use std::path::PathBuf;
 // The harness currently ships a single catalog; reject unexpected versions
 // rather than risk emitting records with mismatched metadata.
 const DEFAULT_SCHEMA_VERSION: &str = "sandbox_catalog_v1";
+const CATALOG_SCHEMA_TITLE: &str = "Sandbox capability catalog (v1)";
+const CATALOG_SCHEMA_REQUIRED_POINTERS: [&str; 6] = [
+    "/properties/schema_version/const",
+    "/properties/catalog",
+    "/properties/scope",
+    "/properties/docs",
+    "/properties/capabilities",
+    "/properties/extensions",
+];
 
 #[derive(Debug)]
 /// Capability catalog plus a derived index keyed by capability id.
@@ -119,7 +128,7 @@ fn catalog_schema_version_from_disk() -> Option<String> {
 }
 
 fn canonical_catalog_schema_path() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("schema/capability_catalog.schema.json")
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("catalogs/capability_catalog.schema.json")
 }
 
 fn validate_catalog_metadata(meta: &CatalogMetadata) -> Result<()> {
@@ -217,6 +226,9 @@ fn validate_against_schema(catalog_path: &Path) -> Result<()> {
         &schema_path,
         SchemaLoadOptions {
             allowed_versions: Some(&allowed),
+            expected_title: Some(CATALOG_SCHEMA_TITLE),
+            expected_type: Some("object"),
+            required_pointers: Some(&CATALOG_SCHEMA_REQUIRED_POINTERS),
             ..Default::default()
         },
     )
@@ -237,12 +249,19 @@ fn validate_against_schema(catalog_path: &Path) -> Result<()> {
 }
 
 fn resolve_catalog_schema_path(catalog_path: &Path) -> PathBuf {
-    if let Some(base) = catalog_path.parent().and_then(|p| p.parent()) {
-        let candidate = base.join("schema/capability_catalog.schema.json");
+    if let Some(parent) = catalog_path.parent() {
+        let candidate = parent.join("capability_catalog.schema.json");
         if candidate.exists() {
             return candidate;
         }
     }
 
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("schema/capability_catalog.schema.json")
+    if let Some(base) = catalog_path.parent().and_then(|p| p.parent()) {
+        let candidate = base.join("catalogs/capability_catalog.schema.json");
+        if candidate.exists() {
+            return candidate;
+        }
+    }
+
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("catalogs/capability_catalog.schema.json")
 }

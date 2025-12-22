@@ -1,10 +1,10 @@
 # Capability Catalog Guide 
 
-This document summarizes the structure of the capability catalog schema and the bundled catalog instance so humans and agents can quickly understand how capabilities are represented.
+This document summarizes the structure of the capability catalog schema and the bundled catalog instance so humans and agents can quickly understand how capabilities are represented. It also captures the shared schema load/validation flow for the catalog and boundary object contracts.
 
-> NOTE: This document exists to help agents understand the structure of the catalog, NOT to provide additional technical or policy information.
+> NOTE: This document exists to help agents understand the contract structure and validation flow, NOT to introduce new policy.
 
-The catalog schema lives at `schema/capability_catalog.schema.json` (current schema version: **sandbox_catalog_v1**). The bundled catalog instance is stored at `catalogs/macos_codex_v1.json` (catalog key: **macOS_codex_v1**) and can be swapped for another catalog without code changes. CLI/env overrides (`--catalog` / `CATALOG_PATH`) select alternates; otherwise the bundled catalog is used.
+The catalog schema lives at `catalogs/capability_catalog.schema.json` (current schema version: **sandbox_catalog_v1**). The bundled catalog instance is stored at `catalogs/macos_codex_v1.json` (catalog key: **macOS_codex_v1**) and can be swapped for another catalog without code changes. CLI/env overrides (`--catalog` / `CATALOG_PATH`) select alternates; otherwise the bundled catalog is used.
 
 ## Catalog keys and repositories
 
@@ -21,6 +21,7 @@ Top-level fields:
 - `scope` — description of what the catalog covers plus `policy_layers`, `categories`, and optional `limitations`/`notes`.
 - `docs` — bibliography map used by capability sources.
 - `capabilities` — array of capability entries.
+- `extensions` — optional object for forward-compatible metadata.
 
 Policy and category snapshot (bundled catalog):
 - 2 policy layers (`os_sandbox`, `agent_runtime`).
@@ -42,6 +43,7 @@ Fields:
 - `labels` — optional string tags to mark environment or client-specific bits.
 - `notes` — probe-author hints or contextual commentary.
 - `sources` — citations `{doc, section?, url_hint?}` pointing back to `docs`.
+- `extensions` — optional object for forward-compatible metadata.
 
 ## Example entry
 
@@ -71,5 +73,62 @@ Excerpt from `catalogs/macos_codex_v1.json`:
   ]
 }
 ```
+
+## Schema contracts and validation flow
+
+This section summarizes the pattern -> loader -> validator -> instance flow for both schema contracts. The catalog schema is versioned (schema_version const); the boundary object schema is intentionally minimal and unversioned. Both contracts share the same load/validate pipeline described here.
+
+### Terms
+
+- Pattern: the versioned schema contract that defines what "valid" means.
+- Loader: the Rust entry point that reads the schema and compiles a validator.
+- Validator: the compiled JSONSchema plus any extra semantic checks.
+- Instance: the JSON file or emitted record validated at runtime.
+
+### Capability catalog (sandbox_catalog_v1)
+
+Pattern:
+- `catalogs/capability_catalog.schema.json` (schema_version: `sandbox_catalog_v1`)
+
+Loader:
+- `src/catalog/index.rs` -> `CapabilityIndex::load`
+- Uses `src/schema_loader.rs` to read and compile the JSON schema.
+
+Validator:
+- JSONSchema validation against `catalogs/capability_catalog.schema.json`
+- Additional checks in `CapabilityIndex` for schema_version allowlist, duplicate
+  ids, category/layer references, and doc references.
+
+Instance:
+- Default catalog: `catalogs/macos_codex_v1.json`
+- Overrides: `--catalog` or `CATALOG_PATH`
+
+### Boundary object schema
+
+Pattern:
+- `boundary/boundary_object_schema.json` (minimal required fields for a probe run)
+
+Loader:
+- `src/boundary/mod.rs` -> `BoundarySchema::load`
+- Path resolution via `resolve_boundary_schema_path` in `src/lib.rs`
+
+Validator:
+- Boundary objects are validated by `BoundarySchema::validate` (used by
+  `bin/emit-record`, `bin/probe-listen`, and tests)
+
+Instance:
+- Default schema: `boundary/boundary_object_schema.json`
+- Emitted boundary objects: NDJSON from probes (`bin/emit-record`)
+- Overrides: `--boundary` or `BOUNDARY_PATH`
+
+### Manual validation
+
+- `schema-validate --mode catalog --file <path>`
+- `schema-validate --mode boundary --file <path>`
+
+### Guard rails
+
+- `tests/schema.rs` asserts boundary object and catalog schemas stay aligned
+  with their instances.
 
 As the catalog evolves, keep the schema and tests aligned so probe authors and downstream consumers can trust capability IDs and metadata.

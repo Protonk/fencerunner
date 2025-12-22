@@ -1,0 +1,147 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://fencerunner.dev/schemas/capability_catalog_v1.json",
+  "title": "Sandbox capability catalog (v1)",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "catalog",
+    "scope",
+    "docs",
+    "capabilities"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "const": "sandbox_catalog_v1"
+    },
+    "catalog": {"$ref": "#/$defs/catalog"},
+    "scope": {"$ref": "#/$defs/scope"},
+    "docs": {"$ref": "#/$defs/docs"},
+    "capabilities": {"$ref": "#/$defs/capabilities"},
+    "extensions": {"$ref": "#/$defs/extensions"}
+  },
+  "$defs": {
+    "extensions": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "string_list": {
+      "type": "array",
+      "items": {"type": "string"}
+    },
+    "string_list_unique": {
+      "type": "array",
+      "items": {"type": "string"},
+      "uniqueItems": true
+    },
+    "catalog": {
+      "type": "object",
+      "required": ["key", "title"],
+      "additionalProperties": false,
+      "properties": {
+        "key": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_.-]+$"
+        },
+        "title": {"type": "string"},
+        "description": {"type": "string"},
+        "labels": {"$ref": "#/$defs/string_list_unique"},
+        "notes": {"type": "string"},
+        "extensions": {"$ref": "#/$defs/extensions"}
+      }
+    },
+    "scope": {
+      "type": "object",
+      "required": ["description", "categories"],
+      "additionalProperties": false,
+      "properties": {
+        "description": {"type": "string"},
+        "notes": {"type": "string"},
+        "policy_layers": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/policy_layer"}
+        },
+        "categories": {
+          "type": "object",
+          "additionalProperties": {"type": "string"}
+        },
+        "limitations": {"type": "string"},
+        "extensions": {"$ref": "#/$defs/extensions"}
+      }
+    },
+    "policy_layer": {
+      "type": "object",
+      "required": ["id", "description"],
+      "additionalProperties": false,
+      "properties": {
+        "id": {"type": "string"},
+        "description": {"type": "string"},
+        "extensions": {"$ref": "#/$defs/extensions"}
+      }
+    },
+    "docs": {
+      "type": "object",
+      "additionalProperties": {"$ref": "#/$defs/doc_ref"}
+    },
+    "doc_ref": {
+      "type": "object",
+      "required": ["title"],
+      "additionalProperties": false,
+      "properties": {
+        "title": {"type": "string"},
+        "url": {"type": "string"},
+        "url_hint": {"type": "string"},
+        "extensions": {"$ref": "#/$defs/extensions"}
+      }
+    },
+    "capabilities": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/capability"}
+    },
+    "capability": {
+      "type": "object",
+      "required": ["id", "category", "layer", "description", "operations"],
+      "additionalProperties": false,
+      "properties": {
+        "id": {"type": "string"},
+        "category": {"type": "string"},
+        "layer": {"type": "string"},
+        "description": {"type": "string"},
+        "status": {"type": "string"},
+        "labels": {"$ref": "#/$defs/string_list_unique"},
+        "operations": {"$ref": "#/$defs/operations"},
+        "meta_ops": {"$ref": "#/$defs/string_list"},
+        "agent_controls": {"$ref": "#/$defs/string_list"},
+        "notes": {"type": "string"},
+        "sources": {"$ref": "#/$defs/capability_sources"},
+        "extensions": {"$ref": "#/$defs/extensions"}
+      }
+    },
+    "operations": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "allow": {"$ref": "#/$defs/string_list"},
+        "deny": {"$ref": "#/$defs/string_list"},
+        "extensions": {"$ref": "#/$defs/extensions"}
+      }
+    },
+    "capability_sources": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/capability_source"}
+    },
+    "capability_source": {
+      "type": "object",
+      "required": ["doc"],
+      "additionalProperties": false,
+      "properties": {
+        "doc": {"type": "string"},
+        "section": {"type": "string"},
+        "url_hint": {"type": "string"},
+        "extensions": {"$ref": "#/$defs/extensions"}
+      }
+    }
+  }
+}

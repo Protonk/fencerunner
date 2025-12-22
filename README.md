@@ -169,10 +169,9 @@ that the schemas, helpers, and sample data stay in sync.
 
 For a narrative view of these contracts, see:
 
-- [`catalogs/capabilities.md`](catalogs/capabilities.md)
+- [`catalogs/capabilities.md`](catalogs/capabilities.md) (catalog structure + schema flow)
 - [`boundary/boundary_object.md`](boundary/boundary_object.md)
 - [`probes/probes.md`](probes/probes.md)
-- [`schema/README.md`](schema/README.md)
 
 ## Navigation
 
@@ -183,6 +182,6 @@ Before you change behavior, skim:
 
 - [`AGENTS.md`](AGENTS.md) at the repo root,
 - the `AGENTS.md` for the directory you are touching, and
-- the relevant guide for that area (`catalogs/capabilities.md`, `boundary/boundary_object.md`, `probes/probes.md`, or `schema/README.md`).
+- the relevant guide for that area (`catalogs/capabilities.md`, `boundary/boundary_object.md`, or `probes/probes.md`).
 
 Those files explain the contracts that code and tests are expected to uphold. The tests in `tests/` are intentionally opinionated and high‑coverage: keeping them green is the easiest way to ensure usage remains compatible with the contracts described above.

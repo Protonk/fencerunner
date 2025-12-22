@@ -8,7 +8,8 @@ mod common;
 use anyhow::Result;
 use fencerunner::{CapabilityCategory, CapabilityIndex, CapabilityLayer, CatalogRepository, load_catalog_from_path};
 use serde_json::json;
-use tempfile::NamedTempFile;
+use std::fs;
+use tempfile::{NamedTempFile, tempdir};
 
 use common::{catalog_path, sample_boundary_object};
 
@@ -119,5 +120,49 @@ fn capability_index_accepts_allowed_schema_version_override() -> Result<()> {
         CapabilityIndex::load(temp.path()).is_err(),
         "custom catalog schema_version should be rejected"
     );
+    Ok(())
+}
+
+#[test]
+fn capability_index_rejects_schema_with_wrong_title() -> Result<()> {
+    let dir = tempdir()?;
+    let schema_path = dir.path().join("capability_catalog.schema.json");
+    let catalog_path = dir.path().join("catalog.json");
+
+    let schema = json!({
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "title": "Wrong title",
+        "type": "object",
+        "properties": {
+            "schema_version": {"const": "sandbox_catalog_v1"},
+            "catalog": {},
+            "scope": {},
+            "docs": {},
+            "capabilities": {},
+            "extensions": {}
+        }
+    });
+    fs::write(&schema_path, serde_json::to_vec(&schema)?)?;
+
+    let catalog = json!({
+        "schema_version": "sandbox_catalog_v1",
+        "catalog": {"key": "fixture", "title": "fixture"},
+        "scope": {
+            "description": "fixture",
+            "policy_layers": [{"id": "os_sandbox", "description": "fixture layer"}],
+            "categories": {"filesystem": "fixture"}
+        },
+        "docs": {},
+        "capabilities": [{
+            "id": "cap_fixture",
+            "category": "filesystem",
+            "layer": "os_sandbox",
+            "description": "fixture",
+            "operations": {"allow": [], "deny": []}
+        }]
+    });
+    fs::write(&catalog_path, serde_json::to_vec(&catalog)?)?;
+
+    assert!(CapabilityIndex::load(&catalog_path).is_err());
     Ok(())
 }

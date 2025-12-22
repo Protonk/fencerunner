@@ -165,7 +165,7 @@ fn boundary_object_schema() -> Result<()> {
 #[test]
 fn capability_catalog_schema() -> Result<()> {
     let repo_root = repo_root();
-    let schema_path = repo_root.join("schema/capability_catalog.schema.json");
+    let schema_path = repo_root.join("catalogs/capability_catalog.schema.json");
     let catalog_path = default_catalog_path(&repo_root);
 
     static CATALOG_SCHEMA: OnceLock<Value> = OnceLock::new();

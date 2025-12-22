@@ -15,7 +15,7 @@ binaries under `src/bin/`.
   `boundary/boundary_object_schema.json` and the narrative guide in
   `boundary/boundary_object.md`, then land here with tests.
 - `catalog/` — capability catalog parsing and indexing. Pure Rust; no shelling
-  out. Must stay aligned with `schema/capability_catalog.schema.json` and the
+  out. Must stay aligned with `catalogs/capability_catalog.schema.json` and the
   bundled catalogs under `catalogs/`.
 - `emit_support.rs`, `probe_metadata.rs`, `metadata_validation.rs`,
   `coverage.rs` — harness utilities (payload builders, static probe parsing,

@@ -10,6 +10,7 @@ use crate::catalog::identity::{
 };
 use anyhow::Result;
 use serde::Deserialize;
+use serde_json::Value;
 use std::collections::BTreeMap;
 use std::fs;
 use std::path::Path;
@@ -23,6 +24,8 @@ pub struct CapabilityCatalog {
     pub scope: Scope,
     pub docs: BTreeMap<String, DocRef>,
     pub capabilities: Vec<Capability>,
+    #[serde(default)]
+    pub extensions: BTreeMap<String, Value>,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -36,6 +39,8 @@ pub struct CatalogMetadata {
     pub labels: Vec<String>,
     #[serde(default)]
     pub notes: Option<String>,
+    #[serde(default)]
+    pub extensions: BTreeMap<String, Value>,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -49,6 +54,8 @@ pub struct Scope {
     pub categories: BTreeMap<String, String>,
     #[serde(default)]
     pub limitations: Option<String>,
+    #[serde(default)]
+    pub extensions: BTreeMap<String, Value>,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -56,6 +63,8 @@ pub struct Scope {
 pub struct PolicyLayer {
     pub id: String,
     pub description: String,
+    #[serde(default)]
+    pub extensions: BTreeMap<String, Value>,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -66,6 +75,8 @@ pub struct DocRef {
     pub url: Option<String>,
     #[serde(default)]
     pub url_hint: Option<String>,
+    #[serde(default)]
+    pub extensions: BTreeMap<String, Value>,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -88,6 +99,8 @@ pub struct Capability {
     pub notes: Option<String>,
     #[serde(default)]
     pub sources: Vec<CapabilitySource>,
+    #[serde(default)]
+    pub extensions: BTreeMap<String, Value>,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -97,6 +110,8 @@ pub struct Operations {
     pub allow: Vec<String>,
     #[serde(default)]
     pub deny: Vec<String>,
+    #[serde(default)]
+    pub extensions: BTreeMap<String, Value>,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -107,6 +122,8 @@ pub struct CapabilitySource {
     pub section: Option<String>,
     #[serde(default)]
     pub url_hint: Option<String>,
+    #[serde(default)]
+    pub extensions: BTreeMap<String, Value>,
 }
 
 impl Capability {
