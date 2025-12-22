@@ -68,7 +68,6 @@ pub struct ProbeInfo {
 /// `workspace_root` is optional because emit-record falls back to git/pwd
 /// detection when no override is provided.
 pub struct RunInfo {
-    pub mode: String,
     #[serde(default)]
     pub workspace_root: Option<String>,
     pub command: String,
@@ -530,7 +529,6 @@ mod tests {
                 "secondary_capability_ids": []
             },
             "run": {
-                "mode": "baseline",
                 "workspace_root": "/tmp/sample",
                 "command": "/bin/true"
             },

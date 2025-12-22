@@ -3,7 +3,8 @@
 //! This crate is intentionally small and repetitive to make visible
 //! how the layers stack. Each public function exists because a binary
 //! depends on it; treat them as contracts and
-//! keep behavior aligned with the narrative in README.md and docs/*.md.
+//! keep behavior aligned with the narrative in README.md plus the domain
+//! guides under catalogs/, boundaries/, and probes/.
 
 use anyhow::{Context, Result, bail};
 use serde_json::Value;
@@ -15,7 +16,6 @@ use std::{
 
 pub mod boundary;
 pub mod catalog;
-pub mod connectors;
 pub mod coverage;
 pub mod emit_support;
 pub mod fence_run_support;
@@ -372,7 +372,7 @@ mod tests {
         let array_input = format!("[{0},{0}]", serialized);
         let array_records = parse_json_stream(&array_input).expect("array parses");
         assert_eq!(array_records.len(), 2);
-        assert_eq!(array_records[1].run.mode, "baseline");
+        assert_eq!(array_records[1].run.command, "/bin/true");
     }
 
     #[test]
@@ -400,7 +400,6 @@ mod tests {
                 "secondary_capability_ids": []
             },
             "run": {
-                "mode": "baseline",
                 "workspace_root": "/tmp",
                 "command": "/bin/true"
             },

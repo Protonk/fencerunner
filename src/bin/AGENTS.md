@@ -13,9 +13,8 @@ contract stable, prefer repo helpers before PATH, and propagate exit codes
 verbatim.
 
 ### `probe-exec`
-Executes a probe in a requested mode, exporting `FENCE_*` metadata and enforcing that probes live under `probes/`. Keep probe
-resolution strict, honor `--workspace-root`/`FENCE_WORKSPACE_ROOT`, and
-ensure sandbox env matches the mode (baseline today).
+Executes a probe directly, exporting `FENCE_*` metadata and enforcing that probes live under `probes/`. Keep probe
+resolution strict and honor `--workspace-root`/`FENCE_WORKSPACE_ROOT`.
 
 ## Record helpers (boundary emission/introspection)
 
@@ -35,7 +34,7 @@ input with clear errors; don’t panic.
 ## Harness helpers (probe orchestration)
 
 ### `probe-matrix`
-Iterates probes/modes via `probe-exec`, emitting NDJSON. Reuse
+Iterates probes via `probe-exec`, emitting NDJSON. Reuse
 `resolve_helper_binary`, enforce selection per docs (`--bang`, `--bundle`, or
 `--probe`), and keep error messages actionable.
 
@@ -58,6 +57,6 @@ compact JSON, and prefer explicit failures over silent fallbacks.
 - Subscribe to shared logic in `runtime.rs`/`fence_run_support.rs`/`lib.rs`
   instead of rolling your own path/sandbox/catalog handling.
 - Keep argument parsing explicit and defensive; surface actionable errors.
-- Reflect behavioral changes in docs/tests so shell callers stay in sync.
+- Reflect behavioral changes in the narrative guides and tests so shell callers stay in sync.
 - Portability is non-negotiable: binaries must run on macOS `/bin/bash 3.2` and
   inside CI containers with only the shipped Rust helpers.

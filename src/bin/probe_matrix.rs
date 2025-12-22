@@ -2,14 +2,10 @@
 //!
 //! This binary underpins `fencerunner --bang/--bundle/--probe`: it discovers
 //! probes, selects the requested slice (all probes, a capability bundle, or a
-//! single probe), selects modes (`MODES` or defaults based on connector
-//! availability), executes each probe via `probe-exec`, and prints each emitted
+//! single probe), executes each probe via `probe-exec`, and prints each emitted
 //! JSON object on its own line.
 
 use anyhow::{Context, Result, anyhow, bail};
-use fencerunner::connectors::{
-    Availability, RunMode, allowed_mode_names, default_mode_names, parse_modes,
-};
 use fencerunner::{
     CapabilityId, CapabilityIndex, Probe, find_repo_root, list_probes,
     resolve_boundary_schema_path, resolve_catalog_path, resolve_helper_binary, resolve_probe,
@@ -36,26 +32,12 @@ fn run() -> Result<()> {
     let boundary_schema_path =
         resolve_boundary_schema_path(&repo_root, cli.boundary_path.as_deref())?;
     let probes = resolve_probes(&repo_root, &catalog_path, &cli)?;
-    let modes = resolve_modes()?;
-
     let mut errors: Vec<String> = Vec::new();
-    for mode in modes {
-        for probe in &probes {
-            if let Err(err) = run_probe(
-                &repo_root,
-                probe,
-                mode,
-                &catalog_path,
-                &boundary_schema_path,
-            ) {
-                let message = format!(
-                    "probe {} in mode {} failed: {err:#}",
-                    probe.id,
-                    mode.as_str()
-                );
-                eprintln!("probe-matrix: {message}");
-                errors.push(message);
-            }
+    for probe in &probes {
+        if let Err(err) = run_probe(&repo_root, probe, &catalog_path, &boundary_schema_path) {
+            let message = format!("probe {} failed: {err:#}", probe.id);
+            eprintln!("probe-matrix: {message}");
+            errors.push(message);
         }
     }
 
@@ -68,33 +50,6 @@ fn run() -> Result<()> {
             errors.join("\n")
         )
     }
-}
-
-fn resolve_modes() -> Result<Vec<RunMode>> {
-    let requested = env::var("MODES").ok().and_then(|raw| {
-        let parsed = split_list(&raw);
-        if parsed.is_empty() {
-            None
-        } else {
-            Some(parsed)
-        }
-    });
-
-    let mode_names = requested.unwrap_or_else(|| default_mode_names(Availability::for_host()));
-
-    if mode_names.is_empty() {
-        bail!("No modes resolved; check MODES env var");
-    }
-
-    let allowed = allowed_mode_names();
-    if let Some(bad) = mode_names
-        .iter()
-        .find(|mode| !allowed.contains(&mode.as_str()))
-    {
-        bail!("Unsupported mode requested: {bad}");
-    }
-
-    parse_modes(&mode_names)
 }
 
 fn resolve_probes(repo_root: &Path, catalog_path: &Path, cli: &Cli) -> Result<Vec<Probe>> {
@@ -134,13 +89,11 @@ fn resolve_probes(repo_root: &Path, catalog_path: &Path, cli: &Cli) -> Result<Ve
 fn run_probe(
     repo_root: &Path,
     probe: &Probe,
-    mode: RunMode,
     catalog_path: &Path,
     boundary_path: &Path,
 ) -> Result<()> {
     let runner = resolve_helper_binary(repo_root, "probe-exec")?;
     let output = Command::new(&runner)
-        .arg(mode.as_str())
         .arg(&probe.path)
         .current_dir(repo_root)
         .stdout(Stdio::piped())
@@ -152,19 +105,11 @@ fn run_probe(
 
     if !output.status.success() {
         let code = output.status.code().unwrap_or(-1);
-        bail!(
-            "Probe {} in mode {} returned non-zero exit code {code}",
-            probe.id,
-            mode.as_str()
-        );
+        bail!("Probe {} returned non-zero exit code {code}", probe.id);
     }
 
     let json_value: Value = serde_json::from_slice(&output.stdout).with_context(|| {
-        format!(
-            "Failed to parse boundary object for probe {} in mode {}",
-            probe.id,
-            mode.as_str()
-        )
+        format!("Failed to parse boundary object for probe {}", probe.id)
     })?;
     let compact = serde_json::to_string(&json_value)?;
     println!("{compact}");

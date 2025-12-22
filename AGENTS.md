@@ -9,11 +9,11 @@ For quick orientation, this is how the tree is organized.
 | Path      | Purpose / Notes                                                                                                                                       |
 | --------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `bin/`    | Prebuilt Rust helper binaries (`fencerunner`, `probe-exec`, `probe-matrix`, `emit-record`, `portable-path`, `detect-stack`, etc.) synced from `src/bin/`. |
-| `catalogs/` | Capability catalogs (bundled example: `macos_codex_v1.json`).                                                                                       |
-| `boundaries/` | Boundary schema descriptors (bundled example: `cfbo-v1.json`).                                                                                    |
-| `docs/`   | Human-readable explanations for schemas, probes, and boundary objects; kept aligned with machine contracts like `schema/*.json` and the tests.      |
-| `probes/` | Flat directory of `<probe_id>.sh` scripts plus `probes/AGENTS.md`, the only code that directly exercises the sandboxed runtime.                     |
-| `schema/` | Machine-readable schemas (`boundary_object_schema.json`, `capability_catalog.schema.json`) consumed by tooling.                                     |
+| `catalogs/` | Capability catalogs plus the explainer at `catalogs/capabilities.md` (bundled catalog: `macos_codex_v1.json`).                                    |
+| `boundaries/` | Boundary schema descriptors plus the explainer at `boundaries/boundary_object.md` (bundled descriptor: `cfbo-v1.json`).                          |
+| `docs/`   | Reserved for future top-level docs; narrative guides now live alongside their artifacts.                                                          |
+| `probes/` | Flat directory of `<probe_id>.sh` scripts plus `probes/AGENTS.md` and `probes/probes.md`, the only code that directly exercises the sandboxed runtime. |
+| `schema/` | Machine-readable schemas (`boundary_object_schema.json`, `capability_catalog.schema.json`) plus `schema/README.md` for the load/validation flow.    |
 | `src/`    | Rust sources for the CLI and helpers, including implementations for every binary under `bin/`.                                                      |
 | `target/` | Cargo build artifacts created by `cargo build` or `cargo test`; safe to delete when you need a clean rebuild.                                       |
 | `tests/`  | Rust guard rails (`tests/*.rs`), shared helpers, and fixtures that enforce the contracts under `cargo test`.                                       |
@@ -33,7 +33,12 @@ Once you know which part of the tree you are touching, defer to the `AGENTS.md` 
 * `src/AGENTS.md` — Structure and expectations for Rust code under `src/`, excluding the helper CLIs.
 * `src/bin/AGENTS.md` — Guarantees for the Rust helper binaries (`fencerunner`, `probe-matrix`, `probe-exec`, `emit-record`, `detect-stack`, etc.); how their CLIs and stack metadata must remain stable over time.
 * `tools/AGENTS.md` — Contracts for helper scripts under `tools/` and how they fit into supported workflows.
-* `docs/AGENTS.md` — How explanatory docs relate to machine contracts; when you add or change an explainer in `docs/`, this is the place that says how it should track the schemas and tests.
+
+Narrative guides live alongside the artifacts they explain:
+* `catalogs/capabilities.md` — capability catalog structure and terminology.
+* `boundaries/boundary_object.md` — boundary-event pattern and schema descriptor details.
+* `probes/probes.md` — probe contract overview and harness flow.
+* `schema/README.md` — schema loading/validation flow and instance mapping.
 
 ## Good habits for all agents
 

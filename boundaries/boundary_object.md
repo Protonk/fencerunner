@@ -7,7 +7,7 @@ descriptor `boundaries/cfbo-v1.json`. Descriptors follow the contract in
 (`schema_key`, e.g., `cfbo-v1`) and embed the boundary-event JSON Schema used to
 validate emitted records.
 
-Each boundary object captures *one* probe execution in one run mode. Probes are
+Each boundary object captures *one* probe execution. Probes are
 tiny scripts stored under `probes/<probe_id>.sh` that:
 
 1. Use `#!/usr/bin/env bash` with `set -euo pipefail`.
@@ -15,8 +15,7 @@ tiny scripts stored under `probes/<probe_id>.sh` that:
    `sysctl`, etc.).
 3. Collect the stdout/stderr snippets needed to describe that action plus any
    structured payload.
-4. Call `bin/emit-record` once with `--run-mode "$FENCE_RUN_MODE"` plus the
-   metadata described below.
+4. Call `bin/emit-record` once with the metadata described below.
 5. Exit with status `0` after emitting JSON. They must not print anything else
    to stdout; use stderr only for debugging.
 
@@ -51,7 +50,7 @@ enforced by `bin/emit-record`.
 | `capabilities_schema_version` | yes | The catalog key from the loaded capability catalog. It is a string with no whitespace (e.g., `example_catalog_key`). |
 | `stack` | yes | Sandbox/OS fingerprint for the host that ran the probe. |
 | `probe` | yes | Identity and capability linkage for the probe implementation. |
-| `run` | yes | Execution metadata for this invocation (mode, workspace, command). This harness intentionally omits timestamps so records stay stateless. |
+| `run` | yes | Execution metadata for this invocation (workspace, command). This harness intentionally omits timestamps so records stay stateless. |
 | `operation` | yes | Description of the sandbox-facing operation being attempted. |
 | `result` | yes | Normalized observed outcome plus error metadata. |
 | `payload` | yes | Small probe-specific diagnostics and structured raw data. |
@@ -86,7 +85,6 @@ data must add it outside the boundary object.
 
 | Field | Required | Meaning |
 | --- | --- | --- |
-| `mode` | yes | `baseline`; matches `bin/probe-exec`. |
 | `workspace_root` | yes (nullable) | Canonical workspace root exported by `bin/probe-exec` (`FENCE_WORKSPACE_ROOT`), falling back to `git rev-parse` / `pwd` if unset. |
 | `command` | yes | Human/machine-usable string describing the actual command. |
 
@@ -162,7 +160,6 @@ workspace and expects a denial):
     "secondary_capability_ids": []
   },
   "run": {
-    "mode": "baseline",
     "workspace_root": "/Users/example/project",
     "command": "printf 'probe write ...' >> '/tmp/probe-outside-root-test'"
   },

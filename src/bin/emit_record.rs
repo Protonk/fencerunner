@@ -63,7 +63,7 @@ fn run() -> Result<()> {
     let payload = args.payload.build()?;
     let operation_args = args.operation_args.build("operation args")?;
 
-    let stack_raw = run_command_json(&detect_stack, &[&args.run_mode])
+    let stack_raw = run_command_json(&detect_stack, &[])
         .with_context(|| format!("Failed to execute {}", detect_stack.display()))?;
     let stack: StackInfo = serde_json::from_value(stack_raw.clone())
         .context("detect-stack emitted JSON that does not match the current stack schema")?;
@@ -124,7 +124,6 @@ fn run() -> Result<()> {
             "secondary_capability_ids": secondary_capability_ids,
         },
         "run": {
-            "mode": args.run_mode,
             "workspace_root": workspace_root,
             "command": args.command,
         },
@@ -154,7 +153,6 @@ fn run() -> Result<()> {
 struct CliArgs {
     catalog_path: Option<String>,
     boundary_schema_path: Option<String>,
-    run_mode: String,
     probe_name: String,
     probe_version: String,
     category: String,
@@ -188,7 +186,6 @@ impl CliArgs {
                     let value = next_value(&mut args, "--boundary")?;
                     config.boundary_schema_path = Some(value);
                 }
-                "--run-mode" => config.run_mode = Some(next_value(&mut args, "--run-mode")?),
                 "--probe-name" | "--probe-id" => {
                     config.probe_name = Some(next_value(&mut args, arg.as_str())?)
                 }
@@ -331,7 +328,6 @@ impl CliArgs {
 struct PartialArgs {
     catalog_path: Option<String>,
     boundary_schema_path: Option<String>,
-    run_mode: Option<String>,
     probe_name: Option<String>,
     probe_version: Option<String>,
     category: Option<String>,
@@ -354,7 +350,6 @@ impl PartialArgs {
         let PartialArgs {
             catalog_path,
             boundary_schema_path,
-            run_mode,
             probe_name,
             probe_version,
             category,
@@ -375,7 +370,6 @@ impl PartialArgs {
         Ok(CliArgs {
             catalog_path,
             boundary_schema_path,
-            run_mode: Self::require("--run-mode", run_mode)?,
             probe_name: Self::require("--probe-name", probe_name)?,
             probe_version: Self::require("--probe-version", probe_version)?,
             category: Self::require("--category", category)?,
@@ -529,7 +523,7 @@ fn print_usage() {
 }
 
 fn usage() -> &'static str {
-    "Usage: emit-record --run-mode MODE --probe-name NAME --probe-version VERSION \
+    "Usage: emit-record --probe-name NAME --probe-version VERSION \
   --primary-capability-id CAP_ID --command COMMAND \
   --category CATEGORY --verb VERB --target TARGET --status STATUS [options]\n\nOptions:\n  --errno ERRNO\n  --message MESSAGE\n  --raw-exit-code CODE\n  --error-detail TEXT\n  --secondary-capability-id CAP_ID   # repeat for multiple entries\n  --payload-file PATH (JSON object)\n  --payload-stdout TEXT | --payload-stdout-file PATH\n  --payload-stderr TEXT | --payload-stderr-file PATH\n  --payload-raw JSON_OBJECT | --payload-raw-file PATH\n  --payload-raw-field KEY VALUE\n  --payload-raw-field-json KEY JSON_VALUE\n  --payload-raw-null KEY\n  --payload-raw-list KEY \"a,b,c\"\n  --operation-args JSON_OBJECT | --operation-args-file PATH\n  --operation-arg KEY VALUE\n  --operation-arg-json KEY JSON_VALUE\n  --operation-arg-null KEY\n  --operation-arg-list KEY \"a,b,c\"\n"
 }

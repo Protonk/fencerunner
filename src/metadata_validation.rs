@@ -193,7 +193,7 @@ mod tests {
                 "primary_capability_id": "cap_missing",
                 "secondary_capability_ids": []
             },
-            "run": {"mode": "baseline", "workspace_root": "/tmp", "command": "true"},
+            "run": {"workspace_root": "/tmp", "command": "true"},
             "operation": {"category": "fs", "verb": "read", "target": "/tmp", "args": {}},
             "result": {"observed_result": "success", "raw_exit_code": 0, "errno": null, "message": null, "error_detail": null},
             "payload": {"stdout_snippet": null, "stderr_snippet": null, "raw": {}},
@@ -225,7 +225,7 @@ mod tests {
                 "primary_capability_id": "cap_fs_read_workspace_tree",
                 "secondary_capability_ids": []
             },
-            "run": {"mode": "baseline", "workspace_root": "/tmp", "command": "true"},
+            "run": {"workspace_root": "/tmp", "command": "true"},
             "operation": {"category": "fs", "verb": "read", "target": "/tmp", "args": {}},
             "result": {"observed_result": "success", "raw_exit_code": 0, "errno": null, "message": null, "error_detail": null},
             "payload": {"stdout_snippet": null, "stderr_snippet": null, "raw": {}},

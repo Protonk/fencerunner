@@ -2,21 +2,46 @@
 # -----------------------------------------------------------------------------
 # Probe contract gate (static + dynamic helpers).
 #
-# - Canonical implementation of the probe contract gate used by probe authors,
-#   `bin/probe-contract-gate`, and `probe-gate`.
-# - Provides gate_static_probe/gate_probe functions for agents to source.
-# - CLI: run a static contract scan over all probes (default), or gate a
-#   specific probe across modes with --probe.
-# - Emits an embedded emit-record stub (via --emit-record-stub) for dynamic
-#   validation; no separate stub file is needed.
+# This script is intentionally plain Bash because it is the first door many
+# contributors open. The goal is transparency over cleverness: every check in
+# here should map directly to a contract described in docs/tests so a reader can
+# reason about intent without reverse-engineering a helper binary.
+#
+# Why this exists:
+# - Probes are small Bash scripts that promise one observable action and a
+#   single emit-record boundary object. This gate enforces those promises
+#   without executing the probe's real side effects.
+# - It is used by probe authors (manual runs), by the compiled probe-gate tool,
+#   and by the CI/test entry points. Inconsistencies here leak into those
+#   workflows, so changes must be conservative.
+#
+# What this gate does:
+# - Static checks: shebang, `set -euo pipefail`, syntax, required probe
+#   metadata variables, and file placement. These are quick and deterministic.
+# - Dynamic checks: run the probe in a shadow workspace with emit-record stubbed
+#   out so we validate the emitted boundary object shape and required flags
+#   without triggering the actual capability action.
+#
+# What this gate does not do:
+# - It does not evaluate probe logic correctness or exercise the real
+#   capability; that is left to full probe runs via fencerunner and tests.
+#
+# The code is deliberately verbose and over-commented to make intent and
+# invariants obvious to human and automated readers.
 # -----------------------------------------------------------------------------
 set -euo pipefail
 
+# Consistent prefix for diagnostics so gate output is easy to scan or grep.
 gate_name="validate_contract_gate"
+# Resolve repository root from this script's location so the gate works from any
+# working directory and when sourced.
 script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)
 repo_root=$(cd "${script_dir}/.." >/dev/null 2>&1 && pwd)
 
 maybe_exec_fence_test() {
+  # If a compiled probe-gate binary exists, prefer it to match production
+  # behavior. This script stays as a readable reference and fallback, and it is
+  # still directly callable when FENCE_TEST_FORCE_SCRIPT=1 is set.
   local candidate
   for candidate in \
     "${repo_root}/target/debug/probe-gate" \
@@ -28,25 +53,57 @@ maybe_exec_fence_test() {
   done
 }
 
-paths_helper="${repo_root}/tools/resolve_paths.sh"
-modes_helper="${repo_root}/tools/list_run_modes.sh"
 fence_run_bin="${repo_root}/bin/probe-exec"
+portable_path_helper="${repo_root}/bin/portable-path"
 
-if [[ ! -f "${paths_helper}" ]]; then
-  echo "${gate_name}: missing path helper at ${paths_helper}" >&2
+# portable-path provides a cross-platform realpath. We keep the dependency
+# explicit because probes/gates must behave identically across macOS/Linux.
+if [[ ! -x "${portable_path_helper}" ]]; then
+  echo "${gate_name}: missing portable-path helper at ${portable_path_helper}" >&2
   exit 1
 fi
-# shellcheck source=/dev/null
-source "${paths_helper}"
 
-if [[ ! -f "${modes_helper}" ]]; then
-  echo "${gate_name}: missing run-modes helper at ${modes_helper}" >&2
-  exit 1
-fi
-# shellcheck source=/dev/null
-source "${modes_helper}"
+portable_realpath() {
+  # Use the helper rather than `realpath` to avoid platform differences.
+  "${portable_path_helper}" realpath "$1"
+}
+
+resolve_probe_script_path() {
+  # Turn a probe id or path into a canonical path rooted under probes/.
+  # This rejects any path that escapes probes/ via symlinks or ../ tricks.
+  local repo_root="$1"
+  local identifier="$2"
+  local attempts=() trimmed candidate canonical_path
+  if [[ -z "${identifier}" ]]; then
+    return 1
+  fi
+  if [[ "${identifier}" == /* ]]; then
+    attempts+=("${identifier}")
+  else
+    trimmed=${identifier#./}
+    attempts+=("${repo_root}/${trimmed}")
+    if [[ "${trimmed}" != *.sh ]]; then
+      attempts+=("${repo_root}/${trimmed}.sh")
+    fi
+    attempts+=("${repo_root}/probes/${trimmed}")
+    if [[ "${trimmed}" != *.sh ]]; then
+      attempts+=("${repo_root}/probes/${trimmed}.sh")
+    fi
+  fi
+  for candidate in "${attempts[@]}"; do
+    if [[ -f "${candidate}" ]]; then
+      canonical_path=$(portable_realpath "${candidate}")
+      if [[ -n "${canonical_path}" && "${canonical_path}" == "${repo_root}/probes/"* ]]; then
+        printf '%s\n' "${canonical_path}"
+        return 0
+      fi
+    fi
+  done
+  return 1
+}
 
 usage() {
+  # Keep usage minimal: this gate is often invoked by other tooling.
   cat <<'USAGE' >&2
 Usage:
   tools/validate_contract_gate.sh                      # static scan of all probes
@@ -54,7 +111,6 @@ Usage:
 Options:
   --probe <id|path>   Target a single probe (filename or probe id).
   --static-only       Run only the static contract (skip dynamic gate).
-  --modes "<list>"    Override run modes for dynamic gate (space or comma separated).
   --help              Show this message.
 
 Internal:
@@ -63,8 +119,12 @@ USAGE
 }
 
 # ---------------- emit-record stub ----------------
+# The stub is a self-contained validator for emit-record arguments. It is
+# embedded here so we can ship one file that fully explains the dynamic gate.
 
 emit_record_stub_main() {
+  # Emit the stub script to a temporary file, execute it, and clean up.
+  # This mirrors the real emit-record CLI without needing a separate script.
   local stub_path
   stub_path=$(mktemp)
   write_emit_stub_script "${stub_path}"
@@ -78,6 +138,9 @@ emit_record_stub_main() {
 # ---------------- shared helpers ----------------
 
 extract_probe_var() {
+  # Very small parser for lines like `probe_name="..."`.
+  # We intentionally avoid full Bash parsing so this stays deterministic and
+  # portable; probes are expected to keep these assignments simple.
   local file="$1"
   local var="$2"
   local line value trimmed first last value_length
@@ -102,6 +165,8 @@ extract_probe_var() {
 }
 
 resolve_probe() {
+  # Resolve a probe identifier to a canonical path. When this file is sourced
+  # elsewhere, resolve_probe_script_path may be overridden for custom logic.
   local identifier="$1"
   local resolved=""
   if declare -F resolve_probe_script_path >/dev/null 2>&1; then
@@ -119,6 +184,8 @@ resolve_probe() {
 }
 
 collect_probes() {
+  # Enumerate probes under probes/ or resolve a specific target.
+  # The list is realpath'd to avoid symlink escapes and to normalize paths.
   local target_probe="$1"
   if [[ -n "${target_probe}" ]]; then
     local resolved
@@ -146,6 +213,7 @@ collect_probes() {
 }
 
 gate_static_probe() {
+  # Static contract checks: no side effects, quick feedback.
   local probe_script="$1"
   local rel_path=${probe_script#"${repo_root}/"}
   local probe_file
@@ -153,26 +221,31 @@ gate_static_probe() {
   local probe_id=${probe_file%.sh}
   local errors=()
 
+  # Probes must be executable to match how fencerunner invokes them.
   if [[ ! -x "${probe_script}" ]]; then
     errors+=("not executable (chmod +x)")
   fi
 
+  # Enforce the standard shebang to keep runtime consistent.
   local first_line
   first_line=$(head -n 1 "${probe_script}" || true)
   if [[ "${first_line}" != '#!/usr/bin/env bash' ]]; then
     errors+=("missing '#!/usr/bin/env bash' shebang")
   fi
 
+  # Require strict mode so probes fail fast and don't mask errors.
   if ! grep -Eq '^[[:space:]]*set -euo pipefail' "${probe_script}"; then
     errors+=("missing 'set -euo pipefail'")
   fi
 
+  # Syntax check without executing the probe.
   local syntax_error
   if ! syntax_error=$(bash -n "${probe_script}" 2>&1); then
     syntax_error=${syntax_error:-"bash -n failed"}
     errors+=("syntax error: ${syntax_error}")
   fi
 
+  # probe_name must exist and match filename to keep IDs stable.
   local probe_name
   probe_name=$(extract_probe_var "${probe_script}" "probe_name" 2>/dev/null || true)
   if [[ -z "${probe_name}" ]]; then
@@ -181,6 +254,7 @@ gate_static_probe() {
     errors+=("probe_name '${probe_name}' does not match filename '${probe_id}'")
   fi
 
+  # Primary capability id is required; catalog validation is handled later.
   local primary_capability
   primary_capability=$(extract_probe_var "${probe_script}" "primary_capability_id" 2>/dev/null || true)
   if [[ -z "${primary_capability}" ]]; then
@@ -199,10 +273,16 @@ gate_static_probe() {
 }
 
 write_emit_stub_script() {
+  # Write an emit-record stub script that validates arguments and writes status
+  # into a state directory for the dynamic gate to inspect.
   local dest="$1"
   cat >"${dest}" <<'STUB'
 #!/usr/bin/env bash
 set -euo pipefail
+
+# This stub accepts the same CLI flags as emit-record but performs only
+# validation. It never emits a real boundary object; instead it records state
+# for the gate to inspect.
 
 state_dir=${PROBE_CONTRACT_GATE_STATE_DIR:-}
 if [[ -z "${state_dir}" ]]; then
@@ -210,6 +290,8 @@ if [[ -z "${state_dir}" ]]; then
   exit 1
 fi
 
+# Use the state directory as the only side-effectful output. This keeps probe
+# runs hermetic and makes it easy to inspect failures.
 mkdir -p "${state_dir}" >/dev/null 2>&1
 
 counter_file="${state_dir}/emit_record_invocations"
@@ -220,6 +302,7 @@ json_extract_bin=${JSON_EXTRACT_BIN:-json-extract}
 real_emit_record=${REAL_EMIT_RECORD:-}
 
 fail() {
+  # Collect errors for the gate and fail fast to avoid cascading issues.
   local message="$1"
   printf '%s\n' "${message}" >>"${error_file}"
   printf '%s\n' "emit-record stub: ${message}" >&2
@@ -227,6 +310,8 @@ fail() {
 }
 
 record_invocation() {
+  # Count how many times the stub was invoked so the gate can enforce "exactly
+  # once" semantics.
   local current="0"
   if [[ -f "${counter_file}" ]]; then
     current=$(cat "${counter_file}" 2>/dev/null || printf '0')
@@ -241,6 +326,7 @@ record_invocation() {
 record_invocation
 
 validate_json_object() {
+  # Ensure a value is a JSON object.
   local value="$1"
   if ! printf '%s' "${value}" | "${json_extract_bin}" --stdin --type object >/dev/null 2>&1; then
     fail "expected JSON object"
@@ -248,6 +334,7 @@ validate_json_object() {
 }
 
 validate_json_value() {
+  # Accept any JSON value (null/bool/number/string/array/object).
   local value="$1"
   case "${value}" in
     null|true|false) return 0;;
@@ -267,15 +354,16 @@ validate_json_value() {
   fail "value is not valid JSON"
 }
 
+# Persist the raw args for debugging when a probe fails the dynamic gate.
 printf '%s\0' "$@" >"${args_file}" 2>/dev/null || true
 
-required_run_mode=""
+# These are retained for compatibility with emit-record and other tooling that
+# may set them, even though the stub uses only a subset.
 required_probe_name=""
 required_primary_capability_id=""
 capabilities_json=""
 capabilities_adapter=""
 
-run_mode=""
 probe_name=""
 probe_version=""
 primary_capability_id=""
@@ -294,7 +382,6 @@ payload_seen="false"
 payload_inline_seen="false"
 operation_args_seen="false"
 
-run_mode_set="false"
 probe_name_set="false"
 probe_version_set="false"
 primary_capability_id_set="false"
@@ -309,6 +396,7 @@ operation_args_file_set="false"
 raw_exit_code_set="false"
 
 assign_flag() {
+  # Centralized enforcement for "set once" and "not empty" semantics.
   local var_name="$1"
   local set_flag_name="$2"
   local human_name="$3"
@@ -328,12 +416,9 @@ assign_flag() {
 secondary_capability_ids=()
 
 while [[ $# -gt 0 ]]; do
+  # Parse emit-record flags. The stub mirrors emit-record's CLI surface so
+  # probes can be validated without running the real helper.
   case "$1" in
-    --run-mode)
-      [[ $# -ge 2 ]] || fail "--run-mode requires a value"
-      assign_flag run_mode run_mode_set "--run-mode" "$2" "no-empty"
-      shift 2
-      ;;
     --probe-name)
       [[ $# -ge 2 ]] || fail "--probe-name requires a value"
       assign_flag probe_name probe_name_set "--probe-name" "$2" "no-empty"
@@ -508,6 +593,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 require_flag_value() {
+  # Enforce required flags for boundary object shape.
   local value="$1"
   local human_name="$2"
   if [[ -z "${value}" ]]; then
@@ -515,7 +601,6 @@ require_flag_value() {
   fi
 }
 
-require_flag_value "${run_mode}" "--run-mode"
 require_flag_value "${probe_name}" "--probe-name"
 require_flag_value "${probe_version}" "--probe-version"
 require_flag_value "${primary_capability_id}" "--primary-capability-id"
@@ -527,11 +612,8 @@ require_flag_value "${status_value}" "--status"
 require_flag_value "${raw_exit_code}" "--raw-exit-code"
 
 if [[ "${payload_seen}" != "true" && -z "${payload_file}" ]]; then
+  # Every record must include a payload; emit-record enforces this too.
   fail "payload flags are required"
-fi
-
-if [[ -n "${required_run_mode}" && "${run_mode}" != "${required_run_mode}" ]]; then
-  fail "--run-mode '${run_mode}' does not match expected '${required_run_mode}'"
 fi
 
 case "${status_value}" in
@@ -547,6 +629,7 @@ if ! [[ "${raw_exit_code}" =~ ^-?[0-9]+$ ]]; then
 fi
 
 if [[ -n "${payload_file}" && "${payload_inline_seen}" == "true" ]]; then
+  # Mutually exclusive payload mechanisms mirror the real emit-record contract.
   fail "--payload-file cannot be combined with inline payload flags"
 fi
 
@@ -570,10 +653,14 @@ if [[ -n "${payload_file}" ]]; then
 fi
 
 if [[ "${operation_args_seen}" != "true" ]]; then
+  # Operation args are required even if empty; probes must state intent.
   fail "operation args flags are required"
 fi
 
 if [[ -n "${capabilities_json}" && -n "${capabilities_adapter}" && -x "${capabilities_adapter}" && -f "${capabilities_json}" ]]; then
+  # Optionally validate capability IDs against the catalog if an adapter is
+  # provided. This keeps probes aligned with the catalog without forcing extra
+  # dependencies in the stub.
   if ! capability_map=$("${capabilities_adapter}" "${capabilities_json}" 2>/dev/null); then
     fail "capability catalog validation failed"
   fi
@@ -584,6 +671,8 @@ fi
 
 printf 'ok\n' >"${status_file}"
 
+# Emit a sentinel JSON line so manual runs have visible output. The gate does
+# not parse this; it inspects the status file and invocation count instead.
 printf '{"probe_contract_gate":"validated"}\n'
 
 STUB
@@ -598,10 +687,14 @@ if [[ "${1-}" == "--emit-record-stub" ]]; then
 fi
 
 if [[ "${BASH_SOURCE[0]}" == "${0}" && -z "${FENCE_TEST_FORCE_SCRIPT:-}" ]]; then
+  # Delegate to the compiled probe-gate when available unless explicitly
+  # forced to use this script.
   maybe_exec_fence_test "$@"
 fi
 
 run_with_timeout() {
+  # Best-effort timeout wrapper. Prefer gtimeout/timeout when available; fall
+  # back to a manual loop to avoid hanging the gate.
   local seconds="$1"
   shift
   if command -v gtimeout >/dev/null 2>&1; then
@@ -629,11 +722,13 @@ run_with_timeout() {
 }
 
 run_dynamic_gate() {
+  # Dynamic gate runs a probe under probe-exec using a shadow workspace and an
+  # emit-record stub. This validates the emitted boundary object without
+  # performing the real action.
   local probe_path="$1"
   local probe_id="$2"
   local expected_probe_name="$3"
   local expected_primary_capability_id="$4"
-  local run_mode="$5"
 
   if [[ ! -x "${fence_run_bin}" ]]; then
     echo "${gate_name}: missing probe-exec helper at ${fence_run_bin}" >&2
@@ -643,6 +738,8 @@ run_dynamic_gate() {
   local shadow_root
   shadow_root=$(mktemp -d "${TMPDIR:-/tmp}/probe-contract-shadow.XXXXXX")
 
+  # Build a minimal shadow repo layout so probe helpers and find_repo_root
+  # behave as they would inside the real repository.
   mkdir -p "${shadow_root}/bin" "${shadow_root}/probes" "${shadow_root}/tmp"
   # Provide repo root sentinels expected by find_repo_root.
   if [[ -f "${repo_root}/bin/.gitkeep" ]]; then
@@ -652,12 +749,15 @@ run_dynamic_gate() {
     ln -s "${repo_root}/Makefile" "${shadow_root}/Makefile" 2>/dev/null || cp "${repo_root}/Makefile" "${shadow_root}/Makefile"
   fi
 
+  # Copy the probe into the shadow tree so it cannot reach other probes.
   local probe_filename
   probe_filename=$(basename "${probe_path}")
   local shadow_probe="${shadow_root}/probes/${probe_filename}"
   cp "${probe_path}" "${shadow_probe}"
   chmod +x "${shadow_probe}"
 
+  # Expose helper binaries in the shadow bin/ but replace emit-record with the
+  # stub so we only validate the record, not emit it.
   local helper
   for helper in "${repo_root}"/bin/*; do
     local helper_name
@@ -690,14 +790,13 @@ run_dynamic_gate() {
   local adapter_path="${capabilities_adapter:-${repo_root}/tools/adapt_capabilities.sh}"
   local boundary_path="${BOUNDARY_PATH:-${default_boundary}}"
 
-  local modes_arg=("${run_mode}")
-
+  # Environment mirrors the real runner but points to shadow paths and the
+  # stub state directory.
   local run_env=(env
     PATH="${path_prefix}"
     HOME="${shadow_root}"
     FENCE_ROOT="${shadow_root}"
     PROBE_CONTRACT_GATE_STATE_DIR="${stub_state}"
-    PROBE_CONTRACT_EXPECTED_RUN_MODE="${run_mode}"
     PROBE_CONTRACT_CAPABILITIES_JSON="${catalog_path}"
     PROBE_CONTRACT_CAPABILITIES_ADAPTER="${adapter_path}"
     BOUNDARY_PATH="${boundary_path}"
@@ -712,7 +811,7 @@ run_dynamic_gate() {
   fi
 
   # Run through probe-exec so the gate matches real execution environment.
-  run_env+=("${fence_run_bin}" "--workspace-root" "${shadow_root}" "${run_mode}" "${shadow_probe}")
+  run_env+=("${fence_run_bin}" "--workspace-root" "${shadow_root}" "${shadow_probe}")
 
   if ! run_with_timeout 5 "${run_env[@]}" >"${probe_stdout}" 2>"${probe_stderr}"; then
     local exit_code=$?
@@ -735,6 +834,7 @@ run_dynamic_gate() {
     return 1
   fi
 
+  # Enforce "emit-record called exactly once".
   local invocation_file="${stub_state}/emit_record_invocations"
   if [[ ! -f "${invocation_file}" ]]; then
     echo "${gate_name}: dynamic gate failed for ${probe_id}: emit-record not invoked" >&2
@@ -759,6 +859,7 @@ run_dynamic_gate() {
     return 1
   fi
 
+  # Fail if the stub reported any contract violation.
   local stub_errors_file="${stub_state}/emit_record_errors.log"
   if [[ -s "${stub_errors_file}" ]]; then
     echo "${gate_name}: dynamic gate failed for ${probe_id}: $(tr '\n' ' ' <"${stub_errors_file}")" >&2
@@ -766,6 +867,7 @@ run_dynamic_gate() {
     return 1
   fi
 
+  # Stub writes an "ok" marker when all required fields validated.
   local stub_status_file="${stub_state}/emit_record_status"
   if [[ ! -f "${stub_status_file}" ]]; then
     echo "${gate_name}: dynamic gate failed for ${probe_id}: stub status missing" >&2
@@ -779,14 +881,13 @@ run_dynamic_gate() {
   fi
 
   rm -rf "${shadow_root}" "${probe_stdout}" "${probe_stderr}"
-  echo "${gate_name}: dynamic gate passed for ${probe_id} (${run_mode})"
+  echo "${gate_name}: dynamic gate passed for ${probe_id}"
   return 0
 }
 
 gate_probe() {
+  # Gate a single probe: static checks first, then dynamic validation.
   local probe_identifier="$1"
-  shift || true
-  local modes_arg="$*"
 
   local probe_path
   probe_path=$(resolve_probe "${probe_identifier}")
@@ -808,39 +909,17 @@ gate_probe() {
   local expected_primary_capability_id
   expected_primary_capability_id=$(extract_probe_var "${probe_path}" "primary_capability_id" || true)
 
-  local modes=()
-  local mode_override="${PROBE_CONTRACT_MODES:-}"
-  if [[ -n "${modes_arg}" ]]; then
-    mode_override="${modes_arg}"
+  if ! run_dynamic_gate "${probe_path}" "${probe_id}" "${expected_probe_name}" "${expected_primary_capability_id}"; then
+    echo "${gate_name}: dynamic gate failed for ${probe_id}" >&2
+    return 1
   fi
-
-  if [[ -n "${mode_override}" ]]; then
-    local normalized
-    normalized=$(printf '%s' "${mode_override}" | tr ',' ' ' | tr -s ' ' ' ')
-    for m in ${normalized}; do
-      [[ -n "${m}" ]] && modes+=("${m}")
-    done
-  elif declare -F contract_gate_modes >/dev/null 2>&1; then
-    while IFS= read -r mode; do
-      [[ -n "${mode}" ]] && modes+=("${mode}")
-    done < <(contract_gate_modes)
-  fi
-  if [[ ${#modes[@]} -eq 0 ]]; then
-    modes=("baseline")
-  fi
-
-  local mode
-  for mode in "${modes[@]}"; do
-    if ! run_dynamic_gate "${probe_path}" "${probe_id}" "${expected_probe_name}" "${expected_primary_capability_id}" "${mode}"; then
-      echo "${gate_name}: dynamic gate failed for ${probe_id} (${mode})" >&2
-      return 1
-    fi
-  done
 
   echo "${gate_name}: all gates passed for ${probe_id}"
 }
 
 main() {
+  # CLI entry point. With no args, run the static gate over all probes to keep
+  # fast feedback. With --probe, run the full gate for one probe.
   if [[ $# -eq 0 ]]; then
     local failures=0
     while read -r probe_script; do
@@ -853,7 +932,6 @@ main() {
 
   local target_probe=""
   local static_only="false"
-  local modes_arg=""
 
   while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -865,11 +943,6 @@ main() {
       --static-only)
         static_only="true"
         shift
-        ;;
-      --modes)
-        [[ $# -ge 2 ]] || { usage; exit 1; }
-        modes_arg="$2"
-        shift 2
         ;;
       -h|--help)
         usage
@@ -898,7 +971,7 @@ main() {
     exit $?
   fi
 
-  gate_probe "${target_probe}" "${modes_arg}"
+  gate_probe "${target_probe}"
 }
 
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then

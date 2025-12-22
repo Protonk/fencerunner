@@ -4,7 +4,6 @@ set -euo pipefail
 repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." >/dev/null 2>&1 && pwd)
 emit_record_bin="${repo_root}/bin/emit-record"
 
-run_mode="${FENCE_RUN_MODE:-baseline}"
 probe_name="fs_outside_workspace"
 primary_capability_id="cap_fs_write_workspace_tree"
 target_path="${FENCE_FS_OUTSIDE_TARGET:-/tmp/probe-outside-root-test}"
@@ -55,7 +54,6 @@ else
 fi
 
 "${emit_record_bin}" \
-  --run-mode "${run_mode}" \
   --probe-name "${probe_name}" \
   --probe-version "1" \
   --primary-capability-id "${primary_capability_id}" \

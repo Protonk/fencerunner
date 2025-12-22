@@ -6,8 +6,8 @@ This directory hosts helpers for automated agents.
 
 - `adapt_capabilities.sh`: fast, simple reader for capability catalogs.
 - `validate_contract_gate.sh`: canonical probe contract gate (static + dynamic checker) used by Probe Authors when creating new probes and by `probe-gate` / `bin/probe-contract-gate` under the test and CLI entry points.
-- `resolve_paths.sh`: canonicalizes probe paths and exports the `resolve_probe_script_path` + `portable_realpath` helpers shared by the contract tools.
-- `list_run_modes.sh`: canonical list + parser for supported run modes.
+- `sync_bin_helpers.sh`: rebuilds and syncs Rust helper binaries into `bin/`.
+- `helpers.manifest.json`: source of truth for the helper binaries to sync into `bin/`.
 
 ## Modifying tooling
 Before changing or adding tooling:

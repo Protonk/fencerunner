@@ -12,7 +12,7 @@ As the Probe Author, you:
 - Read the active boundary schema descriptor (defaults resolve from
   the bundled `boundaries/cfbo-v1.json`,
   validated by `schema/boundary_object_schema.json`) alongside
-  `docs/boundary_object.md` to understand every field the probe must provide.
+  `boundaries/boundary_object.md` to understand every field the probe must provide.
 - Review existing probes under `probes/` to see which behaviors already have
   coverage and how outcomes are classified.
 - Keep a tight edit/test loop. While iterating on a script, run the contract
@@ -26,9 +26,7 @@ Keep each probe:
   relpath, `bin/json-extract` when you must parse JSON). Build payloads and
   operation args with `bin/emit-record` flags (`--payload-stdout/-stderr`,
   `--payload-raw-field[-json|-list|-null]`, `--operation-arg[...]`) instead of
-  constructing JSON manually. Include `--run-mode "$FENCE_RUN_MODE"` so
-  emitted records capture the active mode (`bin/probe-exec` exports
-  `FENCE_RUN_MODE` and related `FENCE_*` metadata).
+  constructing JSON manually.
 - Clearly labeled with `primary_capability_id`. Choose the best match from the
   catalog and optionally list related capabilities in
   `secondary_capability_ids`. `bin/emit-record` enforces these IDs.
@@ -69,23 +67,20 @@ A probe:
    attempt. Capture the command you actually ran (e.g.,
    `printf -v command_executed "... %q" ...`) and pass it through `--command`
    so the boundary object contains reproducible execution context. The `run`
-   object contains only mode/workspace/command—no timestamps—so probes never
+   object contains only workspace/command—no timestamps—so probes never
    need to track clocks.
 3. Collects stdout/stderr snippets (keep them short) and structured data in the
    payload. Normalize probe outcomes into: `success`, `denied`, `partial`, or
    `error`. Treat sandbox denials (`EACCES`, `EPERM`, network blocked, etc.) as
    `denied`.
 4. Calls `bin/emit-record` once with the correct flags (payload/operation args
-   built inline). Pass `--run-mode "$FENCE_RUN_MODE"` (exported by
-   `bin/probe-exec`) so the emitted record matches the current mode.
+   built inline).
 5. Exits with status `0` after emitting JSON. `bin/probe-exec` relies on this
   behavior so `fencerunner --bang` can stream records as NDJSON.
 
 ### How a probe should emit JSON
 
 Call `bin/emit-record` exactly once with:
-
-- `--run-mode "$FENCE_RUN_MODE"` (already exported by `bin/probe-exec`).
 - `--probe-name "$probe_id"` and `--probe-version "<semver>"`.
 - `--primary-capability-id`, zero or more `--secondary-capability-id`, and
   `--command`.
@@ -93,7 +88,7 @@ Call `bin/emit-record` exactly once with:
 - Outcome metadata (`--status` → `result.observed_result`, `--errno`,
   `--message`, `--raw-exit-code`, etc.) plus `--payload-file`.
 
-See `docs/boundary_object.md` for a complete field description (the
+See `boundaries/boundary_object.md` for a complete field description (the
 boundary_event_v1 pattern includes `capabilities_schema_version` and
 `capability_context` snapshots to
 provide full context for every record).
@@ -112,7 +107,6 @@ primary_capability_id="cap_fs_write_workspace_tree"
 printf -v command_executed "printf %q >> %q" "${attempt_line}" "${target_path}"
 
 "${emit_record_bin}" \
-  --run-mode "${FENCE_RUN_MODE}" \
   --probe-name "${probe_name}" \
   --probe-version "1" \
   --primary-capability-id "${primary_capability_id}" \
@@ -142,7 +136,6 @@ Matching JSON output (trimmed for brevity):
     "secondary_capability_ids": []
   },
   "run": {
-    "mode": "baseline",
     "workspace_root": "/path/to/workspace",
     "command": "printf 'probe write ...' >> '/tmp/probe-outside-root-test'"
   },

@@ -37,7 +37,6 @@ exit 0
         "PROBES",
         format!("{},{}", broken.probe_id(), good.probe_id()),
     )
-    .env("MODES", "baseline")
     .env("TEST_PREFER_TARGET", "1");
     let output = cmd
         .output()
@@ -87,11 +86,14 @@ fn fencerunner_probe_runs_single_probe() -> Result<()> {
     assert_eq!(
         lines.len(),
         1,
-        "expected exactly one record for a single probe+mode"
+        "expected exactly one record for a single probe"
     );
     let (record, _) = parse_boundary_object(lines[0].as_bytes())?;
     assert_eq!(record.probe.id, fixture.probe_id());
-    assert_eq!(record.run.mode, "baseline");
+    assert!(
+        record.run.command.contains("fixture-line"),
+        "expected fixture command to mention fixture-line"
+    );
 
     Ok(())
 }
@@ -125,7 +127,7 @@ fn fencerunner_bundle_runs_capability_subset() -> Result<()> {
         if record.probe.id == fixture.probe_id() {
             saw_fixture = true;
         }
-        assert_eq!(record.run.mode, "baseline");
+        assert!(!record.run.command.is_empty());
     }
     assert!(
         saw_fixture,
@@ -369,12 +371,10 @@ fn detect_stack_reports_expected_sandbox_modes() -> Result<()> {
     let repo_root = repo_root();
     let detect_stack = helper_binary(&repo_root, "detect-stack");
 
-    let mut baseline_cmd = Command::new(&detect_stack);
-    baseline_cmd.arg("baseline");
-    let baseline = run_command(baseline_cmd)?;
-    let baseline_json: Value = serde_json::from_slice(&baseline.stdout)?;
+    let stack_output = run_command(Command::new(&detect_stack))?;
+    let stack_json: Value = serde_json::from_slice(&stack_output.stdout)?;
     assert!(
-        baseline_json
+        stack_json
             .get("sandbox_mode")
             .map(|v| v.is_null())
             .unwrap_or(true)
@@ -382,9 +382,7 @@ fn detect_stack_reports_expected_sandbox_modes() -> Result<()> {
 
     let override_val = "custom-mode";
     let mut override_cmd = Command::new(&detect_stack);
-    override_cmd
-        .arg("baseline")
-        .env("FENCE_SANDBOX_MODE", override_val);
+    override_cmd.env("FENCE_SANDBOX_MODE", override_val);
     let full = run_command(override_cmd)?;
     let full_json: Value = serde_json::from_slice(&full.stdout)?;
     assert_eq!(

@@ -6,7 +6,7 @@ matches the probe id), performs a single well-defined action, and reports what
 the harness observed in that sandbox. This document explains how probes are
 built, how the harness runs them, and how their results are captured.
 
-This file serves as documentation. For authoritative, test-enforced Probe and Probe Author contracts, follow [probes/AGENTS.md](probes/AGENTS.md).
+This file serves as documentation. For authoritative, test-enforced Probe and Probe Author contracts, follow [probes/AGENTS.md](AGENTS.md).
 
 ## What makes a probe
 
@@ -36,37 +36,34 @@ This file serves as documentation. For authoritative, test-enforced Probe and Pr
 
 ## How the harness runs a probe
 
-`bin/probe-exec` executes probes under a specific mode:
+`bin/probe-exec` executes probes with a fixed, direct invocation:
 
 1. **Environment setup** – determines the workspace root, sets the probe id,
-   and exports `FENCE_RUN_MODE`, `FENCE_WORKSPACE_ROOT`, plus any caller-set
-   `FENCE_SANDBOX_MODE` value. Override the exported workspace via
+   and exports `FENCE_WORKSPACE_ROOT` (and preserves any caller-set
+   `FENCE_SANDBOX_MODE` value). Override the exported workspace via
    `--workspace-root PATH` or by setting `FENCE_WORKSPACE_ROOT`; pass an empty
    value to defer to `bin/emit-record`’s `git rev-parse`/`pwd` fallback.
-2. **Mode dispatch** – `baseline` runs the probe directly with no extra
-   sandboxing. (This is the only supported mode after removing Codex-specific
-   runners.)
-3. **Result capture** – the probe prints one JSON boundary object to stdout.
+2. **Result capture** – the probe prints one JSON boundary object to stdout.
   `fencerunner --bang` streams every record as NDJSON so you can capture and diff
-  runs across modes, CLI versions, or host machines.
+  runs across CLI versions or host machines.
 
 ## What a probe emits
 
-Every probe emits one [boundary object](boundary_object.md) that conforms to
+Every probe emits one [boundary object](../boundaries/boundary_object.md) that conforms to
 the active boundary-object schema (defaults resolve to the bundled descriptor
 in `boundaries/`, which embeds the boundary-event schema and declares a
 `schema_key`). Required data includes:
 
 - Probe identity (`probe.id`, `probe.version`,
   `probe.primary_capability_id`, `probe.secondary_capability_ids`).
-- The exact command executed (`run.command`) and mode (`run.mode`).
+- The exact command executed (`run.command`).
 - Operation metadata (`operation.category`, `verb`, `target`, `args`).
 - Normalized outcome (`result.observed_result`, errno/message, exit codes).
 - Evidence (`payload.stdout_snippet`, `payload.stderr_snippet`,
   `payload.raw` for structured notes).
 - Capability context snapshots embedded by `bin/emit-record`.
 
-`docs/boundary_object.md` describes every field along with examples. Treat
+`boundaries/boundary_object.md` describes every field along with examples. Treat
 missing or malformed JSON as a probe failure—`bin/probe-exec` will not try to
 coerce bad output into a result.
 
@@ -99,8 +96,7 @@ this probe obey the contract?” regardless of how the answer is computed.
 - `tools/validate_contract_gate.sh` is the canonical gate implementation. It
   can:
   - scan all probes statically (no arguments; used by `probe-gate`), or
-  - gate a single probe with `--probe <id|path>`, optionally restricted to
-    specific run modes with `--modes`.
+  - gate a single probe with `--probe <id|path>`.
 - `bin/probe-contract-gate` is a stable wrapper that execs
   `tools/validate_contract_gate.sh` from `bin/`, so external tooling can call
   the gate without knowing the layout under `tools/`.
@@ -138,24 +134,23 @@ Dynamic gating runs the probe and validates what it does at runtime. It is
 implemented by `gate_probe` and `run_dynamic_gate` inside
 `tools/validate_contract_gate.sh`:
 
-- The gate runs the probe through `bin/probe-exec` in one or more run modes
-  (`baseline` by default).
+- The gate runs the probe through `bin/probe-exec`.
 - An embedded `emit-record` stub intercepts the probe’s call to `bin/emit-record`
   and checks:
   - all required flags are present and used at most once,
   - payload and operation-args are JSON objects within size limits,
   - `status` and `raw-exit-code` values are well-formed, and
   - `emit-record` is invoked exactly once with metadata that matches the probe
-    script expectations (probe name, primary capability id, and run mode).
+    script expectations (probe name and primary capability id).
 - The gate fails if the probe never calls `emit-record`, calls it multiple
   times, passes inconsistent metadata, or produces malformed JSON.
 
 Use dynamic gating when you are confident the script is structurally sound and
-want to validate its behavior across modes:
+want to validate its behavior:
 
 ```sh
-tools/validate_contract_gate.sh --probe <id|path> --modes "baseline"
-bin/probe-contract-gate --probe <id|path>        # uses default modes
+tools/validate_contract_gate.sh --probe <id|path>
+bin/probe-contract-gate --probe <id|path>
 ```
 
 ### Gating in the test loop

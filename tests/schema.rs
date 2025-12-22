@@ -42,8 +42,6 @@ fn boundary_object_schema() -> Result<()> {
 
     let mut emit_cmd = std::process::Command::new(&emit_record);
     emit_cmd
-        .arg("--run-mode")
-        .arg("baseline")
         .arg("--probe-name")
         .arg("schema_test_fixture")
         .arg("--probe-version")
@@ -114,7 +112,6 @@ fn boundary_object_schema() -> Result<()> {
             .unwrap_or(false)
     );
 
-    assert_eq!(record.run.mode.as_str(), "baseline");
     assert!(record.run.workspace_root.is_some());
     assert!(
         value
@@ -281,7 +278,7 @@ fn boundary_object_round_trips_structs() -> Result<()> {
     );
     let back: BoundaryObject = serde_json::from_value(value)?;
     assert_eq!(back.schema_version, boundary_schema_version());
-    assert_eq!(back.run.mode, "baseline");
+    assert_eq!(back.run.command, "echo test");
     assert_eq!(back.capability_context.primary.id.0, "cap_id");
     Ok(())
 }

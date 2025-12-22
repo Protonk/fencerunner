@@ -8,7 +8,7 @@ shell probes**, and **record the results as versioned JSON “boundary objects�
 that can be analyzed later.
 
 The top‑level CLI is called `fencerunner`. It discovers probes, runs them in
-well‑defined modes, validates their outputs against schemas and capability
+well‑defined flows, validates their outputs against schemas and capability
 catalogs, and keeps the contract between “what probes promise” and “what
 actually ran” tight.
 
@@ -63,8 +63,7 @@ make build
 The primary entry point is the `fencerunner` binary (synced into `bin/fencerunner`).
 
 - `fencerunner --bang`  
-  Run every probe once (modes still follow the `MODES` env fallback) and stream
-  each boundary object as NDJSON.
+  Run every probe once and stream each boundary object as NDJSON.
 
 - **Run the full probe matrix with the bundled catalog and schema**
 
@@ -169,9 +168,10 @@ that the schemas, helpers, and sample data stay in sync.
 
 For a narrative view of these contracts, see:
 
-- [`docs/capabilities.md`](docs/capabilities.md)
-- [`docs/boundary_object.md`](docs/boundary_object.md)
-- [`docs/probes.md`](docs/probes.md)
+- [`catalogs/capabilities.md`](catalogs/capabilities.md)
+- [`boundaries/boundary_object.md`](boundaries/boundary_object.md)
+- [`probes/probes.md`](probes/probes.md)
+- [`schema/README.md`](schema/README.md)
 
 ## Navigation
 
@@ -182,6 +182,6 @@ Before you change behavior, skim:
 
 - [`AGENTS.md`](AGENTS.md) at the repo root,
 - the `AGENTS.md` for the directory you are touching, and
-- any relevant docs in [`docs/`](docs/).
+- the relevant guide for that area (`catalogs/capabilities.md`, `boundaries/boundary_object.md`, `probes/probes.md`, or `schema/README.md`).
 
 Those files explain the contracts that code and tests are expected to uphold. The tests in `tests/` are intentionally opinionated and high‑coverage: keeping them green is the easiest way to ensure usage remains compatible with the contracts described above.

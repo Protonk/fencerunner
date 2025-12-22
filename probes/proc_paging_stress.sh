@@ -19,7 +19,6 @@ elif [[ -x "${repo_root}/target/release/json-extract" ]]; then
   json_extract_bin="${repo_root}/target/release/json-extract"
 fi
 
-run_mode="${FENCE_RUN_MODE:-baseline}"
 probe_name="proc_paging_stress"
 primary_capability_id="cap_proc_fork_and_child_spawn"
 
@@ -162,7 +161,6 @@ EOF
 )
 
 "${emit_record_bin}" \
-  --run-mode "${run_mode}" \
   --probe-name "${probe_name}" \
   --probe-version "1" \
   --primary-capability-id "${primary_capability_id}" \

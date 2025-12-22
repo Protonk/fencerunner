@@ -4,7 +4,6 @@ set -euo pipefail
 repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." >/dev/null 2>&1 && pwd)
 emit_record_bin="${repo_root}/bin/emit-record"
 
-run_mode="${FENCE_RUN_MODE:-baseline}"
 probe_name="sysctl_hw_ncpu_read"
 primary_capability_id="cap_sysctl_read_basic"
 sysctl_key="${FENCE_SYSCTL_KEY:-hw.ncpu}"
@@ -59,7 +58,6 @@ if [[ -n "${value}" ]]; then
 fi
 
 "${emit_record_bin}" \
-  --run-mode "${run_mode}" \
   --probe-name "${probe_name}" \
   --probe-version "1" \
   --primary-capability-id "${primary_capability_id}" \

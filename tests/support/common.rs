@@ -262,7 +262,6 @@ pub fn sample_boundary_object() -> BoundaryObject {
             secondary_capability_ids: vec![],
         },
         run: RunInfo {
-            mode: "baseline".to_string(),
             workspace_root: Some("/tmp".to_string()),
             command: "echo test".to_string(),
         },

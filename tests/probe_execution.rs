@@ -22,7 +22,7 @@ use tempfile::{NamedTempFile, TempDir};
 
 use common::{FileGuard, FixtureProbe, TempWorkspace, parse_boundary_object, repo_guard};
 
-// Runs the minimal fixture probe through probe-exec baseline to confirm the
+// Runs the minimal fixture probe through probe-exec to confirm the
 // generated record reflects success and payload propagation.
 #[test]
 fn harness_smoke_probe_fixture() -> Result<()> {
@@ -30,12 +30,11 @@ fn harness_smoke_probe_fixture() -> Result<()> {
     let _guard = repo_guard();
     let fixture = FixtureProbe::install(&repo_root, "tests_fixture_probe")?;
 
-    let mut baseline_cmd = Command::new(helper_binary(&repo_root, "probe-exec"));
-    baseline_cmd
+    let mut probe_cmd = Command::new(helper_binary(&repo_root, "probe-exec"));
+    probe_cmd
         .env("TEST_PREFER_TARGET", "1")
-        .arg("baseline")
         .arg(fixture.probe_id());
-    let output = run_command(baseline_cmd)?;
+    let output = run_command(probe_cmd)?;
 
     let (record, value) = parse_boundary_object(&output.stdout)?;
 
@@ -68,7 +67,6 @@ fn workspace_root_fallback() -> Result<()> {
         .current_dir(temp_run_dir.path())
         .env("FENCE_WORKSPACE_ROOT", "")
         .env("TEST_PREFER_TARGET", "1")
-        .arg("baseline")
         .arg(fixture.probe_id());
     let output = run_command(fallback_cmd)?;
     let (record, _) = parse_boundary_object(&output.stdout)?;
@@ -102,7 +100,6 @@ fn probe_resolution_guards() -> Result<()> {
     fs::set_permissions(&outside_script, perms)?;
 
     let abs_result = Command::new(helper_binary(&repo_root, "probe-exec"))
-        .arg("baseline")
         .env("TEST_PREFER_TARGET", "1")
         .arg(&outside_script)
         .output()
@@ -127,7 +124,6 @@ fn probe_resolution_guards() -> Result<()> {
     };
 
     let symlink_result = Command::new(helper_binary(&repo_root, "probe-exec"))
-        .arg("baseline")
         .env("TEST_PREFER_TARGET", "1")
         .arg("tests_probe_resolution_symlink")
         .output()

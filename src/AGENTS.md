@@ -20,21 +20,9 @@ share runtime helpers with the binaries under `src/bin/`.
 - `emit_support.rs`, `probe_metadata.rs`, `metadata_validation.rs`,
   `coverage.rs` — harness utilities (payload builders, static probe parsing,
   catalog/probe/record cross-checks). Add focused unit tests when touching them.
-- `connectors.rs` — registry of run modes/connectors (baseline today). Owns
-  defaults, sandbox env overrides, command planning, and the helper APIs
-  binaries should call when adding new connector-aware behavior.
 - `runtime.rs`, `fence_run_support.rs` — shared runtime mechanics (helper search
   order, workspace planning). CLIs should reuse these instead of re-implementing
   path/sandbox logic.
-
-### Adding a new connector/run mode
-- Extend `RunMode`/`MODE_SPECS` in `connectors.rs` with the new mode name,
-  default gating, sandbox defaults, command spec, and any preflight hook.
-- Subscribe binaries to the registry: use `plan_for_mode` in `probe-exec`,
-  `default_mode_names`/`allowed_mode_names` for mode validation, and keep error
-  messages aligned with existing ones.
-- Add tests that exercise the new mode (connector presence, sandbox/env wiring,
-  preflight flow) and adjust docs or examples that enumerate supported modes.
 
 ## Patterns to preserve
 - One source of truth per concern: helper resolution lives in `runtime`, probe

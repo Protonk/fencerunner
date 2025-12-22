@@ -69,7 +69,6 @@ struct ListenStats {
     total_records: usize,
     distinct_probes: usize,
     results: BTreeMap<String, usize>,
-    modes: BTreeMap<String, usize>,
 }
 
 fn summarize_records(records: &[BoundaryObject]) -> ListenStats {
@@ -86,7 +85,6 @@ fn summarize_records(records: &[BoundaryObject]) -> ListenStats {
             .results
             .entry(record.result.observed_result.clone())
             .or_insert(0) += 1;
-        *stats.modes.entry(record.run.mode.clone()).or_insert(0) += 1;
     }
 
     stats
@@ -112,19 +110,14 @@ fn render_summary(stats: &ListenStats, writer: &mut impl fmt::Write) -> fmt::Res
         "results        : {}",
         format_counts(&stats.results, "none")
     )?;
-    writeln!(
-        writer,
-        "modes          : {}",
-        format_counts(&stats.modes, "none")
-    )?;
     Ok(())
 }
 
 fn render_record(idx: usize, record: &BoundaryObject, writer: &mut impl fmt::Write) -> fmt::Result {
     writeln!(
         writer,
-        "[#{}] {:<7} mode={} probe={}",
-        idx, record.result.observed_result, record.run.mode, record.probe.id
+        "[#{}] {:<7} probe={}",
+        idx, record.result.observed_result, record.probe.id
     )?;
     let capability = &record.capability_context.primary;
     writeln!(
@@ -360,7 +353,7 @@ mod tests {
             schema_key: schema.schema_key().map(str::to_string),
             capabilities_schema_version: Some(default_catalog_key()),
             stack: fencerunner::StackInfo {
-                sandbox_mode: Some("baseline".to_string()),
+                sandbox_mode: Some("workspace-write".to_string()),
                 os: "Darwin".to_string(),
             },
             probe: fencerunner::ProbeInfo {
@@ -370,7 +363,6 @@ mod tests {
                 secondary_capability_ids: Vec::new(),
             },
             run: fencerunner::RunInfo {
-                mode: "baseline".to_string(),
                 workspace_root: Some("/tmp".to_string()),
                 command: "echo sample".to_string(),
             },

@@ -24,8 +24,7 @@ fn proc_paging_stress_probe_emits_expected_record() -> Result<()> {
     let probe_run = helper_binary(&repo_root, "probe-exec");
 
     let mut cmd = Command::new(&probe_run);
-    cmd.arg("baseline")
-        .arg("proc_paging_stress")
+    cmd.arg("proc_paging_stress")
         .env("TEST_PREFER_TARGET", "1");
     let output = run_command(cmd)?;
     let (record, value) = parse_boundary_object(&output.stdout)?;

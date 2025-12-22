@@ -6,7 +6,6 @@
 //! - honor workspace overrides without silently falling back to host defaults
 
 use anyhow::{Context, Result, bail};
-use fencerunner::connectors::{CommandSpec, RunMode, plan_for_mode};
 use fencerunner::fence_run_support::{
     WorkspaceOverride, WorkspacePlan, canonicalize_path, resolve_probe_metadata,
     workspace_plan_from_override, workspace_tmpdir_plan,
@@ -19,7 +18,7 @@ use std::env;
 use std::ffi::OsString;
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
+use std::process::Command;
 
 fn main() {
     if let Err(err) = run() {
@@ -42,13 +41,8 @@ fn run() -> Result<()> {
     let workspace_tmpdir = workspace_tmpdir_plan(&workspace_plan, &workspace_root);
     let command_cwd = command_cwd_for(&workspace_plan, &workspace_root);
 
-    let platform = detect_platform().unwrap_or_else(|| env::consts::OS.to_string());
-    let mode_plan = plan_for_mode(&args.run_mode, &platform, &resolved_probe.path, None)?;
-
     run_command(
-        mode_plan.command,
-        &mode_plan.run_mode,
-        &mode_plan.sandbox_env,
+        &resolved_probe.path,
         &workspace_plan,
         workspace_tmpdir.path.as_deref(),
         &command_cwd,
@@ -62,7 +56,6 @@ struct CliArgs {
     workspace_override: Option<WorkspaceOverride>,
     catalog_path: Option<PathBuf>,
     boundary_path: Option<PathBuf>,
-    run_mode: String,
     probe_name: String,
 }
 
@@ -126,7 +119,7 @@ impl CliArgs {
             }
         }
 
-        if positionals.len() != 2 {
+        if positionals.len() != 1 {
             usage();
         }
 
@@ -134,15 +127,14 @@ impl CliArgs {
             workspace_override,
             catalog_path,
             boundary_path,
-            run_mode: positionals[0].clone(),
-            probe_name: positionals[1].clone(),
+            probe_name: positionals[0].clone(),
         })
     }
 }
 
 fn usage() -> ! {
     eprintln!(
-        "Usage: probe-exec [--workspace-root PATH] [--catalog PATH] [--boundary PATH] MODE PROBE_NAME\n\nOverrides:\n  --workspace-root PATH     Export PATH via FENCE_WORKSPACE_ROOT (defaults to repo root).\n                            Pass an empty string to defer to emit-record's git/pwd fallback.\n  --catalog PATH            Override capability catalog path (or set CATALOG_PATH).\n  --boundary PATH           Override boundary-object schema path (or set BOUNDARY_PATH).\n\nEnvironment:\n  FENCE_WORKSPACE_ROOT      When set, takes precedence over the default repo root export."
+        "Usage: probe-exec [--workspace-root PATH] [--catalog PATH] [--boundary PATH] PROBE_NAME\n\nOverrides:\n  --workspace-root PATH     Export PATH via FENCE_WORKSPACE_ROOT (defaults to repo root).\n                            Pass an empty string to defer to emit-record's git/pwd fallback.\n  --catalog PATH            Override capability catalog path (or set CATALOG_PATH).\n  --boundary PATH           Override boundary-object schema path (or set BOUNDARY_PATH).\n\nEnvironment:\n  FENCE_WORKSPACE_ROOT      When set, takes precedence over the default repo root export."
     );
     std::process::exit(1);
 }
@@ -216,37 +208,16 @@ fn has_execute_bit(metadata: &fs::Metadata) -> bool {
     }
 }
 
-fn detect_platform() -> Option<String> {
-    let output = Command::new("uname")
-        .arg("-s")
-        .stdout(Stdio::piped())
-        .stderr(Stdio::null())
-        .output()
-        .ok()?;
-    if !output.status.success() {
-        return None;
-    }
-    let value = String::from_utf8_lossy(&output.stdout).trim().to_string();
-    if value.is_empty() { None } else { Some(value) }
-}
-
 fn run_command(
-    spec: CommandSpec,
-    run_mode: &RunMode,
-    sandbox_mode: &OsString,
+    probe_path: &Path,
     workspace_plan: &WorkspacePlan,
     workspace_tmpdir: Option<&Path>,
     command_cwd: &Path,
     catalog_path: &Path,
     boundary_path: &Path,
 ) -> Result<()> {
-    let mut command = Command::new(&spec.program);
-    for arg in &spec.args {
-        command.arg(arg);
-    }
+    let mut command = Command::new(probe_path);
     command.current_dir(command_cwd);
-    command.env("FENCE_RUN_MODE", run_mode.as_str());
-    command.env("FENCE_SANDBOX_MODE", sandbox_mode);
     command.env("CATALOG_PATH", catalog_path);
     command.env("BOUNDARY_PATH", boundary_path);
     if let Some(value) = workspace_plan.export_value.as_ref() {
@@ -258,7 +229,7 @@ fn run_command(
 
     let status = command
         .status()
-        .with_context(|| format!("Failed to execute {}", spec.program.to_string_lossy()))?;
+        .with_context(|| format!("Failed to execute {}", probe_path.to_string_lossy()))?;
     if !status.success() {
         if let Some(code) = status.code() {
             std::process::exit(code);

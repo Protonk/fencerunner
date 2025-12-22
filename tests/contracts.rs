@@ -49,7 +49,6 @@ emit_record_bin="${repo_root}/bin/emit-record"
 probe_name="tests_static_contract_broken"
 primary_capability_id="cap_fs_read_workspace_tree"
 "${emit_record_bin}" \
-  --run-mode "${FENCE_RUN_MODE:-${FENCE_RUN_MODE:-baseline}}" \
   --probe-name "${probe_name}" \
   --probe-version "1" \
   --primary-capability-id "${primary_capability_id}" \
@@ -98,8 +97,6 @@ fn dynamic_probe_contract_accepts_fixture() -> Result<()> {
     let mut cmd = Command::new(repo_root.join("tools/validate_contract_gate.sh"));
     cmd.arg("--probe")
         .arg(fixture.probe_id())
-        .arg("--modes")
-        .arg("baseline")
         .env("TEST_PREFER_TARGET", "1");
     let output = cmd
         .output()
@@ -155,7 +152,6 @@ fn contract_gate_dynamic_accepts_fixture() -> Result<()> {
 
     let mut cmd = Command::new(repo_root.join("bin/probe-contract-gate"));
     cmd.arg(fixture.probe_id());
-    cmd.env("PROBE_CONTRACT_MODES", "baseline");
     let output = run_command(cmd)?;
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(
@@ -187,7 +183,6 @@ exit 0
 
     let mut cmd = Command::new(repo_root.join("bin/probe-contract-gate"));
     cmd.arg(broken.probe_id());
-    cmd.env("PROBE_CONTRACT_MODES", "baseline");
     let output = cmd
         .output()
         .context("failed to execute probe-contract-gate for missing emit-record fixture")?;
@@ -267,8 +262,6 @@ fn emit_record_requires_primary_capability() -> Result<()> {
     let repo_root = repo_root();
     let emit_record = helper_binary(&repo_root, "emit-record");
     let output = Command::new(&emit_record)
-        .arg("--run-mode")
-        .arg("baseline")
         .arg("--probe-name")
         .arg("missing_cap")
         .arg("--probe-version")
@@ -305,8 +298,6 @@ fn emit_record_rejects_unknown_capability() -> Result<()> {
     let emit_record = helper_binary(&repo_root, "emit-record");
 
     let output = Command::new(&emit_record)
-        .arg("--run-mode")
-        .arg("baseline")
         .arg("--probe-name")
         .arg("tests_unknown_cap")
         .arg("--probe-version")
@@ -351,8 +342,6 @@ fn emit_record_falls_back_to_pwd_for_workspace_root() -> Result<()> {
         .current_dir(&pwd)
         .env("FENCE_WORKSPACE_ROOT", "")
         .env("PWD", &pwd)
-        .arg("--run-mode")
-        .arg("baseline")
         .arg("--probe-name")
         .arg("tests_workspace_fallback")
         .arg("--probe-version")

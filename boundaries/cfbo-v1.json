@@ -93,17 +93,10 @@
         "type": "object",
         "additionalProperties": false,
         "required": [
-          "mode",
           "workspace_root",
           "command"
         ],
         "properties": {
-          "mode": {
-            "type": "string",
-            "enum": [
-              "baseline"
-            ]
-          },
           "workspace_root": {
             "type": [
               "string",

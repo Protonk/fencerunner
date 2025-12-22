@@ -31,7 +31,6 @@ elif [[ -x "${target_release}" ]]; then
 fi
 
 probe_name="tests_fixture_probe"
-run_mode="${FENCE_RUN_MODE:-baseline}"
 primary_capability_id="cap_fs_read_workspace_tree"
 workspace_tmp=$(mktemp -d)
 target_file="${workspace_tmp}/fixture.txt"
@@ -43,7 +42,6 @@ command_executed="printf fixture-line > ${target_file}"
 
 # Emit the same boundary object a real probe would create.
 "${emit_record_bin}" \
-  --run-mode "${run_mode}" \
   --probe-name "${probe_name}" \
   --probe-version "1" \
   --primary-capability-id "${primary_capability_id}" \
