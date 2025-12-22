@@ -92,7 +92,7 @@ Pattern:
 
 Loader:
 - `src/catalog/index.rs` -> `CapabilityIndex::load`
-- Uses `src/schema_loader.rs` to read and compile the JSON schema.
+- Uses `src/schema/loader.rs` to read and compile the JSON schema.
 
 Validator:
 - JSONSchema validation against `catalogs/capability_catalog.schema.json`
@@ -109,7 +109,7 @@ Pattern:
 - `boundary/boundary_object_schema.json` (minimal required fields for a probe run)
 
 Loader:
-- `src/boundary/mod.rs` -> `BoundarySchema::load`
+- `src/boundary/schema.rs` -> `BoundarySchema::load`
 - Path resolution via `resolve_boundary_schema_path` in `src/lib.rs`
 
 Validator:

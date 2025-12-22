@@ -10,13 +10,13 @@
 //! `emit-record` exactly once.
 
 use anyhow::{Context, Result, bail};
-use fencerunner::fence_run_support::{
+use fencerunner::harness::workspace::{
     WorkspaceOverride, WorkspacePlan, canonicalize_path, resolve_probe_metadata,
     workspace_plan_from_override, workspace_tmpdir_plan,
 };
-use fencerunner::{
-    ProbeMetadata, find_repo_root, resolve_catalog_path, resolve_probe,
-};
+use fencerunner::probes::discovery::resolve_probe;
+use fencerunner::probes::metadata::ProbeMetadata;
+use fencerunner::repo_tools::{find_repo_root, resolve_catalog_path};
 use std::env;
 use std::ffi::OsString;
 use std::fs;

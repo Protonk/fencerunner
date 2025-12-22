@@ -7,9 +7,8 @@
 
 use anyhow::{Context, Result, anyhow, bail};
 use clap::Parser;
-use fencerunner::{
-    BoundarySchema, default_boundary_schema_path, default_catalog_path, find_repo_root,
-};
+use fencerunner::boundary::BoundarySchema;
+use fencerunner::repo_tools::{default_boundary_schema_path, default_catalog_path, find_repo_root};
 use serde_json::Value;
 use std::collections::BTreeSet;
 use std::fs::File;

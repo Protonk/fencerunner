@@ -9,10 +9,10 @@
 //! validates and formats a human summary.
 
 use anyhow::{Context, Result, anyhow, bail};
-use fencerunner::{
-    BoundaryObject, BoundaryReadError, BoundarySchema, find_repo_root, read_boundary_objects,
-    resolve_boundary_schema_path,
+use fencerunner::boundary::{
+    BoundaryObject, BoundaryReadError, BoundarySchema, read_boundary_objects,
 };
+use fencerunner::repo_tools::{find_repo_root, resolve_boundary_schema_path};
 use serde_json::Value;
 use std::collections::{BTreeMap, BTreeSet};
 use std::env;
@@ -254,17 +254,19 @@ const MAX_SNIPPET_CHARS: usize = 160;
 #[cfg(test)]
 mod tests {
     use super::*;
-    use fencerunner::{
-        CapabilityCategory, CapabilityContext, CapabilityId, CapabilityLayer, CapabilitySnapshot,
-        ContextInfo, OperationInfo, ProbeContext, ProbeInfo, ResultDetails, ResultInfo, RunInfo,
-        StackInfo,
+    use fencerunner::boundary::{
+        CapabilityContext, ContextInfo, OperationInfo, ProbeContext, ProbeInfo, ResultDetails,
+        ResultInfo, RunInfo, StackInfo,
+    };
+    use fencerunner::catalog::{
+        CapabilityCategory, CapabilityId, CapabilityLayer, CapabilitySnapshot,
     };
     use serde_json::json;
     use std::collections::BTreeMap;
     use std::io::{BufReader, Cursor};
 
     fn boundary_schema() -> BoundarySchema {
-        let repo_root = fencerunner::find_repo_root().expect("repo root");
+        let repo_root = fencerunner::repo_tools::find_repo_root().expect("repo root");
         let path = resolve_boundary_schema_path(&repo_root).expect("resolve boundary schema");
         BoundarySchema::load(&path).expect("load boundary schema")
     }
@@ -381,9 +383,9 @@ mod tests {
         serde_json::to_string(&record).unwrap()
     }
 
-    fn default_catalog_key() -> fencerunner::CatalogKey {
-        let repo_root = fencerunner::find_repo_root().expect("repo root");
-        let path = fencerunner::default_catalog_path(&repo_root);
+    fn default_catalog_key() -> fencerunner::catalog::CatalogKey {
+        let repo_root = fencerunner::repo_tools::find_repo_root().expect("repo root");
+        let path = fencerunner::repo_tools::default_catalog_path(&repo_root);
         fencerunner::load_catalog_from_path(&path)
             .expect("load catalog")
             .catalog

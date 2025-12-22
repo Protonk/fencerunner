@@ -6,7 +6,7 @@ mod support;
 mod common;
 
 use anyhow::{Context, Result};
-use fencerunner::resolve_helper_binary;
+use fencerunner::repo_tools::resolve_helper_binary;
 use serde_json::Value;
 use std::fs::{self, File};
 use std::process::Command;

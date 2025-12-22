@@ -10,7 +10,7 @@ use std::collections::BTreeSet;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use crate::{CapabilityId, CapabilityIndex};
+use crate::catalog::{CapabilityId, CapabilityIndex};
 
 // Keep payloads small and predictable; probes should emit summaries, not logs.
 const PAYLOAD_MAX_BYTES: usize = 4096;

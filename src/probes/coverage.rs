@@ -5,7 +5,7 @@
 //! probes so only actionable entries surface.
 
 use crate::catalog::CapabilityIndex;
-use crate::probe_metadata::ProbeMetadata;
+use super::metadata::ProbeMetadata;
 use anyhow::{Result, anyhow, bail};
 use serde::Serialize;
 use std::collections::BTreeMap;
@@ -99,7 +99,7 @@ pub fn filter_coverage_probes(probes: &[ProbeMetadata]) -> Vec<ProbeMetadata> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::CapabilityId;
+    use crate::catalog::CapabilityId;
     use serde_json::json;
     use std::path::PathBuf;
     use tempfile::NamedTempFile;

@@ -6,7 +6,9 @@ mod support;
 mod common;
 
 use anyhow::Result;
-use fencerunner::{CapabilityCategory, CapabilityIndex, CapabilityLayer, CatalogRepository, load_catalog_from_path};
+use fencerunner::catalog::{
+    CapabilityCategory, CapabilityIndex, CapabilityLayer, CatalogRepository, load_catalog_from_path,
+};
 use serde_json::json;
 use std::fs;
 use tempfile::{NamedTempFile, tempdir};

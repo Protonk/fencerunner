@@ -11,10 +11,8 @@
 //! isolation.
 
 use anyhow::{Context, Result, anyhow, bail};
-use fencerunner::{
-    find_repo_root, resolve_helper_binary,
-    runtime::{find_on_path, helper_is_executable},
-};
+use fencerunner::harness::binaries::{find_on_path, helper_is_executable};
+use fencerunner::repo_tools::{find_repo_root, resolve_helper_binary};
 use std::env;
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};

@@ -6,8 +6,8 @@ mod support;
 mod common;
 
 use anyhow::{Context, Result};
-use fencerunner::emit_support::{JsonObjectBuilder, PayloadArgs, TextSource};
-use fencerunner::{list_probes, resolve_probe};
+use fencerunner::harness::payload::{JsonObjectBuilder, PayloadArgs, TextSource};
+use fencerunner::probes::discovery::{list_probes, resolve_probe};
 use serde_json::Value;
 use std::fs;
 use std::io::Write;

@@ -2,12 +2,15 @@
 #![allow(dead_code)]
 
 use anyhow::{Context, Result, bail};
-use fencerunner::{
-    BoundaryObject, CapabilityCategory, CapabilityContext, CapabilityId, CapabilityIndex,
-    CapabilityLayer, CapabilitySnapshot, CatalogKey, ContextInfo, OperationInfo, ProbeContext,
-    ProbeInfo, ResultDetails, ResultInfo, RunInfo, StackInfo, default_catalog_path,
-    load_catalog_from_path,
+use fencerunner::boundary::{
+    BoundaryObject, CapabilityContext, ContextInfo, OperationInfo, ProbeContext, ProbeInfo,
+    ResultDetails, ResultInfo, RunInfo, StackInfo,
 };
+use fencerunner::catalog::{
+    CapabilityCategory, CapabilityId, CapabilityIndex, CapabilityLayer, CapabilitySnapshot,
+    CatalogKey, load_catalog_from_path,
+};
+use fencerunner::repo_tools::default_catalog_path;
 use serde_json::{Value, json};
 use std::collections::{BTreeMap, BTreeSet};
 use std::env;

@@ -7,7 +7,7 @@
 
 use crate::catalog::load_catalog_from_path;
 use crate::catalog::{Capability, CapabilityCatalog, CapabilityId, CatalogKey, CatalogMetadata};
-use crate::schema_loader::{SchemaLoadOptions, load_json_schema};
+use crate::schema::loader::{SchemaLoadOptions, load_json_schema};
 use anyhow::{Context, Result, bail};
 use serde_json::Value;
 use std::collections::{BTreeMap, BTreeSet};

@@ -6,11 +6,11 @@ mod support;
 mod common;
 
 use anyhow::{Context, Result, bail};
-use fencerunner::fence_run_support::{
+use fencerunner::harness::workspace::{
     WorkspaceOverride, canonicalize_path, resolve_probe_metadata, workspace_plan_from_override,
     workspace_tmpdir_plan,
 };
-use fencerunner::{Probe, resolve_probe};
+use fencerunner::probes::discovery::{Probe, resolve_probe};
 use serde_json::Value;
 use std::fs;
 use std::io::Write;
@@ -234,7 +234,7 @@ primary_capability_id="cap_fs_read_workspace_tree"
         "#,
     )?;
     make_executable(&script)?;
-    let parsed = fencerunner::ProbeMetadata::from_script(&script)?;
+    let parsed = fencerunner::probes::metadata::ProbeMetadata::from_script(&script)?;
     let probe = Probe {
         id: "meta".to_string(),
         path: fs::canonicalize(&script)?,

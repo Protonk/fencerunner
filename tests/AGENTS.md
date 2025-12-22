@@ -91,7 +91,7 @@ contract without an obvious row, add both the row and the tests.
   the test (they log the exact arguments). Most rely on binaries under `bin/`,
   so rebuild those if they drift.
 - **Workspace/path issues:** rerun the failing test with `RUST_LOG=debug` to see
-  the path planning traces emitted by `fence_run_support`.
+  the path planning traces emitted by `harness/workspace`.
 - **Probe contract gates:** run `tools/validate_contract_gate.sh --probe <id|path>`,
   `bin/probe-gate --probe <id|path>`, or `bin/probe-contract-gate --probe <id|path>` to gate the
   offending script. Edit in a tight loop until the probe passes the contract

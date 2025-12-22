@@ -1,7 +1,7 @@
 #![allow(dead_code)]
 
 use anyhow::{Context, Result, bail};
-use fencerunner::find_repo_root;
+use fencerunner::repo_tools::find_repo_root;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 use std::sync::atomic::{AtomicBool, Ordering};

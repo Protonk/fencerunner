@@ -5,7 +5,7 @@
 //! current catalog snapshot.
 
 use crate::catalog::{CapabilityId, CapabilityIndex};
-use crate::probe_metadata::ProbeMetadata;
+use crate::probes::metadata::ProbeMetadata;
 use anyhow::Result;
 use serde_json::Value;
 use std::collections::BTreeSet;
@@ -162,7 +162,8 @@ fn extract_capability_ids(value: &Value) -> Vec<CapabilityId> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{default_catalog_path, find_repo_root, load_catalog_from_path};
+    use crate::catalog::load_catalog_from_path;
+    use crate::repo_tools::{default_catalog_path, find_repo_root};
     use serde_json::json;
     use std::path::PathBuf;
     use tempfile::NamedTempFile;

@@ -7,11 +7,11 @@ mod support;
 mod common;
 
 use anyhow::{Context, Result, bail};
-use fencerunner::{
-    BoundaryObject, BoundarySchema, CapabilityCategory, CapabilityContext, CapabilityId,
-    CapabilityLayer, CapabilitySnapshot, CatalogKey, default_catalog_path,
-    resolve_boundary_schema_path,
+use fencerunner::boundary::{BoundaryObject, BoundarySchema, CapabilityContext};
+use fencerunner::catalog::{
+    CapabilityCategory, CapabilityId, CapabilityLayer, CapabilitySnapshot, CatalogKey,
 };
+use fencerunner::repo_tools::{default_catalog_path, resolve_boundary_schema_path};
 use jsonschema::JSONSchema;
 use serde_json::{Value, json};
 use std::fs::File;

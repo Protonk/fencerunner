@@ -1,4 +1,4 @@
-//! Runtime helpers shared across binaries.
+//! Binary resolution helpers shared across CLIs.
 //!
 //! Centralizes executable detection, PATH resolution, and helper search order
 //! so CLIs subscribe to the same behavior instead of re-implementing it.

@@ -9,15 +9,18 @@
 //! record stays schema-valid and consistent with the catalog.
 
 use anyhow::{Context, Result, anyhow, bail};
-use fencerunner::emit_support::{
+use fencerunner::boundary::{
+    BoundaryObject, BoundarySchema, CapabilityContext, ContextInfo, OperationInfo, ProbeContext,
+    ProbeInfo, ResultDetails, ResultInfo, RunInfo, StackInfo,
+};
+use fencerunner::catalog::{Capability, CapabilityId, CapabilityIndex};
+use fencerunner::harness::payload::{
     JsonObjectBuilder, PayloadArgs, TextSource, normalize_secondary_ids, not_empty,
     validate_capability_id, validate_outcome,
 };
-use fencerunner::{
-    BoundaryObject, BoundarySchema, CapabilityContext, CapabilityId, CapabilityIndex, ContextInfo,
-    OperationInfo, ProbeContext, ProbeInfo, ResultDetails, ResultInfo, RunInfo, StackInfo,
+use fencerunner::repo_tools::split_list;
+use fencerunner::repo_tools::{
     find_repo_root, resolve_boundary_schema_path, resolve_catalog_path, resolve_helper_binary,
-    split_list,
 };
 use serde_json::Value;
 use std::collections::BTreeMap;
@@ -482,7 +485,7 @@ fn run_command_json(path: &Path, args: &[&str]) -> Result<Value> {
 fn resolve_secondary_capabilities<'a>(
     capabilities: &'a CapabilityIndex,
     ids: &[CapabilityId],
-) -> Result<Vec<&'a fencerunner::Capability>> {
+) -> Result<Vec<&'a Capability>> {
     let mut caps = Vec::new();
     for id in ids {
         let Some(cap) = capabilities.capability(id) else {

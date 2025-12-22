@@ -5,7 +5,9 @@
 //! defensive consistency: if the probe contract changes, the rule lives in one
 //! place that all callers reuse.
 
-use crate::{CapabilityId, Probe, ProbeMetadata};
+use crate::catalog::CapabilityId;
+use crate::probes::discovery::Probe;
+use crate::probes::metadata::ProbeMetadata;
 use anyhow::{Result, anyhow};
 use std::ffi::OsString;
 use std::fs;

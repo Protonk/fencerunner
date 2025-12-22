@@ -6,10 +6,10 @@
 //! JSON object on its own line.
 
 use anyhow::{Context, Result, anyhow, bail};
-use fencerunner::{
-    CapabilityId, CapabilityIndex, Probe, find_repo_root, list_probes,
-    resolve_catalog_path, resolve_helper_binary, resolve_probe, split_list,
-};
+use fencerunner::catalog::{CapabilityId, CapabilityIndex};
+use fencerunner::repo_tools::split_list;
+use fencerunner::probes::discovery::{Probe, list_probes, resolve_probe};
+use fencerunner::repo_tools::{find_repo_root, resolve_catalog_path, resolve_helper_binary};
 use serde_json::Value;
 use std::{
     env,
@@ -118,7 +118,7 @@ fn run_probe(
 fn probes_for_capability(repo_root: &Path, capability: &CapabilityId) -> Result<Vec<Probe>> {
     let mut matches = Vec::new();
     for probe in list_probes(repo_root)? {
-        let metadata = fencerunner::ProbeMetadata::from_script(&probe.path)?;
+        let metadata = fencerunner::probes::metadata::ProbeMetadata::from_script(&probe.path)?;
         if metadata
             .primary_capability
             .as_ref()

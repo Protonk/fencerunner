@@ -6,7 +6,7 @@ mod support;
 mod common;
 
 use anyhow::{Context, Result};
-use fencerunner::emit_support::{normalize_secondary_ids, validate_outcome};
+use fencerunner::harness::payload::{normalize_secondary_ids, validate_outcome};
 use std::fs;
 use std::process::Command;
 use support::{helper_binary, repo_root, run_command};
@@ -380,17 +380,17 @@ fn normalize_secondary_deduplicates_and_trims() -> Result<()> {
         ("cap_b", "process", "agent_runtime"),
     ])?;
     let input = vec![
-        fencerunner::CapabilityId(" cap_a ".to_string()),
-        fencerunner::CapabilityId("cap_b".to_string()),
-        fencerunner::CapabilityId("".to_string()),
-        fencerunner::CapabilityId("cap_a".to_string()),
+        fencerunner::catalog::CapabilityId(" cap_a ".to_string()),
+        fencerunner::catalog::CapabilityId("cap_b".to_string()),
+        fencerunner::catalog::CapabilityId("".to_string()),
+        fencerunner::catalog::CapabilityId("cap_a".to_string()),
     ];
     let normalized = normalize_secondary_ids(&caps, &input)?;
     assert_eq!(
         normalized,
         vec![
-            fencerunner::CapabilityId("cap_a".to_string()),
-            fencerunner::CapabilityId("cap_b".to_string())
+            fencerunner::catalog::CapabilityId("cap_a".to_string()),
+            fencerunner::catalog::CapabilityId("cap_b".to_string())
         ]
     );
     Ok(())
@@ -400,8 +400,8 @@ fn normalize_secondary_deduplicates_and_trims() -> Result<()> {
 fn normalize_secondary_rejects_unknown() -> Result<()> {
     let caps = sample_capability_index(&[("cap_a", "filesystem", "os_sandbox")])?;
     let input = vec![
-        fencerunner::CapabilityId("cap_a".to_string()),
-        fencerunner::CapabilityId("cap_missing".to_string()),
+        fencerunner::catalog::CapabilityId("cap_a".to_string()),
+        fencerunner::catalog::CapabilityId("cap_missing".to_string()),
     ];
     assert!(normalize_secondary_ids(&caps, &input).is_err());
     Ok(())

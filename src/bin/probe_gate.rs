@@ -6,7 +6,7 @@
 //! gate that `bin/probe-contract-gate` exposes for CLI callers.
 
 use anyhow::{Context, Result, anyhow};
-use fencerunner::find_repo_root;
+use fencerunner::repo_tools::find_repo_root;
 use std::env;
 use std::process::{Command, Stdio};
 

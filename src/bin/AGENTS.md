@@ -54,8 +54,8 @@ Minimal JSON pointer extractor for probes. Keep the small CLI surface, return
 compact JSON, and prefer explicit failures over silent fallbacks.
 
 ## Expectations across binaries
-- Subscribe to shared logic in `runtime.rs`/`fence_run_support.rs`/`lib.rs`
-  instead of rolling your own path/sandbox/catalog handling.
+- Subscribe to shared logic in `harness/binaries`, `harness/workspace`,
+  `repo_tools`, and `lib.rs` instead of rolling your own path/sandbox/catalog handling.
 - Keep argument parsing explicit and defensive; surface actionable errors.
 - Reflect behavioral changes in the narrative guides and tests so shell callers stay in sync.
 - Portability is non-negotiable: binaries must run on macOS `/bin/bash 3.2` and
