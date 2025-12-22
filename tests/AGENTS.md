@@ -75,9 +75,9 @@ single command now executes the entire suite.
 | --- | --- |
 | Boundary object schema + payload semantics (schema.rs) | `boundary_object_schema`, `boundary_schema_matches_contract`, `boundary_object_round_trips_structs`, `capabilities_schema_version_serializes_in_json` |
 | Capability catalog + context wiring (catalog.rs) | `load_real_catalog_smoke`, `repository_lookup_context_matches_capabilities`, `capability_index_*` |
-| Helper binaries & CLI ergonomics (cli.rs, helpers.rs) | `json_extract_*`, `portable_path_relpath_*`, `detect_stack_reports_expected_sandbox_modes`, `paging_stress_*`, `contract_gate_*`, `probe_matrix_*`, `fencerunner_*` |
+| Helper binaries & CLI ergonomics (cli.rs, helpers.rs) | `json_extract_*`, `portable_path_relpath_*`, `detect_stack_reports_expected_sandbox_modes`, `paging_stress_*`, `payload_builder_rejects_large_payloads`, `contract_gate_*`, `probe_matrix_*`, `fencerunner_*` |
 | Workspace + sandbox guarantees (probe_execution.rs) | `workspace_root_fallback`, `workspace_tmpdir_*`, `probe_resolution_guards`, `resolve_probe_metadata_prefers_script_values` |
-| Probe contracts & fixtures (contracts.rs) | `harness_smoke_probe_fixture`, `dynamic_probe_contract_accepts_fixture`, `static_probe_contract_*`, `proc_paging_stress_probe_emits_expected_record` |
+| Probe contracts & fixtures (contracts.rs) | `harness_smoke_probe_fixture`, `dynamic_probe_contract_accepts_fixture`, `static_probe_contract_*`, `contract_gate_dynamic_flags_*`, `contract_gate_dynamic_rejects_payload_over_limit`, `proc_paging_stress_probe_emits_expected_record` |
 
 Use this table to decide where to plug a new test. If your change touches a
 contract without an obvious row, add both the row and the tests.

@@ -9,11 +9,10 @@ For quick orientation, this is how the tree is organized.
 | Path      | Purpose / Notes                                                                                                                                       |
 | --------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `bin/`    | Prebuilt Rust helper binaries (`fencerunner`, `probe-exec`, `probe-matrix`, `emit-record`, `portable-path`, `detect-stack`, etc.) synced from `src/bin/`. |
-| `catalogs/` | Capability catalogs plus the explainer at `catalogs/capabilities.md` (bundled catalog: `macos_codex_v1.json`).                                    |
-| `boundaries/` | Boundary schema descriptors plus the explainer at `boundaries/boundary_object.md` (bundled descriptor: `cfbo-v1.json`).                          |
-| `docs/`   | Reserved for future top-level docs; narrative guides now live alongside their artifacts.                                                          |
+| `catalogs/` | Capability catalogs plus an explainer at `catalogs/capabilities.md` (bundled catalog: `macos_codex_v1.json`).                                    |
+| `boundaries/` | Boundary schema descriptors (bundled descriptor: `cfbo-v1.json`) and `boundaries/boundary_object.md` documentation.                          |
 | `probes/` | Flat directory of `<probe_id>.sh` scripts plus `probes/AGENTS.md` and `probes/probes.md`, the only code that directly exercises the sandboxed runtime. |
-| `schema/` | Machine-readable schemas (`boundary_object_schema.json`, `capability_catalog.schema.json`) plus `schema/README.md` for the load/validation flow.    |
+| `schema/` | Machine-readable schemas (`boundary_object_schema.json`, `capability_catalog.schema.json`) plus `schema/README.md` for load/validation flow.    |
 | `src/`    | Rust sources for the CLI and helpers, including implementations for every binary under `bin/`.                                                      |
 | `target/` | Cargo build artifacts created by `cargo build` or `cargo test`; safe to delete when you need a clean rebuild.                                       |
 | `tests/`  | Rust guard rails (`tests/*.rs`), shared helpers, and fixtures that enforce the contracts under `cargo test`.                                       |

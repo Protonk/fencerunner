@@ -300,6 +300,8 @@ status_file="${state_dir}/emit_record_status"
 args_file="${state_dir}/emit_record_last_args"
 json_extract_bin=${JSON_EXTRACT_BIN:-json-extract}
 real_emit_record=${REAL_EMIT_RECORD:-}
+orig_args=("$@")
+max_payload_bytes=4096
 
 fail() {
   # Collect errors for the gate and fail fast to avoid cascading issues.
@@ -354,13 +356,164 @@ validate_json_value() {
   fail "value is not valid JSON"
 }
 
+check_payload_size() {
+  if ! command -v python3 >/dev/null 2>&1; then
+    fail "python3 is required for payload size validation"
+  fi
+
+  local output
+  if ! output=$(python3 - "${max_payload_bytes}" "${orig_args[@]}" 2>&1 <<'PY'
+import json
+import sys
+
+def truncate_snippet(text):
+    if len(text) <= 400:
+        return text
+    return text[:400] + "\u2026"
+
+def clean_text(text):
+    return text.replace("\x00", "")
+
+def read_text(source):
+    if source is None:
+        return None
+    kind, value = source
+    if kind == "inline":
+        raw = value
+    else:
+        with open(value, "rb") as fh:
+            raw = fh.read().decode("utf-8", errors="replace")
+    return truncate_snippet(clean_text(raw))
+
+def split_list(value):
+    return [item for item in value.replace(",", " ").split() if item]
+
+def parse_json(raw, label):
+    try:
+        return json.loads(raw)
+    except Exception as exc:
+        raise ValueError(f"{label} invalid JSON: {exc}") from exc
+
+def parse_json_object(raw, label):
+    value = parse_json(raw, label)
+    if not isinstance(value, dict):
+        raise ValueError(f"{label} must be a JSON object")
+    return value
+
+def parse_json_file(path, label):
+    with open(path, "rb") as fh:
+        data = fh.read()
+    try:
+        text = data.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise ValueError(f"{label} must be valid UTF-8: {exc}") from exc
+    return parse_json(text, label)
+
+def parse_json_object_file(path, label):
+    value = parse_json_file(path, label)
+    if not isinstance(value, dict):
+        raise ValueError(f"{label} must be a JSON object")
+    return value
+
+def build_payload(args):
+    payload_file = None
+    stdout_source = None
+    stderr_source = None
+    raw_ops = []
+    idx = 0
+    while idx < len(args):
+        arg = args[idx]
+        if arg == "--payload-file" and idx + 1 < len(args):
+            payload_file = args[idx + 1]
+            idx += 2
+        elif arg == "--payload-stdout" and idx + 1 < len(args):
+            stdout_source = ("inline", args[idx + 1])
+            idx += 2
+        elif arg == "--payload-stdout-file" and idx + 1 < len(args):
+            stdout_source = ("file", args[idx + 1])
+            idx += 2
+        elif arg == "--payload-stderr" and idx + 1 < len(args):
+            stderr_source = ("inline", args[idx + 1])
+            idx += 2
+        elif arg == "--payload-stderr-file" and idx + 1 < len(args):
+            stderr_source = ("file", args[idx + 1])
+            idx += 2
+        elif arg == "--payload-raw" and idx + 1 < len(args):
+            raw_ops.append(("merge", args[idx + 1]))
+            idx += 2
+        elif arg == "--payload-raw-file" and idx + 1 < len(args):
+            raw_ops.append(("merge_file", args[idx + 1]))
+            idx += 2
+        elif arg == "--payload-raw-field" and idx + 2 < len(args):
+            raw_ops.append(("set_string", args[idx + 1], args[idx + 2]))
+            idx += 3
+        elif arg == "--payload-raw-field-json" and idx + 2 < len(args):
+            raw_ops.append(("set_json", args[idx + 1], args[idx + 2]))
+            idx += 3
+        elif arg == "--payload-raw-null" and idx + 1 < len(args):
+            raw_ops.append(("set_null", args[idx + 1]))
+            idx += 2
+        elif arg == "--payload-raw-list" and idx + 2 < len(args):
+            raw_ops.append(("set_list", args[idx + 1], args[idx + 2]))
+            idx += 3
+        else:
+            idx += 1
+
+    if payload_file:
+        return parse_json_object_file(payload_file, "payload file")
+
+    raw = {}
+    for op in raw_ops:
+        kind = op[0]
+        if kind == "merge":
+            raw.update(parse_json_object(op[1], "payload raw"))
+        elif kind == "merge_file":
+            raw.update(parse_json_object_file(op[1], "payload raw file"))
+        elif kind == "set_string":
+            raw[op[1]] = op[2]
+        elif kind == "set_json":
+            raw[op[1]] = parse_json(op[2], "payload raw field")
+        elif kind == "set_null":
+            raw[op[1]] = None
+        elif kind == "set_list":
+            raw[op[1]] = split_list(op[2])
+
+    return {
+        "stdout_snippet": read_text(stdout_source),
+        "stderr_snippet": read_text(stderr_source),
+        "raw": raw,
+    }
+
+def main():
+    if len(sys.argv) < 2:
+        raise SystemExit("missing payload size limit")
+    max_bytes = int(sys.argv[1])
+    payload = build_payload(sys.argv[2:])
+    payload_json = json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
+    size = len(payload_json.encode("utf-8"))
+    if size > max_bytes:
+        sys.stderr.write(f"payload exceeds {max_bytes} bytes (got {size})")
+        raise SystemExit(1)
+
+if __name__ == "__main__":
+    try:
+        main()
+    except Exception as exc:
+        sys.stderr.write(str(exc))
+        raise SystemExit(1)
+PY
+); then
+    fail "${output}"
+  fi
+}
+
 # Persist the raw args for debugging when a probe fails the dynamic gate.
 printf '%s\0' "$@" >"${args_file}" 2>/dev/null || true
 
 # These are retained for compatibility with emit-record and other tooling that
 # may set them, even though the stub uses only a subset.
-required_probe_name=""
-required_primary_capability_id=""
+required_probe_name=${PROBE_CONTRACT_EXPECTED_PROBE_NAME:-}
+required_primary_capability_id=${PROBE_CONTRACT_EXPECTED_PRIMARY_CAPABILITY_ID:-}
 capabilities_json=""
 capabilities_adapter=""
 
@@ -501,13 +654,6 @@ while [[ $# -gt 0 ]]; do
       if [[ ! -f "${raw_file}" ]]; then
         fail "payload raw file '${raw_file}' does not exist"
       fi
-      raw_size=$(wc -c <"${raw_file}" 2>/dev/null || printf '0')
-      if ! [[ "${raw_size}" =~ ^[0-9]+$ ]]; then
-        raw_size=0
-      fi
-      if (( raw_size > 1048576 )); then
-        fail "payload raw file is larger than 1048576 bytes"
-      fi
       if ! "${json_extract_bin}" --file "${raw_file}" --pointer "/" --type object >/dev/null 2>&1; then
         fail "--payload-raw-file must contain a JSON object"
       fi
@@ -611,6 +757,14 @@ require_flag_value "${target}" "--target"
 require_flag_value "${status_value}" "--status"
 require_flag_value "${raw_exit_code}" "--raw-exit-code"
 
+if [[ -n "${required_probe_name}" && "${probe_name}" != "${required_probe_name}" ]]; then
+  fail "--probe-name '${probe_name}' does not match expected '${required_probe_name}'"
+fi
+
+if [[ -n "${required_primary_capability_id}" && "${primary_capability_id}" != "${required_primary_capability_id}" ]]; then
+  fail "--primary-capability-id '${primary_capability_id}' does not match expected '${required_primary_capability_id}'"
+fi
+
 if [[ "${payload_seen}" != "true" && -z "${payload_file}" ]]; then
   # Every record must include a payload; emit-record enforces this too.
   fail "payload flags are required"
@@ -638,19 +792,12 @@ if [[ -n "${payload_file}" ]]; then
     fail "payload file '${payload_file}' does not exist"
   fi
 
-  payload_size=$(wc -c <"${payload_file}" 2>/dev/null || printf '0')
-  if ! [[ "${payload_size}" =~ ^[0-9]+$ ]]; then
-    payload_size=0
-  fi
-  max_payload_bytes=$((1024 * 1024))
-  if (( payload_size > max_payload_bytes )); then
-    fail "payload file is larger than ${max_payload_bytes}"
-  fi
-
   if ! "${json_extract_bin}" --file "${payload_file}" --pointer "/" --type object >/dev/null 2>&1; then
     fail "payload JSON missing required fields"
   fi
 fi
+
+check_payload_size
 
 if [[ "${operation_args_seen}" != "true" ]]; then
   # Operation args are required even if empty; probes must state intent.

@@ -256,6 +256,22 @@ fn payload_builder_accepts_inline_snippets() -> Result<()> {
     Ok(())
 }
 
+#[test]
+fn payload_builder_rejects_large_payloads() -> Result<()> {
+    let mut payload = PayloadArgs::default();
+    payload
+        .raw_mut()
+        .insert_string("big".to_string(), "a".repeat(5000));
+    let err = payload
+        .build()
+        .expect_err("expected payload size enforcement to fail");
+    assert!(
+        err.to_string().contains("Payload exceeds"),
+        "expected payload size error, got: {err}"
+    );
+    Ok(())
+}
+
 // === portable-path helper semantics ===
 
 #[test]

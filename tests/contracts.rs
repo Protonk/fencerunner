@@ -198,6 +198,164 @@ exit 0
     Ok(())
 }
 
+// Ensures the dynamic gate fails when probes emit a probe name that differs
+// from the script metadata.
+#[test]
+fn contract_gate_dynamic_flags_probe_name_mismatch() -> Result<()> {
+    let repo_root = repo_root();
+    let _guard = repo_guard();
+    let contents = r#"#!/usr/bin/env bash
+set -euo pipefail
+
+repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." >/dev/null 2>&1 && pwd)
+emit_record_bin="${repo_root}/bin/emit-record"
+probe_name="tests_contract_gate_probe_name_mismatch"
+primary_capability_id="cap_fs_read_workspace_tree"
+wrong_probe_name="tests_contract_gate_probe_name_mismatch_wrong"
+
+"${emit_record_bin}" \
+  --probe-name "${wrong_probe_name}" \
+  --probe-version "1" \
+  --primary-capability-id "${primary_capability_id}" \
+  --command "true" \
+  --category "fs" \
+  --verb "read" \
+  --target "/dev/null" \
+  --status "success" \
+  --raw-exit-code "0" \
+  --payload-stdout "" \
+  --payload-stderr "" \
+  --payload-raw "{}" \
+  --operation-args "{}"
+"#;
+    let broken = FixtureProbe::install_from_contents(
+        &repo_root,
+        "tests_contract_gate_probe_name_mismatch",
+        contents,
+    )?;
+
+    let mut cmd = Command::new(repo_root.join("bin/probe-contract-gate"));
+    cmd.arg(broken.probe_id());
+    let output = cmd
+        .output()
+        .context("failed to execute probe-contract-gate for probe name mismatch")?;
+    assert!(
+        !output.status.success(),
+        "dynamic gate should fail when probe-name mismatches script metadata"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("--probe-name") && stderr.contains("does not match expected"),
+        "expected probe-name mismatch error, stderr was: {stderr}"
+    );
+    Ok(())
+}
+
+// Ensures the dynamic gate fails when probes emit a primary capability id that
+// differs from the script metadata.
+#[test]
+fn contract_gate_dynamic_flags_primary_capability_mismatch() -> Result<()> {
+    let repo_root = repo_root();
+    let _guard = repo_guard();
+    let contents = r#"#!/usr/bin/env bash
+set -euo pipefail
+
+repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." >/dev/null 2>&1 && pwd)
+emit_record_bin="${repo_root}/bin/emit-record"
+probe_name="tests_contract_gate_primary_capability_mismatch"
+primary_capability_id="cap_fs_read_workspace_tree"
+wrong_primary_capability_id="cap_fs_write_workspace_tree"
+
+"${emit_record_bin}" \
+  --probe-name "${probe_name}" \
+  --probe-version "1" \
+  --primary-capability-id "${wrong_primary_capability_id}" \
+  --command "true" \
+  --category "fs" \
+  --verb "read" \
+  --target "/dev/null" \
+  --status "success" \
+  --raw-exit-code "0" \
+  --payload-stdout "" \
+  --payload-stderr "" \
+  --payload-raw "{}" \
+  --operation-args "{}"
+"#;
+    let broken = FixtureProbe::install_from_contents(
+        &repo_root,
+        "tests_contract_gate_primary_capability_mismatch",
+        contents,
+    )?;
+
+    let mut cmd = Command::new(repo_root.join("bin/probe-contract-gate"));
+    cmd.arg(broken.probe_id());
+    let output = cmd
+        .output()
+        .context("failed to execute probe-contract-gate for capability mismatch")?;
+    assert!(
+        !output.status.success(),
+        "dynamic gate should fail when primary capability mismatches script metadata"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("--primary-capability-id") && stderr.contains("does not match expected"),
+        "expected primary capability mismatch error, stderr was: {stderr}"
+    );
+    Ok(())
+}
+
+// Ensures payload size limits are enforced by the dynamic gate.
+#[test]
+fn contract_gate_dynamic_rejects_payload_over_limit() -> Result<()> {
+    let repo_root = repo_root();
+    let _guard = repo_guard();
+    let contents = r#"#!/usr/bin/env bash
+set -euo pipefail
+
+repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." >/dev/null 2>&1 && pwd)
+emit_record_bin="${repo_root}/bin/emit-record"
+probe_name="tests_contract_gate_payload_too_large"
+primary_capability_id="cap_fs_read_workspace_tree"
+
+big_payload=$(printf 'a%.0s' {1..5000})
+payload_json=$(printf '{"big":"%s"}' "${big_payload}")
+
+"${emit_record_bin}" \
+  --probe-name "${probe_name}" \
+  --probe-version "1" \
+  --primary-capability-id "${primary_capability_id}" \
+  --command "true" \
+  --category "fs" \
+  --verb "read" \
+  --target "/dev/null" \
+  --status "success" \
+  --raw-exit-code "0" \
+  --payload-raw "${payload_json}" \
+  --operation-args "{}"
+"#;
+    let broken = FixtureProbe::install_from_contents(
+        &repo_root,
+        "tests_contract_gate_payload_too_large",
+        contents,
+    )?;
+
+    let mut cmd = Command::new(repo_root.join("bin/probe-contract-gate"));
+    cmd.arg(broken.probe_id());
+    let output = cmd
+        .output()
+        .context("failed to execute probe-contract-gate for payload size limit")?;
+    assert!(
+        !output.status.success(),
+        "dynamic gate should fail when payload exceeds size limit"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("payload exceeds") && stderr.contains("4096 bytes"),
+        "expected payload size error, stderr was: {stderr}"
+    );
+    Ok(())
+}
+
 // Runs the `probe-gate` binary so `cargo test` fails whenever the static
 // contract gate over the full probe set rejects any checked-in probe.
 #[test]

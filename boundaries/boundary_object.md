@@ -124,7 +124,7 @@ Interpretation of `observed_result`:
 
 ### `payload`
 
-Catch-all for probe-specific breadcrumbs. Keep these small (<4 KB).
+Catch-all for probe-specific breadcrumbs. Keep these small (<= 4096 bytes); emit-record and the contract gate enforce this limit on serialized payload JSON.
 
 | Field | Required | Meaning |
 | --- | --- | --- |

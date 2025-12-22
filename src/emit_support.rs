@@ -6,6 +6,8 @@ use std::path::{Path, PathBuf};
 
 use crate::{CapabilityId, CapabilityIndex};
 
+const PAYLOAD_MAX_BYTES: usize = 4096;
+
 #[derive(Default, Clone)]
 /// Builder for probe payloads that enforces “single source of truth” rules.
 ///
@@ -44,25 +46,28 @@ impl PayloadArgs {
     }
 
     pub fn build(self) -> Result<Value> {
-        if let Some(ref path) = self.payload_file {
+        let payload = if let Some(ref path) = self.payload_file {
             if self.has_inline_fields() {
                 bail!("--payload-file cannot be combined with inline payload flags");
             }
             if !path.is_file() {
                 bail!("Payload file not found: {}", path.display());
             }
-            return read_json_file(&path);
-        }
+            read_json_file(&path)?
+        } else {
+            let stdout_snippet = build_snippet_value(self.stdout)?;
+            let stderr_snippet = build_snippet_value(self.stderr)?;
+            let raw = self.raw.build("payload raw object")?;
 
-        let stdout_snippet = build_snippet_value(self.stdout)?;
-        let stderr_snippet = build_snippet_value(self.stderr)?;
-        let raw = self.raw.build("payload raw object")?;
+            json!({
+                "stdout_snippet": stdout_snippet,
+                "stderr_snippet": stderr_snippet,
+                "raw": raw,
+            })
+        };
 
-        Ok(json!({
-            "stdout_snippet": stdout_snippet,
-            "stderr_snippet": stderr_snippet,
-            "raw": raw,
-        }))
+        enforce_payload_size(&payload)?;
+        Ok(payload)
     }
 
     fn has_inline_fields(&self) -> bool {
@@ -216,6 +221,19 @@ fn truncate_snippet(text: &str) -> String {
 fn read_json_file(path: &Path) -> Result<Value> {
     let data = fs::read_to_string(path)?;
     serde_json::from_str(&data).context("File contained invalid JSON")
+}
+
+fn enforce_payload_size(payload: &Value) -> Result<()> {
+    let bytes = serde_json::to_vec(payload).context("Failed to serialize payload for size check")?;
+    let size = bytes.len();
+    if size > PAYLOAD_MAX_BYTES {
+        bail!(
+            "Payload exceeds {} bytes (got {})",
+            PAYLOAD_MAX_BYTES,
+            size
+        );
+    }
+    Ok(())
 }
 
 pub fn validate_status(status: &str) -> Result<()> {
