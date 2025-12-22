@@ -5,6 +5,11 @@
 //! `boundary/boundary_object_schema.json` so helpers can round-trip JSON without
 //! ad-hoc maps. Optional context/payload blocks allow probes to attach richer
 //! metadata without changing the required shape.
+//!
+//! The boundary object is the "contract boundary" between a messy runtime and
+//! clean analysis. Probes can do anything internally, but they must summarize
+//! the attempted operation and observed outcome using this schema so downstream
+//! tools stay deterministic.
 
 use crate::catalog::{Capability, CapabilityId, CapabilitySnapshot, CatalogKey, CatalogRepository};
 use anyhow::{Context, Result, bail};
@@ -32,6 +37,7 @@ pub struct BoundaryObject {
     pub context: Option<ContextInfo>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub payload: Option<Value>,
+    /// Extensions are allowed but not interpreted by core tooling.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub extensions: Option<Value>,
 }
@@ -94,6 +100,8 @@ pub struct ContextInfo {
     pub probe: Option<ProbeContext>,
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     #[serde(flatten)]
+    // Unknown keys are preserved here so newer emitters do not break older
+    // listeners. This is a deliberate forward-compatibility hook.
     pub extra: BTreeMap<String, Value>,
 }
 
@@ -159,6 +167,8 @@ impl BoundaryObject {
         primary: &Capability,
         secondary: &[&Capability],
     ) -> Self {
+        // Mutate in place because the emitter typically constructs the record
+        // first and then attaches catalog snapshots before serialization.
         let context = self.ensure_context();
         context.capabilities_schema_version = Some(catalog_key);
         context.capability_context = Some(CapabilityContext {
@@ -188,6 +198,8 @@ impl CatalogRepository {
         &'a self,
         bo: &BoundaryObject,
     ) -> Option<(&'a Capability, Vec<&'a Capability>)> {
+        // Use the catalog key embedded in the record. This keeps lookups
+        // explicit even if multiple catalogs are loaded in memory.
         let context = bo.context.as_ref()?;
         let catalog_key = context.capabilities_schema_version.as_ref()?;
         let snapshot = context.capability_context.as_ref()?;
@@ -223,6 +235,8 @@ impl BoundarySchema {
         )
         .with_context(|| format!("parsing boundary schema {}", path.display()))?;
 
+        // Keep a strong reference to the raw schema alongside the compiled
+        // validator so callers can inspect it for diagnostics.
         let raw = Arc::new(value);
         let raw_static: &'static Value = unsafe { &*(Arc::as_ptr(&raw)) };
         let compiled = JSONSchema::compile(raw_static)
@@ -278,6 +292,7 @@ impl std::error::Error for BoundaryReadError {
 pub fn read_boundary_objects<R: BufRead>(
     reader: R,
 ) -> Result<Vec<BoundaryObject>, BoundaryReadError> {
+    // Streaming read so large NDJSON inputs do not need to fit in memory.
     let mut records = Vec::new();
     let mut line_buf = String::new();
     let mut reader = reader;

@@ -138,6 +138,8 @@ fn deserialize_policy_layers<'de, D>(deserializer: D) -> Result<Vec<PolicyLayer>
 where
     D: Deserializer<'de>,
 {
+    // Accept both the modern list form and the legacy map form for backward
+    // compatibility with older catalogs.
     let input = Option::<PolicyLayersInput>::deserialize(deserializer)?;
     Ok(match input {
         None => Vec::new(),
@@ -174,6 +176,7 @@ fn deserialize_sources<'de, D>(deserializer: D) -> Result<Vec<CapabilitySource>,
 where
     D: Deserializer<'de>,
 {
+    // Sources can appear as a list or a map keyed by doc id; normalize to a list.
     let input = Option::<SourcesInput>::deserialize(deserializer)?;
     Ok(match input {
         None => Vec::new(),
@@ -203,6 +206,7 @@ impl Capability {
 
 /// Read and parse a capability catalog from disk without additional validation.
 pub fn load_catalog_from_path(path: &Path) -> Result<CapabilityCatalog> {
+    // Schema validation happens in CapabilityIndex; this is a raw parse helper.
     let data = fs::read_to_string(path)?;
     let catalog: CapabilityCatalog = serde_json::from_str(&data)?;
     Ok(catalog)

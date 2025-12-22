@@ -4,6 +4,9 @@
 //! expected type, and prints the selected value as compact JSON. Designed for
 //! probes that need to pull booleans/numbers/objects out of helper output
 //! without adding scripting dependencies.
+//!
+//! JSON Pointer uses a leading slash and does not require a full JSONPath
+//! implementation. Keeping it small helps probes stay portable.
 
 use anyhow::{Context, Result, bail};
 use serde_json::Value;
@@ -24,6 +27,7 @@ fn run() -> Result<()> {
     let source = args.source.read()?;
     let value: Value = serde_json::from_slice(&source).context("failed to parse JSON input")?;
 
+    // Empty pointer means "root". This mirrors RFC 6901 and keeps CLI simple.
     let selected = if args.pointer.is_empty() {
         Some(&value)
     } else {
@@ -175,6 +179,7 @@ impl CliArgs {
                 }
                 "--pointer" => {
                     let raw = next_value(&mut args, "--pointer")?;
+                    // Root is represented by an empty string, not "/".
                     if !raw.is_empty() && !raw.starts_with('/') {
                         bail!("--pointer must be empty (root) or start with '/'");
                     }

@@ -4,6 +4,9 @@
 //! capability IDs against the shipped catalog, shells out to `detect-stack` for
 //! host context, resolves workspace roots following the documented fallback
 //! order, and prints a single JSON record to stdout.
+//!
+//! Probes should not hand-roll JSON. They should call this helper so the
+//! record stays schema-valid and consistent with the catalog.
 
 use anyhow::{Context, Result, anyhow, bail};
 use fencerunner::emit_support::{
@@ -36,11 +39,15 @@ fn run() -> Result<()> {
     let args = CliArgs::parse()?;
     let repo_root = find_repo_root()?;
 
+    // Resolve helper paths and catalog/schema locations early so error messages
+    // mention concrete paths instead of default values.
     let detect_stack = resolve_helper_binary(&repo_root, "detect-stack")?;
 
     let capability_catalog_path =
         resolve_catalog_path(&repo_root, args.catalog_path.as_deref().map(Path::new));
     let boundary_schema_path = resolve_boundary_schema_path(&repo_root)?;
+    // The catalog drives validation and the capability snapshots we attach to
+    // the boundary object.
     let capability_index = CapabilityIndex::load(&capability_catalog_path).with_context(|| {
         format!(
             "loading capability catalog from {}",
@@ -71,6 +78,7 @@ fn run() -> Result<()> {
         ..
     } = args;
 
+    // Validate capability ids against the catalog before building the record.
     validate_capability_id(
         &capability_index,
         &primary_capability_id,
@@ -88,6 +96,8 @@ fn run() -> Result<()> {
         Some(operation_args.build("operation args")?)
     };
 
+    // detect-stack is the only allowed helper for stack metadata; keep probes
+    // free from OS-specific commands.
     let stack_raw = run_command_json(&detect_stack, &[])
         .with_context(|| format!("Failed to execute {}", detect_stack.display()))?;
     let stack: StackInfo = serde_json::from_value(stack_raw)
@@ -95,6 +105,7 @@ fn run() -> Result<()> {
 
     let workspace_root = resolve_workspace_root()?;
 
+    // Only populate details when something was provided, keeping JSON concise.
     let details = if exit_code.is_some()
         || errno.is_some()
         || message.is_some()
@@ -133,6 +144,8 @@ fn run() -> Result<()> {
         )
     })?;
 
+    // Assemble the full boundary object with catalog snapshots so the record
+    // is self-describing even if the on-disk catalog changes later.
     let record = BoundaryObject {
         probe: ProbeInfo { id: probe_name },
         operation: OperationInfo {
@@ -162,6 +175,8 @@ fn run() -> Result<()> {
         extensions: None,
     };
 
+    // Validate against schema before printing; probes depend on hard failures
+    // here to catch mistakes early.
     let record_json = serde_json::to_value(&record)?;
     boundary_schema.validate(&record_json)?;
     println!("{}", serde_json::to_string(&record)?);
@@ -194,6 +209,8 @@ impl CliArgs {
         let mut args = env::args_os().skip(1);
         let mut config = PartialArgs::default();
 
+        // Parse flags into a partial struct so we can report all missing
+        // required fields in one place.
         while let Some(arg_os) = args.next() {
             let arg = os_to_string(arg_os);
             match arg.as_str() {
@@ -416,6 +433,7 @@ fn parse_i64(value: String, label: &str) -> Result<i64> {
 }
 
 fn os_to_string(value: OsString) -> String {
+    // Probes can pass non-UTF8 values; encode them so errors are visible.
     match value.into_string() {
         Ok(val) => val,
         Err(os) => escape_os_value(os),
@@ -440,6 +458,7 @@ fn escape_bytes(bytes: &[u8]) -> String {
         if byte.is_ascii_graphic() || byte == b' ' {
             out.push(byte as char);
         } else {
+            // Represent non-printables in a compact \xNN form for diagnostics.
             write!(&mut out, "\\x{byte:02X}").expect("write to string");
         }
     }
@@ -447,6 +466,7 @@ fn escape_bytes(bytes: &[u8]) -> String {
 }
 
 fn run_command_json(path: &Path, args: &[&str]) -> Result<Value> {
+    // Small helper to run detect-stack and parse its JSON output.
     let output = Command::new(path)
         .args(args)
         .stdout(Stdio::piped())
@@ -474,6 +494,7 @@ fn resolve_secondary_capabilities<'a>(
 }
 
 fn resolve_workspace_root() -> Result<Option<String>> {
+    // Respect FENCE_WORKSPACE_ROOT first, then git/PWD/current-dir fallbacks.
     if let Ok(env_root) = env::var("FENCE_WORKSPACE_ROOT") {
         if !env_root.is_empty() {
             return Ok(Some(canonicalize_string(env_root)));
@@ -516,6 +537,7 @@ fn canonicalize_string(path: String) -> String {
 }
 
 fn canonicalize_pathbuf(path: PathBuf) -> String {
+    // Best-effort canonicalization keeps reporting stable but never fails hard.
     fs::canonicalize(&path)
         .unwrap_or(path)
         .display()

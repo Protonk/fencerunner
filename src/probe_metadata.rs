@@ -73,6 +73,7 @@ fn parse_assignment(contents: &str, var: &str) -> Option<String> {
     let prefix = var;
     for line in contents.lines() {
         let trimmed = line.trim_start();
+        // Ignore commented lines so commented-out assignments do not count.
         if trimmed.starts_with('#') {
             continue;
         }
@@ -98,6 +99,8 @@ fn parse_assignment(contents: &str, var: &str) -> Option<String> {
                 return Some(value[..end].to_string());
             }
         } else {
+            // Unquoted values get the first token only; anything more complex
+            // is treated as dynamic and ignored.
             let token = value.split_whitespace().next().unwrap_or("").trim();
             if !token.is_empty() {
                 return Some(token.to_string());
@@ -115,6 +118,7 @@ fn parse_secondary_capabilities(contents: &str) -> Vec<CapabilityId> {
         let trimmed = line.trim_start();
 
         if array_open {
+            // We are inside a multi-line secondary_capability_ids=(...) array.
             let (segment, closed) = array_segment(trimmed);
             push_tokens(segment, &mut ids);
             if closed {
@@ -124,6 +128,7 @@ fn parse_secondary_capabilities(contents: &str) -> Vec<CapabilityId> {
         }
 
         if let Some(value) = trimmed.strip_prefix("secondary_capability_id=") {
+            // Support singular secondary_capability_id=... assignments.
             if let Some(id) = parse_token(value.trim()) {
                 ids.insert(id);
             }
@@ -131,6 +136,7 @@ fn parse_secondary_capabilities(contents: &str) -> Vec<CapabilityId> {
         }
 
         if let Some(rest) = trimmed.strip_prefix("secondary_capability_ids=(") {
+            // Support array assignments: secondary_capability_ids=(cap_a cap_b).
             let (segment, closed) = array_segment(rest);
             push_tokens(segment, &mut ids);
             array_open = !closed;
@@ -138,6 +144,7 @@ fn parse_secondary_capabilities(contents: &str) -> Vec<CapabilityId> {
         }
 
         if trimmed.contains("--secondary-capability-id") {
+            // Support flags in inline emit-record invocations.
             push_from_flags(trimmed, &mut ids);
         }
     }

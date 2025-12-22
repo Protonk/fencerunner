@@ -55,6 +55,7 @@ fn resolve_probes(repo_root: &Path, catalog_path: &Path, cli: &Cli) -> Result<Ve
             if explicit {
                 return list_probes(repo_root);
             }
+            // PROBES/PROBES_RAW allow a smaller slice without changing CLI args.
             let requested = env::var("PROBES")
                 .or_else(|_| env::var("PROBES_RAW"))
                 .ok()
@@ -88,6 +89,7 @@ fn run_probe(
     probe: &Probe,
     catalog_path: &Path,
 ) -> Result<()> {
+    // probe-exec enforces the probe contract and exports FENCE_* metadata.
     let runner = resolve_helper_binary(repo_root, "probe-exec")?;
     let output = Command::new(&runner)
         .arg(&probe.path)
@@ -103,6 +105,8 @@ fn run_probe(
         bail!("Probe {} returned non-zero exit code {code}", probe.id);
     }
 
+    // Keep the output compact and single-line so downstream consumers can
+    // stream records as NDJSON.
     let json_value: Value = serde_json::from_slice(&output.stdout).with_context(|| {
         format!("Failed to parse boundary object for probe {}", probe.id)
     })?;

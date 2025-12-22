@@ -47,6 +47,9 @@ pub fn validate_boundary_objects(
     capabilities: &CapabilityIndex,
     dirs: &[PathBuf],
 ) -> Result<Vec<String>> {
+    // This function is intentionally forgiving: it returns a list of
+    // validation errors so tests can surface all missing capability IDs in one
+    // run instead of failing fast on the first file.
     let mut errors = Vec::new();
     let json_files = find_json_files(dirs)?;
     for json_file in json_files {
@@ -86,6 +89,7 @@ pub fn validate_boundary_objects(
 }
 
 fn find_json_files(dirs: &[PathBuf]) -> Result<Vec<PathBuf>> {
+    // Deterministic ordering helps tests and CI output stay stable.
     let mut files = Vec::new();
     for dir in dirs {
         collect_json(dir, &mut files)?;
@@ -112,6 +116,8 @@ fn collect_json(dir: &Path, acc: &mut Vec<PathBuf>) -> Result<()> {
 
 fn extract_capability_ids(value: &Value) -> Vec<CapabilityId> {
     let mut ids = Vec::new();
+    // Look in both the probe metadata and capability_context blocks because
+    // older fixtures might only contain one of them.
     if let Some(id) = value
         .pointer("/context/probe/primary_capability_id")
         .and_then(Value::as_str)

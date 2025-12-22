@@ -1,3 +1,9 @@
+//! Shared helpers for building boundary-object payloads and validating inputs.
+//!
+//! These functions back `emit-record`. They focus on enforcing the probe
+//! contract (single payload source, bounded size, valid capability IDs) while
+//! keeping the CLI parsing code readable.
+
 use anyhow::{Context, Result, bail};
 use serde_json::{Map, Value, json};
 use std::collections::BTreeSet;
@@ -6,6 +12,7 @@ use std::path::{Path, PathBuf};
 
 use crate::{CapabilityId, CapabilityIndex};
 
+// Keep payloads small and predictable; probes should emit summaries, not logs.
 const PAYLOAD_MAX_BYTES: usize = 4096;
 
 #[derive(Default, Clone)]
@@ -66,6 +73,8 @@ impl PayloadArgs {
             })
         };
 
+        // Apply the size limit to the final serialized JSON to match what is
+        // actually emitted on stdout.
         enforce_payload_size(&payload)?;
         Ok(payload)
     }
@@ -145,6 +154,7 @@ impl JsonObjectBuilder {
             match source {
                 JsonValueSource::MergeObject(obj) => merge_object(&mut map, obj),
                 JsonValueSource::SetField { key, value } => {
+                    // Later sources override earlier ones, matching CLI flag order.
                     map.insert(key.clone(), value.clone());
                     Ok(())
                 }
@@ -173,6 +183,7 @@ pub enum TextSource {
 
 fn merge_object(target: &mut Map<String, Value>, source: &Map<String, Value>) -> Result<()> {
     for (key, value) in source {
+        // Last writer wins, mirroring how JSON merge flags are expected to work.
         target.insert(key.clone(), value.clone());
     }
     Ok(())
@@ -182,6 +193,7 @@ fn build_snippet_value(source: Option<TextSource>) -> Result<Value> {
     let Some(src) = source else {
         return Ok(Value::Null);
     };
+    // Snippets are cleaned and truncated to keep boundary objects compact.
     let text = read_text_source(&src)?;
     Ok(Value::String(truncate_snippet(&text)))
 }
@@ -200,6 +212,7 @@ fn read_text_source(source: &TextSource) -> Result<String> {
 }
 
 fn clean_text(raw: &str) -> String {
+    // Some probes can emit NULs; strip them so JSON output stays valid.
     raw.replace('\0', "")
 }
 
@@ -207,6 +220,7 @@ const SNIPPET_MAX_CHARS: usize = 400;
 const SNIPPET_ELLIPSIS: &str = "\u{2026}";
 
 fn truncate_snippet(text: &str) -> String {
+    // Count chars (not bytes) so multi-byte UTF-8 does not get split.
     let mut acc = String::new();
     for (idx, ch) in text.chars().enumerate() {
         if idx >= SNIPPET_MAX_CHARS {
@@ -224,6 +238,7 @@ fn read_json_file(path: &Path) -> Result<Value> {
 }
 
 fn enforce_payload_size(payload: &Value) -> Result<()> {
+    // Size is measured after serialization to account for JSON overhead.
     let bytes = serde_json::to_vec(payload).context("Failed to serialize payload for size check")?;
     let size = bytes.len();
     if size > PAYLOAD_MAX_BYTES {
@@ -237,6 +252,7 @@ fn enforce_payload_size(payload: &Value) -> Result<()> {
 }
 
 pub fn validate_outcome(outcome: &str) -> Result<()> {
+    // Outcomes are a fixed vocabulary to keep downstream analytics stable.
     match outcome {
         "success" | "denied" | "partial" | "error" => Ok(()),
         other => bail!("Unknown outcome: {other} (expected success|denied|partial|error)"),
@@ -261,6 +277,7 @@ pub fn normalize_secondary_ids(
     capabilities: &CapabilityIndex,
     raw: &[CapabilityId],
 ) -> Result<Vec<CapabilityId>> {
+    // Normalize whitespace and de-duplicate for deterministic output.
     let mut acc: BTreeSet<CapabilityId> = BTreeSet::new();
     for value in raw {
         let trimmed = value.0.trim();

@@ -1,10 +1,11 @@
 //! Shared library for the probe harness.
 //!
-//! This crate is intentionally small and repetitive to make visible
-//! how the layers stack. Each public function exists because a binary
-//! depends on it; treat them as contracts and
-//! keep behavior aligned with the narrative in README.md plus the domain
-//! guides under catalogs/, boundary/, and probes/.
+//! This crate is intentionally small and repetitive to make visible how the
+//! layers stack. Each public function exists because a binary depends on it;
+//! treat them as contracts and keep behavior aligned with the narrative in
+//! README.md plus the domain guides under catalogs/, boundary/, and probes/.
+//! This module holds shared "repo plumbing": repo discovery, catalog and schema
+//! resolution, and probe lookup logic.
 
 use anyhow::{Context, Result, bail};
 use serde_json::Value;
@@ -39,6 +40,8 @@ pub use metadata_validation::{validate_boundary_objects, validate_probe_capabili
 pub use probe_metadata::{ProbeMetadata, collect_probe_scripts};
 
 // === Repository discovery and helper resolution ===
+// A tiny file under bin/ that ships with the repo. We use it as a cheap "yes,
+// this is the root" marker instead of trusting cwd alone.
 const ROOT_SENTINEL: &str = "bin/.gitkeep";
 const MAKEFILE: &str = "Makefile";
 const ENV_CATALOG_PATH: &str = "CATALOG_PATH";
@@ -48,7 +51,9 @@ pub const CANONICAL_BOUNDARY_SCHEMA_PATH: &str = "boundary/boundary_object_schem
 /// Default paths for catalog and boundary schemas, resolved relative to a repo root.
 #[derive(Debug, Clone)]
 pub struct DefaultSchemaPaths {
+    /// Absolute path to the capability catalog JSON file.
     pub catalog: PathBuf,
+    /// Absolute path to the boundary-object schema JSON file.
     pub boundary: PathBuf,
 }
 
@@ -73,6 +78,7 @@ fn repo_root_from_hint(hint: &str) -> Option<PathBuf> {
     fs::canonicalize(hint_path).ok()
 }
 
+/// Walk upward from `start` to find the first directory that looks like a repo.
 fn search_upwards(start: &Path) -> Option<PathBuf> {
     let mut dir = fs::canonicalize(start).ok()?;
     loop {
@@ -129,6 +135,7 @@ fn resolve_repo_data_path(
     env_key: &str,
     default_path: &Path,
 ) -> PathBuf {
+    // Order matters: explicit CLI path wins, then env var, then repo default.
     if let Some(path) = cli_override {
         return repo_relative(repo_root, path);
     }
@@ -141,6 +148,7 @@ fn resolve_repo_data_path(
 }
 
 fn repo_relative(repo_root: &Path, candidate: &Path) -> PathBuf {
+    // Absolute paths pass through unchanged; relative paths are anchored to the repo.
     if candidate.is_absolute() {
         candidate.to_path_buf()
     } else {
@@ -186,6 +194,7 @@ pub fn resolve_helper_binary(repo_root: &Path, name: &str) -> Result<PathBuf> {
 // === Small parsing helpers ===
 /// Split comma- or whitespace-delimited configuration lists into tokens.
 pub fn split_list(value: &str) -> Vec<String> {
+    // Simple normalization helper for env vars like "a,b c".
     value
         .replace(',', " ")
         .split_whitespace()
@@ -205,6 +214,8 @@ pub fn parse_json_stream(input: &str) -> Result<Vec<BoundaryObject>> {
         bail!("No input provided on stdin");
     }
 
+    // First try to parse the whole input as a JSON value. If that fails we
+    // fall back to the NDJSON line-by-line path below.
     if let Ok(value) = serde_json::from_str::<Value>(trimmed) {
         return match value {
             Value::Array(items) => items
@@ -269,6 +280,8 @@ pub fn resolve_probe(repo_root: &Path, identifier: &str) -> Result<Probe> {
     }
     let trimmed = trimmed.strip_prefix("./").unwrap_or(trimmed);
 
+    // Build a small set of path candidates so users can pass "id", "id.sh",
+    // "probes/id.sh", or a repo-relative path.
     let mut attempts = Vec::new();
     let input_path = PathBuf::from(trimmed);
     if input_path.is_absolute() {
@@ -309,6 +322,7 @@ pub fn resolve_probe(repo_root: &Path, identifier: &str) -> Result<Probe> {
 /// least the fixtures to exist.
 pub fn list_probes(repo_root: &Path) -> Result<Vec<Probe>> {
     let probes_root = canonical_probes_root(repo_root)?;
+    // BTreeMap keeps ordering stable across platforms and filesystems.
     let mut results: BTreeMap<String, Probe> = BTreeMap::new();
     for entry in fs::read_dir(&probes_root)? {
         let entry = entry?;

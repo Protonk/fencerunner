@@ -11,6 +11,7 @@ use serde::Serialize;
 use std::collections::BTreeMap;
 
 // Probes used by tests or contract fixtures should not count toward coverage.
+// Keeping this list short and explicit forces new fixtures to be intentional.
 const IGNORED_PROBE_IDS: &[&str] = &["tests_fixture_probe", "tests_static_contract_broken"];
 
 #[derive(Debug, Clone, Serialize)]
@@ -84,6 +85,7 @@ pub fn validate_coverage_against_map(
 
 /// Filter out probes that should not affect coverage reporting.
 pub fn filter_coverage_probes(probes: &[ProbeMetadata]) -> Vec<ProbeMetadata> {
+    // Clone the metadata so callers can reuse the original list unchanged.
     probes
         .iter()
         .cloned()

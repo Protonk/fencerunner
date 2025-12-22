@@ -97,6 +97,8 @@ pub(crate) fn load_json_schema(
         }
     }
 
+    // JSONSchema wants a 'static reference; keep the Value in an Arc and leak
+    // a stable pointer so the compiled validator can outlive this function.
     let raw = Arc::new(schema_value);
     let raw_static: &'static Value = unsafe { &*(Arc::as_ptr(&raw)) };
     let compiled = JSONSchema::compile(raw_static)

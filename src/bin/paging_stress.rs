@@ -168,6 +168,7 @@ fn run_workload(config: &Config) -> Result<(), RunError> {
         ));
     }
 
+    // Use page counts so the access pattern stays stable across hosts.
     let page_count = page_count(config.total_bytes, page_size);
     let deadline = config.max_seconds.map(Duration::from_secs);
 
@@ -212,6 +213,7 @@ fn sequential_sweep(
             if idx % DEADLINE_CHECK_INTERVAL == 0 {
                 check_deadline(start, deadline)?;
             }
+            // Touch one byte per page to force allocation without heavy writes.
             touch_page(buffer, idx, page_size);
         }
     }
@@ -233,6 +235,7 @@ fn random_sweep(
     let mut indices: Vec<usize> = (0..page_count).collect();
     for pass in 0..passes {
         check_deadline(start, deadline)?;
+        // Deterministic shuffle so repeated runs are comparable.
         let seed = (pass + 1) ^ (page_count as u64).wrapping_mul(0x9E3779B97F4A7C15);
         shuffle_indices(&mut indices, seed);
         for (idx, &page) in indices.iter().enumerate() {
@@ -247,6 +250,7 @@ fn random_sweep(
 }
 
 fn shuffle_indices(indices: &mut [usize], seed: u64) {
+    // Fisher-Yates with a tiny PRNG for portability and speed.
     let mut rng = XorShift64::new(seed);
     for i in (1..indices.len()).rev() {
         let j = (rng.next() as usize) % (i + 1);

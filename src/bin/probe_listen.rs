@@ -4,6 +4,9 @@
 //! `fencerunner --bang | fencerunner --listen`. It leans on the shared
 //! boundary reader so it understands the exact boundary schema without rolling
 //! bespoke parsers.
+//!
+//! This is a "reader", not a mutator. It never rewrites JSON, it only
+//! validates and formats a human summary.
 
 use anyhow::{Context, Result, anyhow, bail};
 use fencerunner::{
@@ -56,6 +59,7 @@ pub fn render_listen_output<R: BufRead, W: fmt::Write>(
 ) -> Result<(), ListenError> {
     let records = read_boundary_objects(reader).map_err(ListenError::Boundary)?;
     for record in &records {
+        // Validate each record so bad output is caught before summarizing.
         let value = serde_json::to_value(record).map_err(ListenError::Serialize)?;
         boundary_schema
             .validate(&value)

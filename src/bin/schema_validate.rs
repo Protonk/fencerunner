@@ -50,6 +50,7 @@ fn read_input(file: Option<PathBuf>) -> Result<Value> {
             .read_to_string(&mut buf)
             .with_context(|| format!("reading input file {}", path.display()))?;
     } else {
+        // Stdin mode keeps the tool usable in pipelines.
         stdin()
             .read_to_string(&mut buf)
             .context("reading stdin for input JSON")?;
@@ -121,6 +122,7 @@ fn validate_catalog_schema_shape(
 }
 
 fn resolve_catalog_schema_path(catalog_path: &PathBuf) -> PathBuf {
+    // Prefer a schema next to the catalog, then fall back to the repo default.
     if let Some(parent) = catalog_path.parent() {
         let candidate = parent.join("capability_catalog.schema.json");
         if candidate.exists() {
@@ -142,6 +144,8 @@ fn validate_catalog(input: &Value, catalog_path: &PathBuf) -> Result<()> {
     let allowed = fencerunner::catalog::index::allowed_schema_versions();
     let schema_path = resolve_catalog_schema_path(catalog_path);
 
+    // Parse and compile the schema explicitly so we can add extra checks and
+    // clearer error messages than the JSONSchema crate alone provides.
     let raw_schema: Arc<Value> = Arc::new(
         serde_json::from_reader(
             File::open(&schema_path)

@@ -21,6 +21,7 @@ fn run() -> Result<()> {
             if let Some(resolved) = resolve_realpath(&path) {
                 println!("{}", resolved.display());
             } else {
+                // Match shell-friendly behavior: emit an empty line when missing.
                 println!();
             }
         }
@@ -93,6 +94,7 @@ fn resolve_realpath(path: &Path) -> Option<PathBuf> {
 }
 
 fn absolute_path(path: &Path) -> PathBuf {
+    // Keep this logic tiny so it behaves the same across macOS/Linux.
     let candidate = if path.is_absolute() {
         path.to_path_buf()
     } else {
@@ -108,6 +110,7 @@ fn compute_relpath(target: &Path, base: &Path) -> PathBuf {
     let target_abs = absolute_path(target);
     let base_abs = absolute_path(base);
 
+    // Work at the component level so we can walk the shared prefix safely.
     let target_components: Vec<_> = target_abs.components().collect();
     let base_components: Vec<_> = base_abs.components().collect();
 

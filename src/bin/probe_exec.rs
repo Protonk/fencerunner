@@ -4,6 +4,10 @@
 //! - resolve probes strictly within `probes/`
 //! - export probe-facing environment expected by probe scripts and `emit-record`
 //! - honor workspace overrides without silently falling back to host defaults
+//!
+//! This binary does not parse the probe output; it only runs the script with
+//! the right environment. The probe itself is responsible for calling
+//! `emit-record` exactly once.
 
 use anyhow::{Context, Result, bail};
 use fencerunner::fence_run_support::{
@@ -32,6 +36,8 @@ fn run() -> Result<()> {
     let catalog_path = resolve_catalog_path(&repo_root, args.catalog_path.as_deref());
     let workspace_root = canonicalize_path(&repo_root);
     let workspace_plan = determine_workspace_plan(&workspace_root, args.workspace_override)?;
+    // Probe resolution is strict to avoid running arbitrary scripts outside
+    // the trusted probes/ tree.
     let resolved_probe = resolve_probe(&workspace_root, &args.probe_name)?;
     let parsed_metadata = ProbeMetadata::from_script(&resolved_probe.path)?;
     let _resolved_metadata = resolve_probe_metadata(&resolved_probe, parsed_metadata)?;
@@ -197,6 +203,8 @@ fn run_command(
     command_cwd: &Path,
     catalog_path: &Path,
 ) -> Result<()> {
+    // Probes are executed directly; they are expected to emit a single JSON
+    // record to stdout and keep stderr for diagnostics only.
     let mut command = Command::new(probe_path);
     command.current_dir(command_cwd);
     command.env("CATALOG_PATH", catalog_path);

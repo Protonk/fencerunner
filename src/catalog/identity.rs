@@ -1,3 +1,8 @@
+//! Stable identifiers for capability catalogs and entries.
+//!
+//! The wrapper types keep serialization consistent across JSON boundaries and
+//! make the API self-documenting.
+
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 /// Versioned key for a capability catalog (e.g., `macOS_codex_v1`).
@@ -85,6 +90,8 @@ impl CapabilityCategory {
     }
 
     fn from_str(value: &str) -> Self {
+        // Unknown categories map to Other so older binaries can read new
+        // catalogs without failing deserialization.
         match value {
             "filesystem" => CapabilityCategory::Filesystem,
             "process" => CapabilityCategory::Process,
@@ -127,6 +134,7 @@ impl CapabilityLayer {
     }
 
     fn from_str(value: &str) -> Self {
+        // Same forward-compatibility story as CapabilityCategory.
         match value {
             "os_sandbox" => CapabilityLayer::OsSandbox,
             "agent_runtime" => CapabilityLayer::AgentRuntime,

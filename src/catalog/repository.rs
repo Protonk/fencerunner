@@ -17,6 +17,7 @@ pub struct CatalogRepository {
 impl CatalogRepository {
     /// Register a catalog for later lookup.
     pub fn register(&mut self, catalog: CapabilityCatalog) {
+        // Last writer wins; callers are expected to avoid duplicate keys.
         self.catalogs.insert(catalog.catalog.key.clone(), catalog);
     }
 

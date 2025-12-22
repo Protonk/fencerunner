@@ -24,6 +24,7 @@ fn run() -> Result<()> {
     let mut script_args: Vec<String> = Vec::new();
 
     if !args.is_empty() && !args[0].starts_with('-') {
+        // Allow "probe-gate <id>" as a shorthand for "--probe <id>".
         if has_probe_flag {
             return Err(anyhow!(
                 "cannot mix positional probe id with --probe flag; remove one"
@@ -38,6 +39,7 @@ fn run() -> Result<()> {
     let script = repo_root.join("tools/validate_contract_gate.sh");
     let mut cmd = Command::new(&script);
     cmd.current_dir(&repo_root)
+        // Force the script path so the gate logic is consistent with CI.
         .env("FENCE_TEST_FORCE_SCRIPT", "1")
         .stdin(Stdio::inherit())
         .stdout(Stdio::inherit())

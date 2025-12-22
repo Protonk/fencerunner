@@ -21,6 +21,8 @@ pub fn helper_is_executable(path: &Path) -> bool {
     }
     #[cfg(not(unix))]
     {
+        // Non-Unix platforms do not expose Unix-style execute bits. For our
+        // use cases (CI containers and macOS/Linux), existence is sufficient.
         true
     }
 }
@@ -50,7 +52,8 @@ pub fn repo_helper_candidates(repo_root: &Path, name: &str, prefer_target: bool)
     };
 
     // Always include fallbacks so callers find any existing build regardless of
-    // the initial ordering.
+    // the initial ordering. This avoids "missing helper" errors if the first
+    // choice is stale but a different build exists.
     candidates.push(target_release);
     candidates.push(target_debug);
     candidates.push(synced);

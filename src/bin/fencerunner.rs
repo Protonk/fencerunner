@@ -5,6 +5,10 @@
 //! synced `bin/` artifacts). It also injects `FENCE_ROOT` when possible so
 //! helpers can locate probes and fixtures even when invoked from an installed
 //! location.
+//!
+//! This is intentionally a thin wrapper. The heavy lifting lives in
+//! `probe-matrix` and `probe-listen`, which are easier to test and reuse in
+//! isolation.
 
 use anyhow::{Context, Result, anyhow, bail};
 use fencerunner::{
@@ -25,6 +29,7 @@ fn main() {
 
 fn run() -> Result<()> {
     let cli = Cli::parse()?;
+    // Repo discovery is best-effort here so installed binaries can still run.
     let repo_root = find_repo_root().ok();
 
     run_helper(&cli, repo_root.as_deref())
@@ -57,6 +62,7 @@ impl Cli {
     let mut command: Option<CommandTarget> = None;
     let mut trailing_args: Vec<OsString> = Vec::new();
 
+    // Parse a minimal set of flags and pass everything else to the helper.
     while let Some(arg) = args.next() {
         let arg_str = arg
             .to_str()
@@ -150,6 +156,8 @@ fn run_helper(cli: &Cli, repo_root: Option<&Path>) -> Result<()> {
         .status()
         .with_context(|| format!("Failed to execute {}", helper_path.display()))?;
 
+    // Preserve the helper's exit code so shell callers can reason about
+    // success/failure without fencerunner adding its own mapping.
     if status.success() {
         return Ok(());
     }

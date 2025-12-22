@@ -17,6 +17,7 @@ fn main() {
 
 fn run() -> Result<()> {
     ensure_no_args();
+    // Keep the OS string compact; this output is embedded in every boundary record.
     let os_info = detect_uname(&["-srm"]).unwrap_or_else(|| fallback_os_info());
 
     let info = StackInfo { os: os_info };
@@ -33,6 +34,7 @@ struct StackInfo {
 fn ensure_no_args() {
     let mut args = env::args().skip(1);
     if let Some(first) = args.next() {
+        // detect-stack is intentionally flag-free to keep probes simple.
         if matches!(first.as_str(), "-h" | "--help") {
             usage_and_exit();
         }

@@ -118,6 +118,8 @@ fn default_catalog_schema_version() -> String {
 }
 
 fn catalog_schema_version_from_disk() -> Option<String> {
+    // Read the schema_version const from the schema file so tests and tooling
+    // stay aligned when the schema is updated.
     let path = canonical_catalog_schema_path();
     let file = File::open(path).ok()?;
     let value: Value = serde_json::from_reader(BufReader::new(file)).ok()?;
@@ -220,6 +222,8 @@ fn validate_against_schema(catalog_path: &Path) -> Result<()> {
     let catalog_value: Value = serde_json::from_reader(BufReader::new(catalog_file))
         .with_context(|| format!("parsing catalog {}", catalog_path.display()))?;
 
+    // Allow per-catalog schema neighbors for local testing, then fall back to
+    // the canonical schema under catalogs/.
     let schema_path = resolve_catalog_schema_path(catalog_path);
     let allowed = allowed_schema_versions();
     let schema = load_json_schema(
