@@ -1,6 +1,9 @@
 #![cfg(unix)]
 #![allow(dead_code)]
 
+// Shared fixtures and builders for integration tests. These helpers centralize
+// temp dirs, probe fixtures, and sample boundary objects so tests stay focused
+// on contract behavior instead of setup details.
 use anyhow::{Context, Result, bail};
 use fencerunner::boundary::{
     BoundaryObject, CapabilityContext, ContextInfo, OperationInfo, ProbeContext, ProbeInfo,
@@ -23,6 +26,8 @@ use tempfile::NamedTempFile;
 
 use crate::support::repo_root;
 
+// Fixture probes are installed into probes/ so we can exercise real probe
+// discovery paths. Drop removes them to keep the repo clean between tests.
 // Helper for installing temporary probe mocks under probes/ and cleaning them
 // up after each test.
 pub struct FixtureProbe {
@@ -31,6 +36,7 @@ pub struct FixtureProbe {
 }
 
 impl FixtureProbe {
+    /// Install the minimal probe fixture with a new name under probes/.
     pub fn install(repo_root: &Path, name: &str) -> Result<Self> {
         let source = repo_root.join("tests/mocks/minimal_probe.sh");
         let dest = repo_root.join("probes").join(format!("{name}.sh"));
@@ -48,6 +54,7 @@ impl FixtureProbe {
         })
     }
 
+    /// Install a named fixture script from tests/mocks.
     pub fn install_from_fixture(repo_root: &Path, fixture: &str, name: &str) -> Result<Self> {
         let source = repo_root.join("tests/mocks").join(fixture);
         let dest = repo_root.join("probes").join(format!("{name}.sh"));
@@ -70,6 +77,7 @@ impl FixtureProbe {
         })
     }
 
+    /// Write a custom fixture script to probes/ with executable permissions.
     pub fn install_from_contents(repo_root: &Path, name: &str, contents: &str) -> Result<Self> {
         let dest = repo_root.join("probes").join(format!("{name}.sh"));
         if dest.exists() {
@@ -86,28 +94,34 @@ impl FixtureProbe {
         })
     }
 
+    /// Return the probe id (derived from the filename stem).
     pub fn probe_id(&self) -> &str {
         &self.name
     }
 }
 
 impl Drop for FixtureProbe {
+    // RAII cleanup makes probe fixtures safe in parallel test runs.
     fn drop(&mut self) {
         let _ = fs::remove_file(&self.path);
     }
 }
 
+// A lightweight guard for temporary files/symlinks created in repo paths.
 // Removes the referenced file on drop so tests can create temporary symlinks.
 pub struct FileGuard {
     pub path: PathBuf,
 }
 
 impl Drop for FileGuard {
+    // Drop is infallible by design; ignore removal errors to avoid masking test results.
     fn drop(&mut self) {
         let _ = fs::remove_file(&self.path);
     }
 }
 
+// RepoGuard serializes tests that mutate probes/ or other shared repo paths.
+// Using a Mutex ensures concurrent tests don't stomp on each other's fixtures.
 // Serializes repository-mutating tests so fixture installs do not conflict.
 pub struct RepoGuard {
     _guard: MutexGuard<'static, ()>,
@@ -120,12 +134,15 @@ pub fn repo_guard() -> RepoGuard {
     RepoGuard { _guard: guard }
 }
 
+/// Parse a boundary object from raw bytes and keep both typed and raw views.
+/// This is handy when we want schema shape assertions on the raw JSON.
 pub fn parse_boundary_object(bytes: &[u8]) -> Result<(BoundaryObject, Value)> {
     let value: Value = serde_json::from_slice(bytes)?;
     let record: BoundaryObject = serde_json::from_value(value.clone())?;
     Ok((record, value))
 }
 
+/// Make a path printable relative to the repo root for diagnostics.
 #[allow(dead_code)]
 pub fn relative_to_repo(path: &Path, repo_root: &Path) -> String {
     path.strip_prefix(repo_root)
@@ -138,6 +155,7 @@ pub struct TempRepo {
 }
 
 impl TempRepo {
+    /// Create a unique temp directory to stand in for a repo root.
     pub fn new() -> Self {
         static COUNTER: AtomicUsize = AtomicUsize::new(0);
         let mut dir = env::temp_dir();
@@ -152,6 +170,7 @@ impl TempRepo {
 }
 
 impl Drop for TempRepo {
+    // Best-effort cleanup keeps temp dirs from piling up if tests abort.
     fn drop(&mut self) {
         let _ = fs::remove_dir_all(&self.root);
     }
@@ -162,6 +181,7 @@ pub struct TempWorkspace {
 }
 
 impl TempWorkspace {
+    /// Create a unique temp workspace root for workspace planning tests.
     pub fn new() -> Self {
         static COUNTER: AtomicUsize = AtomicUsize::new(0);
         let mut base = env::temp_dir();
@@ -177,11 +197,14 @@ impl TempWorkspace {
 }
 
 impl Drop for TempWorkspace {
+    // Temp workspaces are disposable; ignore errors on cleanup.
     fn drop(&mut self) {
         let _ = fs::remove_dir_all(&self.root);
     }
 }
 
+/// Build a minimal catalog file and load it as a CapabilityIndex.
+/// This keeps tests independent from the bundled catalog content.
 pub fn sample_capability_index(entries: &[(&str, &str, &str)]) -> Result<CapabilityIndex> {
     let mut file = NamedTempFile::new()?;
     let capabilities: Vec<Value> = entries
@@ -224,10 +247,12 @@ pub fn sample_capability_index(entries: &[(&str, &str, &str)]) -> Result<Capabil
         .with_context(|| "failed to load sample capability index".to_string())
 }
 
+/// Resolve the default catalog path using repo tooling so tests match production.
 pub fn catalog_path() -> PathBuf {
     default_catalog_path(&repo_root())
 }
 
+/// Cache the default catalog key to avoid re-reading the catalog in each test.
 pub fn default_catalog_key() -> CatalogKey {
     static KEY: OnceLock<CatalogKey> = OnceLock::new();
     KEY.get_or_init(|| {
@@ -240,10 +265,13 @@ pub fn default_catalog_key() -> CatalogKey {
     .clone()
 }
 
+/// Convenience for building empty JSON object payloads.
 pub fn empty_json_object() -> Value {
     Value::Object(Default::default())
 }
 
+/// A minimal but valid boundary object for serde round-trip tests.
+/// This is not meant to represent a real probe; it only exercises struct wiring.
 pub fn sample_boundary_object() -> BoundaryObject {
     BoundaryObject {
         probe: ProbeInfo {

@@ -17,6 +17,8 @@ use tempfile::TempDir;
 
 use common::{FixtureProbe, TempRepo, parse_boundary_object, repo_guard};
 
+// Smoke-test: the paging-stress fixture probe should emit a structured record.
+// This exercises probe-exec + emit-record + paging-stress together.
 #[test]
 fn paging_stress_probe_emits_expected_record() -> Result<()> {
     let repo_root = repo_root();
@@ -48,13 +50,14 @@ fn paging_stress_probe_emits_expected_record() -> Result<()> {
     );
     assert_eq!(
         value
-            .pointer("/operation/args/pattern")
-            .and_then(Value::as_str),
+        .pointer("/operation/args/pattern")
+        .and_then(Value::as_str),
         Some("random")
     );
     Ok(())
 }
 
+// paging-stress is expected to be quiet on stdout; probes parse exit codes only.
 #[test]
 fn paging_stress_runs_small_workload() -> Result<()> {
     let repo_root = repo_root();
@@ -79,6 +82,8 @@ fn paging_stress_runs_small_workload() -> Result<()> {
     Ok(())
 }
 
+// Invalid arguments should fail fast with exit code 1.
+// This protects probes from silently doing nothing.
 #[test]
 fn paging_stress_rejects_invalid_arguments() -> Result<()> {
     let repo_root = repo_root();
@@ -95,6 +100,7 @@ fn paging_stress_rejects_invalid_arguments() -> Result<()> {
     Ok(())
 }
 
+// list_probes and resolve_probe should agree on how ids and extensions behave.
 #[test]
 fn list_and_resolve_probes_share_semantics() -> Result<()> {
     let temp = TempRepo::new();
@@ -117,6 +123,8 @@ fn list_and_resolve_probes_share_semantics() -> Result<()> {
 
 // === json-extract helper semantics ===
 
+// json-extract should honor pointers, enforce types, and accept defaults.
+// Limitation: this does not test the full JSON Pointer escape rules.
 #[test]
 fn json_extract_enforces_pointer_and_type() -> Result<()> {
     let repo_root = repo_root();
@@ -176,6 +184,7 @@ fn json_extract_enforces_pointer_and_type() -> Result<()> {
     Ok(())
 }
 
+// A missing pointer should return the provided default value.
 #[test]
 fn json_extract_applies_default_value() -> Result<()> {
     let repo_root = repo_root();
@@ -199,6 +208,7 @@ fn json_extract_applies_default_value() -> Result<()> {
     Ok(())
 }
 
+// Unknown types should be rejected to keep the CLI explicit.
 #[test]
 fn json_extract_rejects_unknown_type() -> Result<()> {
     let repo_root = repo_root();
@@ -216,6 +226,8 @@ fn json_extract_rejects_unknown_type() -> Result<()> {
 
 // === emit-record builders and payload helpers ===
 
+// JsonObjectBuilder should allow later inserts to override earlier keys.
+// This mirrors how CLI flags can override JSON file contents.
 #[test]
 fn json_object_builder_overrides_fields() -> Result<()> {
     let mut builder = JsonObjectBuilder::default();
@@ -238,6 +250,7 @@ fn json_object_builder_overrides_fields() -> Result<()> {
     Ok(())
 }
 
+// PayloadArgs supports inline stdout/stderr text and raw payload fields.
 #[test]
 fn payload_builder_accepts_inline_snippets() -> Result<()> {
     let mut payload = PayloadArgs::default();
@@ -262,6 +275,7 @@ fn payload_builder_accepts_inline_snippets() -> Result<()> {
     Ok(())
 }
 
+// Payload size limits protect downstream consumers from huge embedded blobs.
 #[test]
 fn payload_builder_rejects_large_payloads() -> Result<()> {
     let mut payload = PayloadArgs::default();
@@ -280,6 +294,7 @@ fn payload_builder_rejects_large_payloads() -> Result<()> {
 
 // === portable-path helper semantics ===
 
+// portable-path relpath should produce clean relative paths for nested children.
 #[test]
 fn portable_path_relpath_matches_basics() -> Result<()> {
     let repo_root = repo_root();
@@ -297,6 +312,7 @@ fn portable_path_relpath_matches_basics() -> Result<()> {
     Ok(())
 }
 
+// relpath should handle parent traversal cleanly.
 #[test]
 fn portable_path_relpath_handles_parent() -> Result<()> {
     let repo_root = repo_root();
@@ -316,6 +332,7 @@ fn portable_path_relpath_handles_parent() -> Result<()> {
     Ok(())
 }
 
+// relpath of the same path should be "." (POSIX convention).
 #[test]
 fn portable_path_relpath_identical_path() -> Result<()> {
     let repo_root = repo_root();
@@ -332,6 +349,7 @@ fn portable_path_relpath_identical_path() -> Result<()> {
     Ok(())
 }
 
+// realpath should return empty output for nonexistent paths instead of failing.
 #[test]
 fn portable_path_realpath_nonexistent_is_blank() -> Result<()> {
     let repo_root = repo_root();

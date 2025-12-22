@@ -1,7 +1,7 @@
 #![cfg(unix)]
 
-// Schema and serialization guard rails: boundary object shape and capability
-// snapshot serde coverage.
+// Schema and serialization guard rails: boundary object shape, catalog schema,
+// and serde round-trip coverage for boundary/capability types.
 mod support;
 #[path = "support/common.rs"]
 mod common;
@@ -21,12 +21,14 @@ use tempfile::NamedTempFile;
 
 use common::{default_catalog_key, parse_boundary_object, sample_boundary_object};
 
-// Ensures boundary objects emitted via emit-record satisfy the boundary schema and
-// contain the required contextual metadata.
+// Ensures emit-record produces schema-valid boundary objects with required context.
+// We treat this as an integration test: use the real helper to catch flag or
+// schema drift that pure Rust unit tests would miss.
 #[test]
 fn boundary_object_schema() -> Result<()> {
     let repo_root = repo_root();
     let emit_record = helper_binary(&repo_root, "emit-record");
+    // Use a payload file to exercise the file-based payload path.
     let payload = json!({
         "stdout_snippet": "fixture-stdout",
         "stderr_snippet": "fixture-stderr",
@@ -58,11 +60,14 @@ fn boundary_object_schema() -> Result<()> {
         .arg("{\"fixture\":true}")
         .arg("--payload-file")
         .arg(payload_file.path());
+    // Prefer target builds during tests so the freshly built helper is used.
     emit_cmd.env("TEST_PREFER_TARGET", "1");
     let output = run_command(emit_cmd)?;
 
+    // Parse both typed and raw JSON so we can assert on types and raw shape.
     let (record, value) = parse_boundary_object(&output.stdout)?;
 
+    // Probe identity and core operation fields should match the CLI inputs.
     assert_eq!(record.probe.id, "schema_test_fixture");
     assert_eq!(record.operation.kind, "fs.read");
     assert_eq!(record.operation.target, "/dev/null");
@@ -74,6 +79,7 @@ fn boundary_object_schema() -> Result<()> {
             .unwrap_or(false)
     );
 
+    // Outcome validation covers the enumerated values expected by the schema.
     assert!(matches!(
         record.result.outcome.as_str(),
         "success" | "denied" | "partial" | "error"
@@ -84,6 +90,7 @@ fn boundary_object_schema() -> Result<()> {
     assert!(details.errno.is_none());
     assert!(details.error_detail.is_none());
 
+    // capabilities_schema_version is a catalog key; keep it URL-safe.
     let cap_schema = value
         .pointer("/context/capabilities_schema_version")
         .and_then(Value::as_str)
@@ -100,6 +107,7 @@ fn boundary_object_schema() -> Result<()> {
             .map(|s| s.is_object())
             .unwrap_or(false)
     );
+    // The run.command field captures the probe command we passed to emit-record.
     assert!(
         value
             .pointer("/context/run/command")
@@ -110,6 +118,7 @@ fn boundary_object_schema() -> Result<()> {
         assert!(ids.is_array());
     }
 
+    // Payload fields should round-trip with the values we provided.
     assert_eq!(
         value
             .pointer("/payload/stdout_snippet")
@@ -129,6 +138,7 @@ fn boundary_object_schema() -> Result<()> {
             .unwrap_or(false)
     );
 
+    // Capability snapshots should be populated based on the catalog id.
     let capability_context = value
         .pointer("/context/capability_context")
         .expect("capability_context present");
@@ -150,17 +160,20 @@ fn boundary_object_schema() -> Result<()> {
         assert!(secondary.is_array());
     }
 
+    // Cache schema parsing across tests; JSONSchema compilation is expensive.
     static BOUNDARY_OBJECT_SCHEMA: OnceLock<BoundarySchema> = OnceLock::new();
     let schema = BOUNDARY_OBJECT_SCHEMA.get_or_init(|| {
         let schema_path = resolve_boundary_schema_path(&repo_root).expect("resolve boundary schema");
         BoundarySchema::load(&schema_path).expect("load boundary schema")
     });
+    // Full schema validation is the ultimate contract check.
     schema.validate(&value)?;
 
     Ok(())
 }
 
-// Confirms the bundled capability catalog satisfies the generic catalog schema.
+// Confirms the bundled capability catalog satisfies the published JSON schema.
+// This is a schema-level check; CatalogIndex adds stricter runtime validation.
 #[test]
 fn capability_catalog_schema() -> Result<()> {
     let repo_root = repo_root();
@@ -188,6 +201,8 @@ fn capability_catalog_schema() -> Result<()> {
     Ok(())
 }
 
+// Serde round-trip for BoundaryObject ensures the structs map 1:1 with JSON.
+// Limitation: this uses a synthetic sample object, not the full emitted record.
 #[test]
 fn boundary_object_round_trips_structs() -> Result<()> {
     let bo = sample_boundary_object();
@@ -210,6 +225,7 @@ fn boundary_object_round_trips_structs() -> Result<()> {
     Ok(())
 }
 
+// The catalog key is serialized as a string; this ensures we don't lose it.
 #[test]
 fn capabilities_schema_version_serializes_in_json() -> Result<()> {
     let bo = sample_boundary_object();
@@ -223,6 +239,7 @@ fn capabilities_schema_version_serializes_in_json() -> Result<()> {
     Ok(())
 }
 
+// Capability snapshots should serialize to the JSON shape the schema expects.
 #[test]
 fn capability_snapshot_serializes_to_expected_shape() -> Result<()> {
     let snapshot = CapabilitySnapshot {
@@ -252,6 +269,8 @@ fn capability_snapshot_serializes_to_expected_shape() -> Result<()> {
     Ok(())
 }
 
+// Known enum values should round-trip, while unknown strings should map to `Other`.
+// This keeps catalog evolution compatible with older code.
 #[test]
 fn category_round_trips_known_and_unknown() {
     let known = CapabilityCategory::SandboxProfile;
@@ -270,6 +289,7 @@ fn category_round_trips_known_and_unknown() {
     assert_eq!(serialized, custom_json);
 }
 
+// Same round-trip behavior for policy layers.
 #[test]
 fn layer_round_trips_known_and_unknown() {
     let known = CapabilityLayer::AgentRuntime;
@@ -285,6 +305,7 @@ fn layer_round_trips_known_and_unknown() {
     assert_eq!(serialized, other_json);
 }
 
+// Schema-aligned fields should survive a serde round-trip intact.
 #[test]
 fn snapshot_serde_matches_schema() -> Result<()> {
     let snapshot = CapabilitySnapshot {
@@ -310,6 +331,7 @@ fn snapshot_serde_matches_schema() -> Result<()> {
     Ok(())
 }
 
+// Catalog keys and capability ids are thin wrappers; serde should preserve values.
 #[test]
 fn catalog_key_and_id_round_trip() {
     let key = default_catalog_key();

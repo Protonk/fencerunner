@@ -17,6 +17,7 @@ use common::{
 };
 
 // Confirms the static contract gate accepts the canonical fixture probe.
+// This checks the shell-level guard rails without running any probe logic.
 #[test]
 fn static_probe_contract_accepts_fixture() -> Result<()> {
     let repo_root = repo_root();
@@ -38,7 +39,7 @@ fn static_probe_contract_accepts_fixture() -> Result<()> {
 }
 
 // Ensures static contract enforcement rejects probes missing strict-mode
-// shell options so safety rules stay consistent.
+// shell options so safety rules stay consistent across all probes.
 #[test]
 fn static_probe_contract_rejects_missing_strict_mode() -> Result<()> {
     let repo_root = repo_root();
@@ -86,6 +87,7 @@ primary_capability_id="cap_fs_read_workspace_tree"
 
 // Exercises the dynamic probe contract gate to ensure the stub parser stays in
 // sync with emit-record flag usage.
+// This runs the probe in a shadow workspace with emit-record stubbed.
 #[test]
 fn dynamic_probe_contract_accepts_fixture() -> Result<()> {
     let repo_root = repo_root();
@@ -114,6 +116,7 @@ fn dynamic_probe_contract_accepts_fixture() -> Result<()> {
 }
 
 // Ensures probe-contract-gate fails fast when static issues are present.
+// The dynamic gate should not run when static validation already failed.
 #[test]
 fn contract_gate_rejects_static_violation() -> Result<()> {
     let repo_root = repo_root();
@@ -142,6 +145,7 @@ exit 0
 }
 
 // Confirms probe-contract-gate runs the fixture probe through the dynamic gate.
+// The wrapper should emit a success summary so CLI users get a clear signal.
 #[test]
 fn contract_gate_dynamic_accepts_fixture() -> Result<()> {
     let repo_root = repo_root();
@@ -160,6 +164,7 @@ fn contract_gate_dynamic_accepts_fixture() -> Result<()> {
 }
 
 // Verifies the dynamic gate detects probes that skip emit-record entirely.
+// This ensures we never accept probes that emit no boundary object.
 #[test]
 fn contract_gate_dynamic_flags_missing_emit_record() -> Result<()> {
     let repo_root = repo_root();
@@ -198,6 +203,7 @@ exit 0
 
 // Ensures the dynamic gate fails when probes emit a probe name that differs
 // from the script metadata.
+// This keeps probe ids stable even if the script sets a different name.
 #[test]
 fn contract_gate_dynamic_flags_probe_name_mismatch() -> Result<()> {
     let repo_root = repo_root();
@@ -249,6 +255,7 @@ wrong_probe_name="tests_contract_gate_probe_name_mismatch_wrong"
 
 // Ensures the dynamic gate fails when probes emit a primary capability id that
 // differs from the script metadata.
+// This prevents probes from advertising a different capability at runtime.
 #[test]
 fn contract_gate_dynamic_flags_primary_capability_mismatch() -> Result<()> {
     let repo_root = repo_root();
@@ -299,6 +306,7 @@ wrong_primary_capability_id="cap_fs_write_workspace_tree"
 }
 
 // Ensures payload size limits are enforced by the dynamic gate.
+// Limitation: this only checks the dynamic gate (not emit-record itself).
 #[test]
 fn contract_gate_dynamic_rejects_payload_over_limit() -> Result<()> {
     let repo_root = repo_root();
@@ -350,6 +358,7 @@ payload_json=$(printf '{"big":"%s"}' "${big_payload}")
 
 // Runs the `probe-gate` binary so `cargo test` fails whenever the static
 // contract gate over the full probe set rejects any checked-in probe.
+// This ties the repo's probe contract to the test suite.
 #[test]
 fn probe_test_contract_gate_succeeds() -> Result<()> {
     let repo_root = repo_root();
@@ -365,6 +374,7 @@ fn probe_test_contract_gate_succeeds() -> Result<()> {
 
 // === emit-record builders and payload helpers ===
 
+// validate_outcome is a small guard; ensure it rejects unknown values.
 #[test]
 fn validate_outcome_allows_known_values() {
     for value in ["success", "denied", "partial", "error"] {
@@ -373,6 +383,7 @@ fn validate_outcome_allows_known_values() {
     assert!(validate_outcome("bogus").is_err());
 }
 
+// normalize_secondary_ids should trim whitespace, drop empties, and dedupe.
 #[test]
 fn normalize_secondary_deduplicates_and_trims() -> Result<()> {
     let caps = sample_capability_index(&[
@@ -396,6 +407,7 @@ fn normalize_secondary_deduplicates_and_trims() -> Result<()> {
     Ok(())
 }
 
+// Unknown capability ids should fail normalization before emit-record accepts them.
 #[test]
 fn normalize_secondary_rejects_unknown() -> Result<()> {
     let caps = sample_capability_index(&[("cap_a", "filesystem", "os_sandbox")])?;
@@ -407,6 +419,8 @@ fn normalize_secondary_rejects_unknown() -> Result<()> {
     Ok(())
 }
 
+// emit-record should reject missing primary capability flags rather than
+// emitting ambiguous records.
 #[test]
 fn emit_record_requires_primary_capability() -> Result<()> {
     let repo_root = repo_root();
@@ -438,6 +452,7 @@ fn emit_record_requires_primary_capability() -> Result<()> {
     Ok(())
 }
 
+// emit-record validates capability ids against the catalog on disk.
 #[test]
 fn emit_record_rejects_unknown_capability() -> Result<()> {
     let repo_root = repo_root();
@@ -473,6 +488,8 @@ fn emit_record_rejects_unknown_capability() -> Result<()> {
     Ok(())
 }
 
+// When FENCE_WORKSPACE_ROOT is blank, emit-record should fall back to PWD.
+// This test sets PWD explicitly to avoid relying on inherited environment.
 #[test]
 fn emit_record_falls_back_to_pwd_for_workspace_root() -> Result<()> {
     let repo_root = repo_root();

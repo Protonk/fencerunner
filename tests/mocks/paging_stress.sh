@@ -5,6 +5,7 @@
 # -----------------------------------------------------------------------------
 set -euo pipefail
 
+# Discover repo root so the fixture can locate helpers regardless of CWD.
 script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)
 repo_root_candidate="${script_dir}"
 repo_root=""
@@ -20,6 +21,7 @@ if [[ -z "${repo_root}" ]]; then
   exit 1
 fi
 
+# Prefer target builds during tests; fall back to synced bin/ helpers.
 emit_record_bin="${repo_root}/bin/emit-record"
 target_debug="${repo_root}/target/debug/emit-record"
 target_release="${repo_root}/target/release/emit-record"
@@ -54,11 +56,13 @@ paging_stress_cmd=(
   "--max-seconds" "${helper_max_seconds}"
 )
 
+# Build a shell-escaped command string for the boundary object.
 printf -v command_executed "%q" "${paging_stress_cmd[0]}"
 for ((i = 1; i < ${#paging_stress_cmd[@]}; i++)); do
   printf -v command_executed "%s %q" "${command_executed}" "${paging_stress_cmd[i]}"
 done
 
+# Capture helper stdout/stderr to embed snippets in the emitted payload.
 stdout_tmp=$(mktemp)
 stderr_tmp=$(mktemp)
 trap 'rm -f "${stdout_tmp}" "${stderr_tmp}"' EXIT
@@ -70,6 +74,7 @@ helper_timeout="false"
 helper_exit_code="127"
 helper_error=""
 
+# If the helper is missing or fails, emit a structured error record instead.
 if [[ -x "${paging_stress_bin}" ]]; then
   exit_code=0
   if ! "${paging_stress_cmd[@]}" >"${stdout_tmp}" 2>"${stderr_tmp}"; then

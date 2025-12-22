@@ -19,6 +19,7 @@ use common::{
 
 // Ensures probe-matrix surfaces malformed probe output without blocking the
 // remaining probes from running.
+// The harness should still emit valid records from other probes.
 #[test]
 fn probe_matrix_continues_after_malformed_probe() -> Result<()> {
     let repo_root = repo_root();
@@ -66,6 +67,7 @@ exit 0
 }
 
 // Smoke-tests the fencerunner --probe CLI end-to-end with a single probe.
+// This validates helper resolution, probe execution, and NDJSON output format.
 #[test]
 fn fencerunner_probe_runs_single_probe() -> Result<()> {
     let repo_root = repo_root();
@@ -103,7 +105,9 @@ fn fencerunner_probe_runs_single_probe() -> Result<()> {
     Ok(())
 }
 
-// Ensures capability selection resolves the bundled catalog and runs every probe in that slice.
+// Ensures capability selection resolves the bundled catalog and runs every
+// probe in that slice.
+// Limitation: we don't verify the full slice membership, just that our fixture is included.
 #[test]
 fn fencerunner_bundle_runs_capability_subset() -> Result<()> {
     let repo_root = repo_root();
@@ -194,19 +198,27 @@ fn fencerunner_errors_on_unknown_bundle() -> Result<()> {
     Ok(())
 }
 
+// When both release and debug builds exist, resolve_helper_binary should pick
+// release before debug (unless bin/ overrides them).
 #[test]
 fn resolve_helper_prefers_release() -> Result<()> {
     let temp = TempRepo::new();
     let release_dir = temp.root.join("target/release");
+    let debug_dir = temp.root.join("target/debug");
     fs::create_dir_all(&release_dir)?;
+    fs::create_dir_all(&debug_dir)?;
     let helper = release_dir.join("probe-exec");
     fs::write(&helper, "#!/bin/sh\n")?;
     make_executable(&helper)?;
+    let debug_helper = debug_dir.join("probe-exec");
+    fs::write(&debug_helper, "#!/bin/sh\n")?;
+    make_executable(&debug_helper)?;
     let resolved = resolve_helper_binary(&temp.root, "probe-exec")?;
     assert_eq!(resolved, helper);
     Ok(())
 }
 
+// bin/ contents should mirror the helpers manifest so sync scripts stay reliable.
 #[test]
 fn bin_helpers_match_manifest() -> Result<()> {
     let repo_root = repo_root();
@@ -230,6 +242,7 @@ fn bin_helpers_match_manifest() -> Result<()> {
             continue;
         }
         let name_str = name.to_string_lossy().to_string();
+        // probe-contract-gate is a thin shell wrapper, not a compiled helper.
         if name_str == "probe-contract-gate" {
             continue;
         }
@@ -244,6 +257,7 @@ fn bin_helpers_match_manifest() -> Result<()> {
     Ok(())
 }
 
+// If bin/ is the only location with a helper, resolve_helper_binary should use it.
 #[test]
 fn resolve_helper_falls_back_to_bin() -> Result<()> {
     let temp = TempRepo::new();
@@ -257,6 +271,8 @@ fn resolve_helper_falls_back_to_bin() -> Result<()> {
     Ok(())
 }
 
+// fencerunner should prefer repo-local helpers when FENCE_ROOT points to a repo.
+// This keeps installed binaries aligned with the repo they're pointed at.
 #[test]
 fn fencerunner_prefers_repo_helper() -> Result<()> {
     let repo_root = repo_root();
@@ -289,6 +305,7 @@ fn fencerunner_prefers_repo_helper() -> Result<()> {
     Ok(())
 }
 
+// If no repo helper can be resolved, fencerunner should fall back to PATH.
 #[test]
 fn fencerunner_falls_back_to_path() -> Result<()> {
     let repo_root = repo_root();
@@ -344,6 +361,7 @@ fn fencerunner_listen_rejects_extra_flags() -> Result<()> {
     Ok(())
 }
 
+// fencerunner should propagate FENCE_ROOT to the helper so it can locate probes.
 #[test]
 fn fencerunner_exports_root_to_helpers() -> Result<()> {
     let repo_root = repo_root();
@@ -377,6 +395,7 @@ fn fencerunner_exports_root_to_helpers() -> Result<()> {
     Ok(())
 }
 
+// detect-stack should always report OS metadata; sandbox_mode is optional.
 #[test]
 fn detect_stack_reports_os() -> Result<()> {
     let repo_root = repo_root();

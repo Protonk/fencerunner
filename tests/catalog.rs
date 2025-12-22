@@ -15,6 +15,8 @@ use tempfile::{NamedTempFile, tempdir};
 
 use common::{catalog_path, sample_boundary_object};
 
+// Ensure catalog snapshots attached to a boundary object can be resolved back
+// through the repository, preserving stable ids for downstream consumers.
 #[test]
 fn repository_lookup_context_matches_capabilities() -> Result<()> {
     let catalog = load_catalog_from_path(&catalog_path())?;
@@ -39,6 +41,8 @@ fn repository_lookup_context_matches_capabilities() -> Result<()> {
     Ok(())
 }
 
+// Smoke-test that the bundled catalog loads and has non-empty metadata.
+// Limitation: this doesn't validate every catalog field; schema tests do that.
 #[test]
 fn load_real_catalog_smoke() -> Result<()> {
     let catalog = load_catalog_from_path(&catalog_path())?;
@@ -58,6 +62,8 @@ fn load_real_catalog_smoke() -> Result<()> {
     Ok(())
 }
 
+// Validate that CatalogRepository can resolve a known capability id once a
+// catalog is registered.
 #[test]
 fn finds_capability_in_registered_catalog() -> Result<()> {
     let catalog = load_catalog_from_path(&catalog_path())?;
@@ -77,6 +83,8 @@ fn finds_capability_in_registered_catalog() -> Result<()> {
     Ok(())
 }
 
+// CapabilityIndex should reject unknown schema_version values early.
+// This protects against silently loading mismatched catalogs.
 #[test]
 fn capability_index_enforces_schema_version() -> Result<()> {
     let mut file = NamedTempFile::new()?;
@@ -93,9 +101,9 @@ fn capability_index_enforces_schema_version() -> Result<()> {
     Ok(())
 }
 
+// Custom catalog schema versions are not allowed; ensure they are rejected.
 #[test]
-fn capability_index_accepts_allowed_schema_version_override() -> Result<()> {
-    // Custom schema versions are no longer allowed; ensure rejection path is covered.
+fn capability_index_rejects_custom_schema_version() -> Result<()> {
     let mut temp = NamedTempFile::new()?;
     serde_json::to_writer(
         &mut temp,
@@ -125,6 +133,8 @@ fn capability_index_accepts_allowed_schema_version_override() -> Result<()> {
     Ok(())
 }
 
+// When a catalog sits next to a schema file, CapabilityIndex should use it.
+// This test feeds a schema with a wrong title to ensure the loader enforces it.
 #[test]
 fn capability_index_rejects_schema_with_wrong_title() -> Result<()> {
     let dir = tempdir()?;
@@ -169,6 +179,7 @@ fn capability_index_rejects_schema_with_wrong_title() -> Result<()> {
     Ok(())
 }
 
+// Sources are optional but must be preserved when present; ensure they're parsed.
 #[test]
 fn capability_index_accepts_sources_map() -> Result<()> {
     let mut file = NamedTempFile::new()?;

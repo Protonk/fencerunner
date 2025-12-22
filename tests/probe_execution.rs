@@ -22,8 +22,9 @@ use tempfile::{NamedTempFile, TempDir};
 
 use common::{FileGuard, FixtureProbe, TempWorkspace, parse_boundary_object, repo_guard};
 
-// Runs the minimal fixture probe through probe-exec to confirm the
-// generated record reflects success and payload propagation.
+// Runs the minimal fixture probe through probe-exec to confirm the emitted
+// record is well-formed and reflects the fixture payloads.
+// This is an integration smoke test for probe-exec + emit-record wiring.
 #[test]
 fn harness_smoke_probe_fixture() -> Result<()> {
     let repo_root = repo_root();
@@ -45,6 +46,7 @@ fn harness_smoke_probe_fixture() -> Result<()> {
         value.pointer("/payload/raw/probe").and_then(Value::as_str),
         Some("fixture")
     );
+    // Workspace root should default to the repo root when probe-exec exports it.
     let workspace_root = record
         .context
         .as_ref()
@@ -56,7 +58,8 @@ fn harness_smoke_probe_fixture() -> Result<()> {
 }
 
 // Checks that workspace_root falls back to the caller's cwd when the env hint
-// is blank, matching legacy agent expectations.
+// is blank and no git/PWD hints are available.
+// Limitation: this only exercises the final fallback path, not git discovery.
 #[test]
 fn workspace_root_fallback() -> Result<()> {
     let repo_root = repo_root();
@@ -68,6 +71,8 @@ fn workspace_root_fallback() -> Result<()> {
     fallback_cmd
         .current_dir(temp_run_dir.path())
         .env("FENCE_WORKSPACE_ROOT", "")
+        // Remove PWD so emit-record must fall back to current_dir.
+        .env_remove("PWD")
         .env("TEST_PREFER_TARGET", "1")
         .arg(fixture.probe_id());
     let output = run_command(fallback_cmd)?;
@@ -85,8 +90,9 @@ fn workspace_root_fallback() -> Result<()> {
     Ok(())
 }
 
-// Exercises the guard rails that keep probe execution inside probes/, blocking
-// both absolute paths and escaping symlinks.
+// Exercises the guard rails that keep probe execution inside probes/ by
+// rejecting absolute paths and symlinks that escape the probes tree.
+// This protects the contract that probes are trusted only within probes/.
 #[test]
 fn probe_resolution_guards() -> Result<()> {
     let repo_root = repo_root();
@@ -141,6 +147,8 @@ fn probe_resolution_guards() -> Result<()> {
     Ok(())
 }
 
+// resolve_probe should find scripts under probes/ without requiring the caller
+// to include the "probes/" prefix.
 #[test]
 fn resolve_probe_prefers_probes_dir() -> Result<()> {
     let workspace = TempWorkspace::new();
@@ -154,27 +162,30 @@ fn resolve_probe_prefers_probes_dir() -> Result<()> {
     Ok(())
 }
 
+// SkipExport should result in no FENCE_WORKSPACE_ROOT value to export.
 #[test]
 fn workspace_override_skip_export() {
     let plan = workspace_plan_from_override(WorkspaceOverride::SkipExport);
     assert!(plan.export_value.is_none());
 }
 
+// WorkspaceOverride::UsePath should canonicalize existing paths to avoid
+// leaking relative segments into the exported value.
 #[test]
 fn workspace_override_canonicalizes_path() -> Result<()> {
     let workspace = TempWorkspace::new();
-    let plan = workspace_plan_from_override(WorkspaceOverride::UsePath(
-        workspace.root.join("probes").into_os_string(),
-    ));
-    assert!(
-        plan.export_value
-            .unwrap()
-            .to_string_lossy()
-            .contains("probes")
-    );
+    let probes_dir = workspace.root.join("probes");
+    fs::create_dir_all(&probes_dir)?;
+    // Add a ".." segment so canonicalization has something to normalize.
+    let non_canonical = probes_dir.join("..").join("probes");
+    let plan =
+        workspace_plan_from_override(WorkspaceOverride::UsePath(non_canonical.into_os_string()));
+    let exported = Path::new(&plan.export_value.expect("exported path missing")).to_path_buf();
+    assert_eq!(exported, fs::canonicalize(&probes_dir)?);
     Ok(())
 }
 
+// TMPDIR should live inside the workspace root when it is explicitly provided.
 #[test]
 fn workspace_tmpdir_prefers_workspace_tree() -> Result<()> {
     let workspace = TempWorkspace::new();
@@ -190,6 +201,7 @@ fn workspace_tmpdir_prefers_workspace_tree() -> Result<()> {
     Ok(())
 }
 
+// TMPDIR should honor the override root even when repo_root differs.
 #[test]
 fn workspace_tmpdir_uses_override_when_present() -> Result<()> {
     let workspace = TempWorkspace::new();
@@ -205,6 +217,7 @@ fn workspace_tmpdir_uses_override_when_present() -> Result<()> {
     Ok(())
 }
 
+// If TMPDIR cannot be created under any candidate roots, capture the last error.
 #[test]
 fn workspace_tmpdir_records_error_when_all_candidates_fail() -> Result<()> {
     let workspace = TempWorkspace::new();
@@ -220,6 +233,8 @@ fn workspace_tmpdir_records_error_when_all_candidates_fail() -> Result<()> {
     Ok(())
 }
 
+// Metadata parsed from the script should override the filename-based defaults.
+// This ensures probes can set a stable probe_name and capability id explicitly.
 #[test]
 fn resolve_probe_metadata_prefers_script_values() -> Result<()> {
     let workspace = TempWorkspace::new();

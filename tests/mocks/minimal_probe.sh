@@ -5,6 +5,8 @@
 # -----------------------------------------------------------------------------
 set -euo pipefail
 
+# Find the repo root by walking up until bin/emit-record is found.
+# This mirrors how real probes discover helper binaries.
 script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)
 repo_root_candidate="${script_dir}"
 repo_root=""
@@ -21,6 +23,7 @@ if [[ -z "${repo_root}" ]]; then
   exit 1
 fi
 
+# Prefer target builds during tests; fall back to the synced bin/ helper.
 emit_record_bin="${repo_root}/bin/emit-record"
 target_debug="${repo_root}/target/debug/emit-record"
 target_release="${repo_root}/target/release/emit-record"
@@ -34,6 +37,7 @@ probe_name="tests_fixture_probe"
 primary_capability_id="cap_fs_read_workspace_tree"
 workspace_tmp=$(mktemp -d)
 target_file="${workspace_tmp}/fixture.txt"
+# Always clean up temp files to keep the workspace tidy.
 trap 'rm -rf "${workspace_tmp}"' EXIT
 
 printf 'fixture-line' > "${target_file}"
