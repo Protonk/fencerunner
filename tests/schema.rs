@@ -193,3 +193,129 @@ fn schema_validate_boundary_accepts_stdin() -> Result<()> {
 
     Ok(())
 }
+
+fn current_utc_year() -> i32 {
+    unsafe {
+        let mut now: libc::time_t = 0;
+        libc::time(&mut now);
+        let mut out: libc::tm = std::mem::zeroed();
+        let tm_ptr = libc::gmtime_r(&now, &mut out);
+        if tm_ptr.is_null() {
+            panic!("gmtime_r returned null");
+        }
+        out.tm_year + 1900
+    }
+}
+
+#[test]
+fn readme_year_footnote_double_asterisk_contract() -> Result<()> {
+    // README contains a deliberately cheeky, year-stamped claim guarded by a
+    // "<sup>**</sup>" footnote that can flip between "Yes" and "No" depending
+    // on the actual current year. If the marker is present, this test enforces
+    // that the footnote stays honest about it.
+    let repo_root = repo_root();
+    let readme_path = repo_root.join("README.md");
+    let contents = fs::read_to_string(&readme_path)
+        .with_context(|| format!("failed to read {}", readme_path.display()))?;
+
+    let sup = "<sup>**</sup>";
+    let mut years: Vec<i32> = Vec::new();
+    let mut cursor = 0;
+    while let Some(pos) = contents[cursor..].find(sup) {
+        let sup_start = cursor + pos;
+        let sup_end = sup_start + sup.len();
+
+        let semicolon_before = sup_start > 0 && contents.as_bytes()[sup_start - 1] == b';';
+        let semicolon_after = contents.as_bytes().get(sup_end).copied() == Some(b';');
+
+        if semicolon_before && sup_start >= 5 {
+            if let Some(candidate) = contents.get(sup_start - 5..sup_start - 1) {
+                if candidate.bytes().all(|byte| byte.is_ascii_digit()) {
+                    let year = candidate
+                        .parse::<i32>()
+                        .with_context(|| format!("failed to parse README year '{}'", candidate))?;
+                    years.push(year);
+                }
+            }
+        }
+
+        if semicolon_after && sup_start >= 4 {
+            if let Some(candidate) = contents.get(sup_start - 4..sup_start) {
+                if candidate.bytes().all(|byte| byte.is_ascii_digit()) {
+                    let year = candidate
+                        .parse::<i32>()
+                        .with_context(|| format!("failed to parse README year '{}'", candidate))?;
+                    years.push(year);
+                }
+            }
+        }
+        cursor = sup_end;
+    }
+
+    if years.is_empty() {
+        return Ok(());
+    }
+
+    if years.len() != 1 {
+        anyhow::bail!(
+            "expected exactly one README year marker like YYYY;<sup>**</sup> or YYYY<sup>**</sup>;, found {} ({years:?})",
+            years.len()
+        );
+    }
+    let readme_year = years[0];
+
+    let footnote_prefix = "<sup>**</sup>:";
+    let mut footnotes: Vec<bool> = Vec::new();
+    let mut cursor = 0;
+    while let Some(pos) = contents[cursor..].find(footnote_prefix) {
+        let idx = cursor + pos + footnote_prefix.len();
+        let rest = contents[idx..].trim_start();
+        let word: String = rest
+            .chars()
+            .take_while(|ch| ch.is_ascii_alphabetic())
+            .collect();
+        if word.is_empty() {
+            anyhow::bail!("README footnote <sup>**</sup>: missing Yes/No value");
+        }
+        match word.to_ascii_lowercase().as_str() {
+            "yes" => footnotes.push(true),
+            "no" => footnotes.push(false),
+            other => anyhow::bail!(
+                "README footnote <sup>**</sup>: has value '{other}', expected Yes or No"
+            ),
+        }
+        cursor = idx;
+    }
+
+    if footnotes.len() != 1 {
+        anyhow::bail!(
+            "expected exactly one README footnote like <sup>**</sup>: Yes/No, found {}",
+            footnotes.len()
+        );
+    }
+    let footnote_yes = footnotes[0];
+
+    let current_year = current_utc_year();
+    if current_year == 2026 {
+        if readme_year != 2026 {
+            anyhow::bail!(
+                "README year marker is {readme_year} but current UTC year is 2026; expected 2026 with <sup>**</sup>"
+            );
+        }
+        if !footnote_yes {
+            anyhow::bail!("README footnote <sup>**</sup>: must say Yes in 2026");
+        }
+        return Ok(());
+    }
+
+    let expected_yes = readme_year != 2026;
+    if footnote_yes != expected_yes {
+        let expected_word = if expected_yes { "Yes" } else { "No" };
+        let actual_word = if footnote_yes { "Yes" } else { "No" };
+        anyhow::bail!(
+            "README footnote <sup>**</sup>: is '{actual_word}' but expected '{expected_word}' (README year marker {readme_year}; current UTC year {current_year})"
+        );
+    }
+
+    Ok(())
+}

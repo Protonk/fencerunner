@@ -22,7 +22,7 @@ single command executes the entire suite.
 
 | Path | Purpose | Notes |
 | --- | --- | --- |
-| `tests/schema.rs` | Boundaries contract guards. | Boundary contract validation (via `scripts/boundaries.json`) and serde round-trips for boundary/commitment enrollment types. |
+| `tests/schema.rs` | Boundaries contract guards. | Boundary contract validation (via `scripts/boundaries.json`) and serde round-trips for boundary/commitment enrollment types; also enforces the README `<sup>**</sup>` year-footnote contract. |
 | `tests/commitments.rs` | Commitments registry guards. | Registry schema validation, schema_version enforcement, and duplicate id rejection for `commitments.json`. |
 | `tests/script_execution.rs` | Run-dir execution guard rails. | Symlink escape checks during script discovery. |
 | `tests/contracts.rs` | emit-record rules. | emit-record flag enforcement (including required payload snippets), outcome normalization, commitment enrollment helpers. |
