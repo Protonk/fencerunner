@@ -1,8 +1,32 @@
-tmp/
-.DS_Store
-.cargo/
+#
+# fencerunner .gitignore
+#
+# Keep this file explicit and local to how this repo is worked on:
+# - ignore build outputs and scratch dirs
+# - do *not* ignore tracked contracts, docs, vendored deps, or Cargo.lock
+#
 
-# Added by cargo
+# --- Cargo / Rust build artifacts ---
+/target/
+**/*.rs.bk
 
-/target
+# --- Repo-local build outputs ---
+# Helper binaries built by tests / local workflows.
 /bin/
+
+# Release artifacts (archives, checksums, per-platform binaries).
+/dist/
+
+# Test/debug scratch output (some tests write failing payloads here).
+/tmp/
+
+# --- OS / editor noise ---
+.DS_Store
+._*
+*.swp
+*.swo
+*~
+.idea/
+.vscode/
+.direnv/
+.env
