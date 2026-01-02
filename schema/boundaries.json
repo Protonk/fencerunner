@@ -1,0 +1,208 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://fencerunner.dev/schemas/boundaries_v1.json",
+  "title": "Boundaries contract (v1)",
+  "description": "Schema for boundaries.json (run-dir-local boundary output contract).",
+  "type": "object",
+  "additionalProperties": true,
+  "required": ["schema_version", "stdout", "record_schema"],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "const": "boundaries_v1"
+    },
+    "stdout": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["format"],
+      "properties": {
+        "format": {
+          "type": "string",
+          "const": "ndjson"
+        }
+      }
+    },
+    "record_schema": {
+      "$ref": "#/$defs/record_schema"
+    }
+  },
+  "$defs": {
+    "record_schema": {
+      "type": "object",
+      "description": "A JSON Schema (draft-07) describing each boundary object emitted on stdout.",
+      "additionalProperties": true,
+      "required": ["type", "required", "properties"],
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "object"
+        },
+        "required": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "allOf": [
+            { "contains": { "const": "probe" } },
+            { "contains": { "const": "result" } },
+            { "contains": { "const": "context" } }
+          ]
+        },
+        "properties": {
+          "type": "object",
+          "additionalProperties": true,
+          "required": ["probe", "result", "context"],
+          "properties": {
+            "probe": { "$ref": "#/$defs/probe_schema" },
+            "result": { "$ref": "#/$defs/result_schema" },
+            "context": { "$ref": "#/$defs/context_schema" }
+          }
+        }
+      }
+    },
+    "probe_schema": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["type", "required", "properties"],
+      "properties": {
+        "type": { "type": "string", "const": "object" },
+        "required": {
+          "type": "array",
+          "items": { "type": "string" },
+          "contains": { "const": "id" }
+        },
+        "properties": {
+          "type": "object",
+          "additionalProperties": true,
+          "required": ["id"],
+          "properties": {
+            "id": { "$ref": "#/$defs/string_schema" }
+          }
+        }
+      }
+    },
+    "result_schema": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["type", "required", "properties"],
+      "properties": {
+        "type": { "type": "string", "const": "object" },
+        "required": {
+          "type": "array",
+          "items": { "type": "string" },
+          "contains": { "const": "outcome" }
+        },
+        "properties": {
+          "type": "object",
+          "additionalProperties": true,
+          "required": ["outcome"],
+          "properties": {
+            "outcome": { "$ref": "#/$defs/string_schema" }
+          }
+        }
+      }
+    },
+    "context_schema": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["type", "required", "properties"],
+      "properties": {
+        "type": { "type": "string", "const": "object" },
+        "required": {
+          "type": "array",
+          "items": { "type": "string" },
+          "contains": { "const": "commitments" }
+        },
+        "properties": {
+          "type": "object",
+          "additionalProperties": true,
+          "required": ["commitments"],
+          "properties": {
+            "commitments": { "$ref": "#/$defs/commitments_schema" }
+          }
+        }
+      }
+    },
+    "string_schema": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["type"],
+      "properties": {
+        "type": { "type": "string", "const": "string" }
+      }
+    },
+    "commitments_schema": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["type", "items"],
+      "properties": {
+        "type": { "type": "string", "const": "array" },
+        "items": { "$ref": "#/$defs/commitment_enrollment_schema" }
+      }
+    },
+    "commitment_enrollment_schema": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["type", "required", "properties"],
+      "properties": {
+        "type": { "type": "string", "const": "object" },
+        "required": {
+          "type": "array",
+          "items": { "type": "string" },
+          "allOf": [
+            { "contains": { "const": "id" } },
+            { "contains": { "const": "helps" } }
+          ]
+        },
+        "properties": {
+          "type": "object",
+          "additionalProperties": true,
+          "required": ["id", "helps"],
+          "properties": {
+            "id": { "$ref": "#/$defs/commitment_id_schema" },
+            "helps": { "$ref": "#/$defs/commitment_helps_schema" }
+          }
+        }
+      }
+    },
+    "commitment_id_schema": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["type", "pattern"],
+      "properties": {
+        "type": { "type": "string", "const": "string" },
+        "pattern": {
+          "type": "string",
+          "const": "^[A-Za-z0-9_.-]+$"
+        }
+      }
+    },
+    "commitment_helps_schema": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["type", "minItems", "uniqueItems", "items"],
+      "properties": {
+        "type": { "type": "string", "const": "array" },
+        "minItems": { "type": "integer", "minimum": 1 },
+        "uniqueItems": { "type": "boolean", "const": true },
+        "items": {
+          "type": "object",
+          "additionalProperties": true,
+          "required": ["type", "enum"],
+          "properties": {
+            "type": { "type": "string", "const": "string" },
+            "enum": {
+              "type": "array",
+              "minItems": 1,
+              "uniqueItems": true,
+              "items": {
+                "type": "string",
+                "enum": ["ensure", "detect", "emit"]
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

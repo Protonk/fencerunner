@@ -1,15 +1,12 @@
 //! Shared JSON Schema loader with optional schema-version enforcement.
 //!
-//! Loads a JSON schema from disk, optionally validates its `schema_version`
-//! const, and compiles a JSONSchema validator.
+//! Loads a JSON schema (usually bundled via `include_str!`), optionally
+//! validates its `schema_version` const, and compiles a JSONSchema validator.
 
 use anyhow::{Context, Result, anyhow, bail};
 use jsonschema::JSONSchema;
 use serde_json::Value;
 use std::collections::BTreeSet;
-use std::fs::File;
-use std::path::Path;
-use std::sync::Arc;
 
 /// Result of loading and compiling a JSON Schema.
 pub(crate) struct SchemaLoadResult {
@@ -17,6 +14,7 @@ pub(crate) struct SchemaLoadResult {
 }
 
 /// Controls how schemas are loaded and normalized before compilation.
+#[derive(Default)]
 pub(crate) struct SchemaLoadOptions<'a> {
     /// Allowed schema_version values; enforced when present.
     pub allowed_versions: Option<&'a BTreeSet<String>>,
@@ -28,26 +26,21 @@ pub(crate) struct SchemaLoadOptions<'a> {
     pub required_pointers: Option<&'a [&'a str]>,
 }
 
-impl<'a> Default for SchemaLoadOptions<'a> {
-    fn default() -> Self {
-        Self {
-            allowed_versions: None,
-            expected_title: None,
-            expected_type: None,
-            required_pointers: None,
-        }
-    }
-}
-
-pub(crate) fn load_json_schema(
-    path: &Path,
+pub(crate) fn load_json_schema_str(
+    label: &str,
+    schema: &str,
     options: SchemaLoadOptions<'_>,
 ) -> Result<SchemaLoadResult> {
-    let schema_value: Value = serde_json::from_reader(
-        File::open(path).with_context(|| format!("opening schema {}", path.display()))?,
-    )
-    .with_context(|| format!("parsing schema {}", path.display()))?;
+    let schema_value: Value =
+        serde_json::from_str(schema).with_context(|| format!("parsing schema {label}"))?;
+    load_json_schema_value(schema_value, label.to_string(), options)
+}
 
+fn load_json_schema_value(
+    schema_value: Value,
+    label: String,
+    options: SchemaLoadOptions<'_>,
+) -> Result<SchemaLoadResult> {
     if let Some(expected_title) = options.expected_title {
         let title = schema_value
             .get("title")
@@ -97,12 +90,8 @@ pub(crate) fn load_json_schema(
         }
     }
 
-    // JSONSchema wants a 'static reference; keep the Value in an Arc and leak
-    // a stable pointer so the compiled validator can outlive this function.
-    let raw = Arc::new(schema_value);
-    let raw_static: &'static Value = unsafe { &*(Arc::as_ptr(&raw)) };
-    let compiled = JSONSchema::compile(raw_static)
-        .with_context(|| format!("compiling schema {}", path.display()))?;
+    let compiled = JSONSchema::compile(&schema_value)
+        .map_err(|err| anyhow!("compiling schema {label}: {err}"))?;
 
     Ok(SchemaLoadResult { compiled })
 }

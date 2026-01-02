@@ -2,16 +2,19 @@
 //!
 //! This crate is intentionally small and repetitive to make the layering
 //! obvious. The root is only a module index: it declares submodules and leaves
-//! their APIs unflattened so callers import from `boundary`, `catalog`,
-//! `harness`, `probes`, `schema`, or `repo_tools` directly. Treat those module
+//! their APIs unflattened so callers import from `boundary`, `commitments`,
+//! `gates`, `harness`, `probes`, `schema`, or `repo_tools`
+//! directly. Treat those module
 //! surfaces as contracts and keep behavior aligned with README.md plus the
-//! domain guides under catalogs/, boundary/, and probes/.
+//! narrative docs under docs/ and the meta-schemas under schema/.
 
 pub mod boundary;
-pub mod catalog;
+pub mod commands;
+pub mod commitments;
+pub mod gates;
 pub mod harness;
 pub mod probes;
-pub mod schema;
 pub mod repo_tools;
+pub mod schema;
 // Intentionally avoid flattening submodule APIs; callers import from the
 // module that owns the behavior so the structure stays visible.

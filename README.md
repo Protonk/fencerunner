@@ -1,186 +1,41 @@
 # Fencerunner
 
-> Run small, explicit probes against a sandbox or runtime and capture what actually happened as structured JSON.
+Fencerunner is a flexible probe runner built to instrument potentially noisy probes. Probes can be “wild” Bash scripts that do anything the host and sandbox allow, but fencerunner turns the run into a clean, machine-readable stream of what happened.
 
-Fencerunner is infrastructure. It does not impose a particular sandbox or policy;
-instead, it gives you a way to **describe capabilities**, **exercise them with tiny
-shell probes**, and **record the results as schema‑validated JSON “boundary objects”**
-that can be analyzed later.
+The core promise is output rigor: one boundary record per probe, streamed as NDJSON to stdout. Each record summarizes the attempted operation and observed outcome in a shape that downstream tools can validate and consume deterministically.
 
-The top‑level CLI is called `fencerunner`. It discovers probes, runs them in
-well‑defined flows, validates their outputs against schemas and capability
-catalogs, and keeps the contract between “what probes promise” and “what
-actually ran” tight.
+Runs are defined by run dirs: flat directories of probe scripts plus three contracts. A run dir declares the commitments a probe intends to rely on (runner helpers and external runtimes), the gates it wants treated as hard failures, and the boundaries it commits to publishing as output. This design is about instrumentation, not containment.
 
-For contributor‑focused details, see [`CONTRIBUTING.md`](CONTRIBUTING.md). For contract‑level
-guidance, start with the AGENTS files.
+The goal is build-time flexibility coupled with run-time rigidity. Strict mode treats contract breaks as failures; supervised runs prioritize a well-formed NDJSON stream over perfect probe behavior.
 
-## Mental model
+## Use
 
-At a high level, Fencerunner is built from three ideas:
-
-- **Probes** — small Bash scripts under `probes/<probe_id>.sh`. Each performs
-  exactly one observable action (for example, “write a file outside the
-  workspace”) and calls a helper binary to emit a single JSON record describing
-  what happened.
-- **Capability catalogs** — a JSON catalog that names the behaviors you care
-  about (`cap_fs_write_workspace_tree`, `cap_net_connect_loopback`, …) and
-  maps each one to structured metadata (including relevant low‑level
-  operations).
-- **Boundary objects** — a schema‑validated JSON record emitted for each probe
-  run. It captures the attempted operation and observed outcome with optional
-  context and payload metadata.
-
-Together, these map probe results to named capabilities and keep the
-output analyzable over multiple runs. The contract harness is intentionally strict so
-new probes add signal without breaking downstream consumers.
-
-## Usage
-
-### Requirements
-
-Build:
-- A Rust toolchain with `rustc`/`cargo` >= 1.85 (see `Cargo.toml` and `Cargo.lock` for the crate set: `Cargo.toml`, `Cargo.lock`).
-- `make` and `/bin/bash` (used by the build scripts).
-- `python3` available on PATH (used by `tools/sync_bin_helpers.sh` to read the helper manifest).
-
-Run:
-- macOS or Linux with `/bin/bash` 3.2+ and common Unix utilities (coreutils, `uname`, etc.).
-- `python3` for the bundled loopback network probe.
-- The compiled helper binaries under `bin/` (produced by `make build`); no other runtime dependencies or package installs are required.
-
-### Build and run
-
-Build the helpers into `bin/`:
+Run `fencerunner` with one or more run dirs. By default it runs in strict mode, treating contract breaks as failures; use `--supervised` when keeping a well-formed NDJSON boundary stream matters more than perfect probe behavior.
 
 ```sh
-make build
+fencerunner probes
+fencerunner ./probes /tmp/other-run-dir
 ```
 
-### Core CLI surface
+## What makes a RUN_DIR
 
-The primary entry point is the `fencerunner` binary (synced into `bin/fencerunner`).
+A run dir is a flat directory you pass to `fencerunner`. It bundles probe scripts with three run-dir-local contracts: **commitments**, **gates**, and **boundaries**.
 
-- `fencerunner --bang`  
-  Run every probe once and stream each boundary object as NDJSON.
+A minimal run dir contains:
 
-- **Run the full probe matrix with the bundled catalog and schema**
+- `commitments.json` — a registry of declared commitments a probe may rely on (runner helpers and external runtimes) and the help verbs they support.
+- `gates.json` — optional gate enrollments that tighten the probe contract for this run dir (for example enforcing `stderr.empty`).
+- `boundaries.json` — the output contract for boundary records (stdout format and the schema each record must satisfy).
+- one or more executable `*.sh` files — each `*.sh` at the top level is a probe; subdirectories are ignored.
 
-  ```sh
-  fencerunner --bang
-  ```
+Conventions and constraints:
 
-- `fencerunner --bundle <capability-id>`  
-  Run all probes whose primary capability matches `<capability-id>`.
+- Probe ids are derived from filenames (`<probe_id>.sh`) and must be unique across all run dirs in a single run.
+- Probes should source the runner library at startup, then emit exactly one boundary record to stdout (and nothing else on stdout).
+- In strict runs, contract breaks are failures. In supervised runs, probe-level contract breaks are converted into synthetic error records so the NDJSON stream stays well-formed (preflight/runner failures still abort).
 
-- `fencerunner --probe <probe-id>`  
-  Run a single probe by id.
+## Tests
 
-- **Run a single probe by id**
+Tests in this repo act more like a contract gate than a coverage exercise: they assert on the externally observable surfaces (schemas, helper CLI behavior, exit codes, and the NDJSON boundary stream) and fail hard when those surfaces drift or when a promised contract can no longer be validated.
 
-  ```sh
-  fencerunner --probe fs_outside_workspace
-  ```
-
-- `fencerunner --listen`  
-  Read boundary-object NDJSON (for example, from `fencerunner --bang`) on stdin
-  and print a human‑readable summary. This is a text‑only viewer; it never
-  changes the underlying JSON and accepts no additional flags.
-
-- **Inspect results in a human‑readable form**
-
-  ```sh
-  fencerunner --bang | fencerunner --listen
-  ```
-
-
-- `schema-validate`  
-  Validate JSON as a catalog (`--mode catalog`) or boundary (`--mode boundary`)
-  against the bundled schemas (catalog overrides via `--catalog`).
-
-## Probes: how you measure a sandbox
-
-Probes are intentionally boring:
-
-- They are Bash scripts in `probes/<probe_id>.sh`.
-- They use `#!/usr/bin/env bash` plus `set -euo pipefail`.
-- They perform one focused operation.
-- They call `bin/emit-record` exactly once to emit a JSON boundary object.
-- They write nothing else to stdout (stderr is reserved for minimal diagnostics).
-
-Each probe declares:
-
-- a `probe.id` (the filename),
-- a `primary_capability_id` and optional `secondary_capability_ids` in
-  `context.probe`, and
-- a normalized `result.outcome` (`success`, `denied`, `partial`, `error`) plus
-  payload snippets that capture what actually happened.
-
-The probe author contract, examples, and test‑backed rules live in
-[`probes/AGENTS.md`](probes/AGENTS.md). Start there if you are writing or modifying probes.
-
-## Catalogs and boundary schemas
-
-Fencerunner’s contracts are expressed as JSON artifacts that can be swapped
-independently: a capability catalog (what behaviors exist and what they mean)
-and a boundary object schema (what a probe run must record).
-
-### Capability catalogs
-
-The bundled capability catalog (`catalogs/macos_codex_v1.json`) is a
-`sandbox_catalog_v1` instance: it declares the catalog’s key and scope, a
-category/layer taxonomy, a sources bibliography, and a set of capability entries
-with stable ids, descriptions, and operation mappings (plus optional
-notes/sources).
-
-Conceptually, a capabilities catalog is a shared vocabulary of testable
-propositions—stable names with structured meaning—so everyone can agree on what
-a capability refers to without tying that meaning to any particular probe
-implementation or runtime.
-
-### Boundary object schema (and boundary objects)
-
-The bundled boundary object schema (`boundary/boundary_object_schema.json`) defines
-the minimal required record shape: probe identity (`probe.id`), attempted
-operation (`operation.kind`, `operation.target`, optional `operation.args`), and
-observed outcome (`result.outcome`, optional `result.details`). Optional
-`context`, `payload`, and `extensions` blocks carry richer metadata without
-changing the core contract.
-
-Conceptually, the boundary object is the contract at the boundary between messy
-execution and reliable interpretation: it forces each probe run to be expressed
-as a small, schema‑checked statement of attempted operation and observed
-outcome (with bounded context), so downstream consumers treat the JSON record—
-not ad‑hoc logs, timing, or side effects—as the interface.
-
-The harness always requires a catalog and a boundary object schema. Catalogs
-are swappable; the boundary schema is fixed.
-
-- Use `--catalog <path>` or `CATALOG_PATH` to point helpers at a different
-  catalog file. Defaults fall back to the bundled `catalogs/macos_codex_v1.json`
-  when no overrides are provided.
-- Boundary schema defaults to `boundary/boundary_object_schema.json`; emitted
-  records are validated against that schema at emit/listen time.
-
-The Rust layer (`src/catalog`, `src/boundary`) validates catalogs and boundary
-objects at load and emit time, and the integration tests under `tests/` assert
-that the schemas, helpers, and sample data stay in sync.
-
-For a narrative view of these contracts, see:
-
-- [`catalogs/capabilities.md`](catalogs/capabilities.md) (catalog structure + schema flow)
-- [`boundary/boundary_object.md`](boundary/boundary_object.md)
-- [`probes/probes.md`](probes/probes.md)
-
-## Navigation
-
-The top‑level `AGENTS.md` is the router for this project: it tells you which
-directory‑specific `AGENTS.md` file to read before editing a given area.
-
-Before you change behavior, skim:
-
-- [`AGENTS.md`](AGENTS.md) at the repo root,
-- the `AGENTS.md` for the directory you are touching, and
-- the relevant guide for that area (`catalogs/capabilities.md`, `boundary/boundary_object.md`, or `probes/probes.md`).
-
-Those files explain the contracts that code and tests are expected to uphold. The tests in `tests/` are intentionally opinionated and high‑coverage: keeping them green is the easiest way to ensure usage aligns with the contracts described above.
+The posture is integration-forward and deterministic. Tests build and run the real binaries, execute fixture probes (including the repo’s minimal example probe) inside temporary run dirs/workspaces, and validate that stdout stays a well-formed boundary-record stream while stderr remains a diagnostic channel.

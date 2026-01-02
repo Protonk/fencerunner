@@ -8,7 +8,8 @@ readme = "README.md"
 license = "Apache-2.0"
 repository = "https://github.com/Protonk/fencerunner"
 default-run = "fencerunner"
-# No build script; repository paths are discovered at runtime via FENCE_ROOT.
+autobins = false
+# No build script; runner-owned assets are embedded and materialized at runtime.
 
 [lib]
 name = "fencerunner"
@@ -21,56 +22,10 @@ serde_json = "1.0"
 tempfile = "3.10"
 libc = "0.2"
 jsonschema = "0.17"
-clap = { version = "4.5", features = ["derive"] }
 
- [dev-dependencies]
-
-[[bin]]
-name = "probe-matrix"
-path = "src/bin/probe_matrix.rs"
-test = false
-
-[[bin]]
-name = "probe-listen"
-path = "src/bin/probe_listen.rs"
-test = false
-
-[[bin]]
-name = "probe-gate"
-path = "src/bin/probe_gate.rs"
-test = false
-
-[[bin]]
-name = "portable-path"
-path = "src/bin/portable_path.rs"
-test = false
-
-[[bin]]
-name = "emit-record"
-path = "src/bin/emit_record.rs"
-test = false
-
-[[bin]]
-name = "detect-stack"
-path = "src/bin/detect_stack.rs"
-test = false
-
-[[bin]]
-name = "probe-exec"
-path = "src/bin/probe_exec.rs"
-test = false
+[dev-dependencies]
 
 [[bin]]
 name = "fencerunner"
 path = "src/bin/fencerunner.rs"
-test = false
-
-[[bin]]
-name = "json-extract"
-path = "src/bin/json_extract.rs"
-test = false
-
-[[bin]]
-name = "paging-stress"
-path = "src/bin/paging_stress.rs"
 test = false

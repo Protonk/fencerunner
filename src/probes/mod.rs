@@ -1,5 +1,3 @@
-//! Probe discovery, metadata extraction, and coverage accounting.
+//! Probe discovery within a run directory.
 
-pub mod coverage;
 pub mod discovery;
-pub mod metadata;

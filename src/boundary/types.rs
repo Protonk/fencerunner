@@ -1,17 +1,17 @@
 //! Serializable types for boundary-object records.
 //!
-//! Shared between the emit/listen binaries and the test suite. The structures
-//! mirror the minimal boundary-object schema in
-//! `boundary/boundary_object_schema.json` so helpers can round-trip JSON without
-//! ad-hoc maps. Optional context/payload blocks allow probes to attach richer
-//! metadata without changing the required shape.
+//! Shared between fencerunner, the probe-facing helpers, and the test suite.
+//! The structures mirror the default run-dir boundaries contract shipped in `probes/boundaries.json`
+//! (record_schema) so helpers can round-trip JSON without ad-hoc maps. Optional
+//! context/payload blocks allow probes to attach richer metadata without
+//! changing the required shape.
 //!
 //! The boundary object is the "contract boundary" between a messy runtime and
 //! clean analysis. Probes can do anything internally, but they must summarize
 //! the attempted operation and observed outcome using this schema so downstream
 //! tools stay deterministic.
 
-use crate::catalog::{CapabilityId, CapabilitySnapshot, CatalogKey};
+use crate::commitments::model::CommitmentHelp;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::BTreeMap;
@@ -20,14 +20,15 @@ use std::collections::BTreeMap;
 #[serde(deny_unknown_fields)]
 /// Boundary object captured for a single probe execution.
 ///
-/// Only `probe`, `operation`, and `result` are required; additional metadata
-/// may be carried under `context`, `payload`, or `extensions`.
+/// The boundary object always includes `context.commitments` (empty allowed);
+/// additional metadata may be carried under `payload`, `extensions`, or extra
+/// `context` keys.
 pub struct BoundaryObject {
     pub probe: ProbeInfo,
     pub operation: OperationInfo,
     pub result: ResultInfo,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub context: Option<ContextInfo>,
+    #[serde(default)]
+    pub context: ContextInfo,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub payload: Option<Value>,
     /// Extensions are allowed but not interpreted by core tooling.
@@ -81,16 +82,13 @@ pub struct ResultDetails {
 /// Known fields are modeled explicitly; unknown entries are preserved in
 /// `extra` so the record can be round-tripped without loss.
 pub struct ContextInfo {
+    /// Commitments the probe enrolled in via `commit_help_me`.
+    #[serde(default)]
+    pub commitments: Vec<CommitmentEnrollment>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub run: Option<RunInfo>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub stack: Option<StackInfo>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub capabilities_schema_version: Option<CatalogKey>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub capability_context: Option<CapabilityContext>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub probe: Option<ProbeContext>,
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     #[serde(flatten)]
     // Unknown keys are preserved here so newer emitters do not break older
@@ -100,19 +98,10 @@ pub struct ContextInfo {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-/// Capability identifiers associated with a probe.
-pub struct ProbeContext {
-    pub primary_capability_id: CapabilityId,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub secondary_capability_ids: Vec<CapabilityId>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
 /// Execution context for a specific probe run.
 ///
-/// `workspace_root` is optional because emit-record falls back to git/pwd
-/// detection when no override is provided.
+/// `workspace_root` is optional and omitted by default; run dirs may choose to
+/// populate it via non-core tooling if it helps downstream consumers.
 pub struct RunInfo {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub workspace_root: Option<String>,
@@ -121,19 +110,15 @@ pub struct RunInfo {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-/// Environment metadata emitted by `detect-stack`.
+/// Optional environment metadata emitted by the runner.
 pub struct StackInfo {
     pub os: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-/// Capability snapshots captured alongside the record.
-///
-/// Snapshots denormalize catalog metadata so boundary objects remain
-/// self-describing even if the catalog evolves after the run.
-pub struct CapabilityContext {
-    pub primary: CapabilitySnapshot,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub secondary: Vec<CapabilitySnapshot>,
+/// Commitment id plus the set of enrolled help verbs.
+pub struct CommitmentEnrollment {
+    pub id: String,
+    pub helps: Vec<CommitmentHelp>,
 }

@@ -1,16 +1,13 @@
 //! Shared helpers for building boundary-object payloads and validating inputs.
 //!
 //! These functions back `emit-record`. They focus on enforcing the probe
-//! contract (single payload source, bounded size, valid capability IDs) while
+//! contract (single payload source, bounded size) while
 //! keeping the CLI parsing code readable.
 
 use anyhow::{Context, Result, bail};
 use serde_json::{Map, Value, json};
-use std::collections::BTreeSet;
 use std::fs;
 use std::path::{Path, PathBuf};
-
-use crate::catalog::{CapabilityId, CapabilityIndex};
 
 // Keep payloads small and predictable; probes should emit summaries, not logs.
 const PAYLOAD_MAX_BYTES: usize = 4096;
@@ -60,7 +57,7 @@ impl PayloadArgs {
             if !path.is_file() {
                 bail!("Payload file not found: {}", path.display());
             }
-            read_json_file(&path)?
+            read_json_file(path)?
         } else {
             let stdout_snippet = build_snippet_value(self.stdout)?;
             let stderr_snippet = build_snippet_value(self.stderr)?;
@@ -239,14 +236,11 @@ fn read_json_file(path: &Path) -> Result<Value> {
 
 fn enforce_payload_size(payload: &Value) -> Result<()> {
     // Size is measured after serialization to account for JSON overhead.
-    let bytes = serde_json::to_vec(payload).context("Failed to serialize payload for size check")?;
+    let bytes =
+        serde_json::to_vec(payload).context("Failed to serialize payload for size check")?;
     let size = bytes.len();
     if size > PAYLOAD_MAX_BYTES {
-        bail!(
-            "Payload exceeds {} bytes (got {})",
-            PAYLOAD_MAX_BYTES,
-            size
-        );
+        bail!("Payload exceeds {} bytes (got {})", PAYLOAD_MAX_BYTES, size);
     }
     Ok(())
 }
@@ -259,39 +253,7 @@ pub fn validate_outcome(outcome: &str) -> Result<()> {
     }
 }
 
-pub fn validate_capability_id(
-    capabilities: &CapabilityIndex,
-    value: &CapabilityId,
-    label: &str,
-) -> Result<()> {
-    if capabilities.capability(value).is_some() {
-        return Ok(());
-    }
-    bail!(
-        "Unknown {label}: {}. Expected one of the IDs in the loaded capability catalog.",
-        value.0
-    );
-}
-
-pub fn normalize_secondary_ids(
-    capabilities: &CapabilityIndex,
-    raw: &[CapabilityId],
-) -> Result<Vec<CapabilityId>> {
-    // Normalize whitespace and de-duplicate for deterministic output.
-    let mut acc: BTreeSet<CapabilityId> = BTreeSet::new();
-    for value in raw {
-        let trimmed = value.0.trim();
-        if trimmed.is_empty() {
-            continue;
-        }
-        let normalized = CapabilityId(trimmed.to_string());
-        validate_capability_id(capabilities, &normalized, "secondary capability id")?;
-        acc.insert(normalized);
-    }
-    Ok(acc.into_iter().collect())
-}
-
 /// Helper used by CLI parsing to single-source non-empty string checks.
-pub fn not_empty(value: &String) -> bool {
+pub fn not_empty(value: &str) -> bool {
     !value.is_empty()
 }

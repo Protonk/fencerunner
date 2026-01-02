@@ -1,4 +1,4 @@
-//! Schema loaders and helpers shared by catalog and boundary validation.
+//! Schema loaders and helpers shared by commitments and boundaries validation.
 //!
 //! This module is a small router; see loader.rs for the JSON Schema logic.
 

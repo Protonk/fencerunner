@@ -1,0 +1,29 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://fencerunner.dev/schemas/gates_v1.json",
+  "title": "Gates contract (v1)",
+  "description": "Schema for gates.json (run-dir-local probe contract enrollment).",
+  "type": "object",
+  "additionalProperties": true,
+  "required": ["schema_version"],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "const": "gates_v1"
+    },
+    "gates": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "enforced_checks": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "enum": ["stderr.empty"]
+          }
+        }
+      }
+    }
+  }
+}

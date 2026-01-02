@@ -1,53 +1,62 @@
 # AGENTS.md
 
-If you are reading this, you have already seen `README.md` and `CONTRIBUTING.md` and you are ready to change something. This file is the shared contract for all agents—human or automated—working in this repository. It explains how to route yourself to the right place and what expectations apply everywhere, regardless of which subsystem you touch. Think of it as the index of agent responsibilities.
+If you are about to change something, read `README.md` and `CONTRIBUTING.md`, then use this file to learn where to look, what must remain true, and how to extend the system without entangling it.
 
-## Repository layout
+This repo uses **nested AGENTS** as scoped contracts. Before editing a file, read the nearest `AGENTS.md` in that file’s directory tree:
 
-For quick orientation, this is how the tree is organized.
+- `src/AGENTS.md` — module routing + Rust expectations.
+- `src/bin/AGENTS.md` — CLI front door + runner-owned shims.
+- `tests/AGENTS.md` — test harness playbook + fixture rules.
 
-| Path      | Purpose / Notes                                                                                                                                       |
-| --------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `bin/`    | Prebuilt Rust helper binaries (`fencerunner`, `probe-exec`, `probe-matrix`, `emit-record`, `portable-path`, `detect-stack`, etc.) synced from `src/bin/`. |
-| `catalogs/` | Capability catalogs, the catalog schema (`catalogs/capability_catalog.schema.json`), and an explainer at `catalogs/capabilities.md` (bundled catalog: `macos_codex_v1.json`). |
-| `boundary/` | Boundary object schema + documentation (`boundary/boundary_object.md`).                                                                     |
-| `probes/` | Flat directory of `<probe_id>.sh` scripts plus `probes/AGENTS.md` and `probes/probes.md`, the only code that directly exercises the sandboxed runtime. |
-| `src/`    | Rust sources for the CLI and helpers, including implementations for every binary under `bin/`.                                                      |
-| `target/` | Cargo build artifacts created by `cargo build` or `cargo test`; safe to delete when you need a clean rebuild.                                       |
-| `tests/`  | Rust guard rails (`tests/*.rs`), shared helpers, and fixtures that enforce the contracts under `cargo test`.                                       |
-| `tmp/`    | Scratch space for probe and test runs; populated with ephemeral `.tmp*` directories that are safe to purge.                                         |
-| `tools/`  | Developer tooling (validation scripts, adapters, contract gates) used by the supported workflows described above.                                   |
+## What's special about this place
 
-When in doubt:
-- Find the directory you are about to change.
-- Read its `AGENTS.md` end-to-end before editing.
-That is the main “rule of engagement” in this repository.
+This repository is optimized for **bold refactors with low friction**. It stays that way by treating “how the system behaves” as a set of overlapping, explicit contracts: JSON schemas, runtime validators, a single small CLI surface, and integration-heavy tests that fail hard when any of those drift. 
+- **Contracts are APIs.** `commitments.json`, `gates.json`, and `boundaries.json` are not suggestions; they are validated and enforced by code and tests.
+- **Overlapping guard rails.** The same rule should often appear in more than one place: schema shape, runtime checks, and tests. Redundancy is a feature here.
+- **High visibility, low cleverness.** Prefer explicit parsing, explicit errors, small modules, and stable names over “smart” abstractions.
+- **No hidden coupling.** Avoid hard-coded interdependencies between subsystems; it makes future refactors expensive and unpredictable.
+The system’s posture assumes **authors are cooperating** (instrumentation, not containment). “Enrollment” is a signal, not a security boundary.
 
-### Layered guidance
+## What's here
 
-Once you know which part of the tree you are touching, defer to the `AGENTS.md` in that directory if it exists.
-* `probes/AGENTS.md` — Probe Author contract: one observable action per script, boundary-object emission rules, capability selection, and how to use helpers like `emit-record`, `portable-path`, and `json-extract`.
-* `tests/AGENTS.md` — Test harness contract: how `cargo test` is wired, where fixtures live, and how guard rails map to specific contracts (schema, catalog, CLI, workspace).
-* `src/AGENTS.md` — Structure and expectations for Rust code under `src/`, excluding the helper CLIs.
-* `src/bin/AGENTS.md` — Guarantees for the Rust helper binaries (`fencerunner`, `probe-matrix`, `probe-exec`, `emit-record`, `detect-stack`, etc.); how their CLIs and stack metadata must remain stable over time.
-* `tools/AGENTS.md` — Contracts for helper scripts under `tools/` and how they fit into supported workflows.
+>Fencerunner runs run dirs: flat directories containing *.sh probes and three local contracts.
 
-Narrative guides live alongside the artifacts they explain:
-* `catalogs/capabilities.md` — capability catalog structure, schema contract, and validation flow.
-* `boundary/boundary_object.md` — boundary-object shape and schema expectations.
-* `probes/probes.md` — probe contract overview and harness flow.
+| Path | Purpose |
+| --- | --- |
+| `schema/` | Meta-schemas for run-dir contracts: `schema/commitments.json`, `schema/gates.json`, `schema/boundaries.json`. |
+| `docs/` | Narrative docs for run-dir authors: `docs/commitments.md`, `docs/gates.md`, `docs/boundaries.md`. |
+| `probes/` | Default/example run dir shipped with the repo (and used by tests): `probes/{commitments,gates,boundaries}.json` + `probes/*.sh`. |
+| `lib/` | Runner-owned probe library: `lib/library.sh` (Bash 3.2 compatible). |
+| `src/` | Rust crate. `src/bin/fencerunner.rs` is the only installed binary. |
+| `tests/` | Contract gate: integration tests that build/run the real binary and execute real probes. |
+| `vendor/` | Vendored crates for offline builds; keep in sync with `Cargo.lock`. |
 
-## Good habits for all agents
+This repo vendors its Rust dependencies under `vendor/` and forces offline builds via `.cargo/config.toml`. If you update dependencies, keep `Cargo.lock` and `vendor/` in sync by running `cargo vendor vendor --locked`.
 
-These habits let aggressive automation and human contributors coexist safely:
+### Run-dir shape
+- Run dirs are **flat**: every top-level `*.sh` is a probe; subdirectories are ignored.
+- Probe ids come from filenames (`<probe_id>.sh`) and must be **globally unique across all run dirs** in one run.
+- Probe scripts must be **executable**; otherwise the run is a preflight/runner failure (even in `--supervised`).
 
-* Use the supported workflows. For probes, iterate with `tools/validate_contract_gate.sh --probe <id|path>` (or `bin/probe-contract-gate --probe <id|path>`) to get a fast, local contract gate before running the full suite.
-* Treat `bin/fencerunner` as the top-level CLI for `--bang`, `--bundle`, `--probe`, and `--listen`. It delegates to Rust helpers; keep its behavior aligned with the Makefile defaults and existing harness scripts rather than re-implementing probe logic in new places.
-* Preserve portability: scripts must run identically under macOS `/bin/bash 3.2` and inside the CI container, using the Rust helpers shipped in `bin/`. Do not introduce new runtime dependencies beyond Bash, the shipped Rust helpers, and the repo’s documented runtime prerequisites (for example `python3` for the loopback probe). If you need new behavior, either express it in Bash or extend the Rust helpers and rebuild; do not add another interpreter or service to the runtime data path.
-* Keep new policy in machine artifacts—schemas, probes, tests, tools. Documentation and AGENTS files explain those artifacts; they do not replace them. When policies change, sync the schemas and tests that enforce them.
-* Rebuild helpers after Rust changes with `make build` or `make test` so `bin/` always matches `src/bin/`; never hand-edit compiled helpers.
-* When dependencies change, refresh the vendored set with `cargo vendor` and keep `vendor/` and `Cargo.lock` in lockstep.
-* Document any new or changed environment variables in the relevant `AGENTS.md` and tests; avoid ad-hoc env knobs.
-* Prefer `rg` for searches and keep changes focused to the touched area; avoid introducing new runtimes beyond Bash and Rust helpers.
-* Prefer `make test` to validate changes: it rebuilds helper binaries into `bin/` and then runs `cargo test`, avoiding spurious failures due to stale `bin/` artifacts.
-* After dependency updates, run `cargo vendor` to refresh `vendor/`, commit it alongside `Cargo.lock`, and keep `.cargo/config.toml` settings in sync with vendoring.
+## How the pieces fit
+
+>schema → validator → run dir → tests
+
+- `schema/*.json` are the **meta-schemas**. They define what a run-dir contract file is allowed to look like.
+- The runner **embeds** these schemas and validates `<RUN_DIR>/{commitments,gates,boundaries}.json` at preflight.
+- Probes source the runner library (`${FENCERUNNER_ROOT}/lib/library.sh`) and use runner shims:
+  - `commit_help_me <ensure|detect|emit> <commitment.id>` records enrollments for the current probe run.
+  - `emit-record ...` emits a boundary object and serializes enrollments into `/context/commitments`.
+- `cargo test` exercises the whole stack end-to-end (including the repo’s minimal example probe). If a contract changes, tests should force you to update code and docs deliberately.
+
+### Output contract
+- Probes emit **one boundary record per probe** as NDJSON to stdout (strict enforces “parse + validate”; supervised synthesizes records for probe-level breaks).
+- Boundary records must include a `context.commitments` array (empty allowed). Commitments are recorded as `(id, helps[])` pairs.
+- Stderr is diagnostic; it should never be treated as a structured output channel.
+
+## Low friction working loop
+
+1. **Decide which contract you’re changing.** Name it (schema / runtime check / test) before coding.
+2. **Keep changes local.** Don’t make one subsystem depend on incidental details of another.
+3. **Update the overlapping layers.** If you changed behavior, update docs and tests in the same patch.
+4. **Validate with `cargo test`.** Treat failures as contract disagreements, not annoyances.

@@ -6,25 +6,18 @@
 // on contract behavior instead of setup details.
 use anyhow::{Context, Result, bail};
 use fencerunner::boundary::{
-    BoundaryObject, CapabilityContext, ContextInfo, OperationInfo, ProbeContext, ProbeInfo,
-    ResultDetails, ResultInfo, RunInfo, StackInfo,
+    BoundaryObject, ContextInfo, OperationInfo, ProbeInfo, ResultDetails, ResultInfo, RunInfo,
+    StackInfo,
 };
-use fencerunner::catalog::{
-    CapabilityCategory, CapabilityId, CapabilityIndex, CapabilityLayer, CapabilitySnapshot,
-    CatalogKey, load_catalog_from_path,
-};
-use fencerunner::repo_tools::default_catalog_path;
 use serde_json::{Value, json};
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 use std::env;
 use std::fs;
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Mutex, MutexGuard, OnceLock};
-use tempfile::NamedTempFile;
-
-use crate::support::repo_root;
+use tempfile::TempDir;
 
 // Fixture probes are installed into probes/ so we can exercise real probe
 // discovery paths. Drop removes them to keep the repo clean between tests.
@@ -38,7 +31,7 @@ pub struct FixtureProbe {
 impl FixtureProbe {
     /// Install the minimal probe fixture with a new name under probes/.
     pub fn install(repo_root: &Path, name: &str) -> Result<Self> {
-        let source = repo_root.join("tests/mocks/minimal_probe.sh");
+        let source = repo_root.join("probes/minimal_example.sh");
         let dest = repo_root.join("probes").join(format!("{name}.sh"));
         if dest.exists() {
             bail!("fixture already exists at {}", dest.display());
@@ -54,20 +47,15 @@ impl FixtureProbe {
         })
     }
 
-    /// Install a named fixture script from tests/mocks.
-    pub fn install_from_fixture(repo_root: &Path, fixture: &str, name: &str) -> Result<Self> {
-        let source = repo_root.join("tests/mocks").join(fixture);
-        let dest = repo_root.join("probes").join(format!("{name}.sh"));
+    /// Install the minimal probe fixture with a new name under the provided run dir.
+    pub fn install_in_run_dir(repo_root: &Path, run_dir: &Path, name: &str) -> Result<Self> {
+        let source = repo_root.join("probes/minimal_example.sh");
+        let dest = run_dir.join(format!("{name}.sh"));
         if dest.exists() {
             bail!("fixture already exists at {}", dest.display());
         }
-        fs::copy(&source, &dest).with_context(|| {
-            format!(
-                "failed to copy fixture {} to {}",
-                source.display(),
-                dest.display()
-            )
-        })?;
+        fs::copy(&source, &dest)
+            .with_context(|| format!("failed to copy fixture to {}", dest.display()))?;
         let mut perms = fs::metadata(&dest)?.permissions();
         perms.set_mode(0o755);
         fs::set_permissions(&dest, perms)?;
@@ -80,6 +68,27 @@ impl FixtureProbe {
     /// Write a custom fixture script to probes/ with executable permissions.
     pub fn install_from_contents(repo_root: &Path, name: &str, contents: &str) -> Result<Self> {
         let dest = repo_root.join("probes").join(format!("{name}.sh"));
+        if dest.exists() {
+            bail!("fixture already exists at {}", dest.display());
+        }
+        fs::write(&dest, contents)
+            .with_context(|| format!("failed to write fixture at {}", dest.display()))?;
+        let mut perms = fs::metadata(&dest)?.permissions();
+        perms.set_mode(0o755);
+        fs::set_permissions(&dest, perms)?;
+        Ok(Self {
+            path: dest,
+            name: name.to_string(),
+        })
+    }
+
+    /// Write a custom fixture script to a run dir with executable permissions.
+    pub fn install_from_contents_in_run_dir(
+        run_dir: &Path,
+        name: &str,
+        contents: &str,
+    ) -> Result<Self> {
+        let dest = run_dir.join(format!("{name}.sh"));
         if dest.exists() {
             bail!("fixture already exists at {}", dest.display());
         }
@@ -176,93 +185,46 @@ impl Drop for TempRepo {
     }
 }
 
-pub struct TempWorkspace {
-    pub root: PathBuf,
+/// Ephemeral probe run directory rooted under the repo's `tmp/`.
+///
+/// The run dir is flat and includes the required `gates.json`,
+/// `commitments.json`, and `boundaries.json` files so fixture probes can be
+/// executed via `fencerunner`.
+pub struct FixtureRunDir {
+    temp: TempDir,
 }
 
-impl TempWorkspace {
-    /// Create a unique temp workspace root for workspace planning tests.
-    pub fn new() -> Self {
-        static COUNTER: AtomicUsize = AtomicUsize::new(0);
-        let mut base = env::temp_dir();
-        let unique = COUNTER.fetch_add(1, Ordering::SeqCst);
-        base.push(format!(
-            "probe-workspace-test-{}-{}",
-            std::process::id(),
-            unique
-        ));
-        fs::create_dir_all(&base).expect("failed to create temp workspace");
-        Self { root: base }
+impl FixtureRunDir {
+    pub fn new(repo_root: &Path) -> Result<Self> {
+        let base = repo_root.join("tmp");
+        fs::create_dir_all(&base)?;
+        let temp = tempfile::Builder::new()
+            .prefix("tests-run-dir")
+            .tempdir_in(&base)
+            .context("failed to create temp run dir")?;
+
+        fs::copy(
+            repo_root.join("probes/commitments.json"),
+            temp.path().join("commitments.json"),
+        )
+        .with_context(|| "copy commitments.json".to_string())?;
+        fs::copy(
+            repo_root.join("probes/boundaries.json"),
+            temp.path().join("boundaries.json"),
+        )
+        .with_context(|| "copy boundaries.json".to_string())?;
+        fs::copy(
+            repo_root.join("probes/gates.json"),
+            temp.path().join("gates.json"),
+        )
+        .with_context(|| "copy gates.json".to_string())?;
+
+        Ok(Self { temp })
     }
-}
 
-impl Drop for TempWorkspace {
-    // Temp workspaces are disposable; ignore errors on cleanup.
-    fn drop(&mut self) {
-        let _ = fs::remove_dir_all(&self.root);
+    pub fn path(&self) -> &Path {
+        self.temp.path()
     }
-}
-
-/// Build a minimal catalog file and load it as a CapabilityIndex.
-/// This keeps tests independent from the bundled catalog content.
-pub fn sample_capability_index(entries: &[(&str, &str, &str)]) -> Result<CapabilityIndex> {
-    let mut file = NamedTempFile::new()?;
-    let capabilities: Vec<Value> = entries
-        .iter()
-        .map(|(id, category, layer)| {
-            json!({
-                "id": id,
-                "category": category,
-                "layer": layer,
-                "description": format!("cap {id}"),
-                "operations": {"allow": [], "deny": []}
-            })
-        })
-        .collect();
-
-    let mut categories = BTreeMap::new();
-    let mut layers = BTreeSet::new();
-    for (_, category, layer) in entries {
-        categories
-            .entry(category.to_string())
-            .or_insert_with(|| "fixture".to_string());
-        layers.insert(layer.to_string());
-    }
-    let policy_layers: BTreeMap<String, String> = layers
-        .into_iter()
-        .map(|layer| (layer, "fixture layer".to_string()))
-        .collect();
-
-    serde_json::to_writer(
-        &mut file,
-        &json!({
-            "schema_version": "sandbox_catalog_v1",
-            "catalog": {"key": "sample_catalog_v1", "title": "sample catalog"},
-            "scope": {"description": "test", "policy_layers": policy_layers, "categories": categories},
-            "sources": {},
-            "capabilities": capabilities
-        }),
-    )?;
-    CapabilityIndex::load(file.path())
-        .with_context(|| "failed to load sample capability index".to_string())
-}
-
-/// Resolve the default catalog path using repo tooling so tests match production.
-pub fn catalog_path() -> PathBuf {
-    default_catalog_path(&repo_root())
-}
-
-/// Cache the default catalog key to avoid re-reading the catalog in each test.
-pub fn default_catalog_key() -> CatalogKey {
-    static KEY: OnceLock<CatalogKey> = OnceLock::new();
-    KEY.get_or_init(|| {
-        load_catalog_from_path(&catalog_path())
-            .expect("load catalog")
-            .catalog
-            .key
-            .clone()
-    })
-    .clone()
 }
 
 /// Convenience for building empty JSON object payloads.
@@ -289,7 +251,8 @@ pub fn sample_boundary_object() -> BoundaryObject {
                 ..ResultDetails::default()
             }),
         },
-        context: Some(ContextInfo {
+        context: ContextInfo {
+            commitments: Vec::new(),
             run: Some(RunInfo {
                 workspace_root: Some("/tmp".to_string()),
                 command: "echo test".to_string(),
@@ -297,21 +260,8 @@ pub fn sample_boundary_object() -> BoundaryObject {
             stack: Some(StackInfo {
                 os: "Darwin".to_string(),
             }),
-            capabilities_schema_version: Some(default_catalog_key()),
-            capability_context: Some(CapabilityContext {
-                primary: CapabilitySnapshot {
-                    id: CapabilityId("cap_id".to_string()),
-                    category: CapabilityCategory::Other("cat".to_string()),
-                    layer: CapabilityLayer::Other("layer".to_string()),
-                },
-                secondary: Vec::new(),
-            }),
-            probe: Some(ProbeContext {
-                primary_capability_id: CapabilityId("cap_id".to_string()),
-                secondary_capability_ids: Vec::new(),
-            }),
             extra: BTreeMap::new(),
-        }),
+        },
         payload: Some(json!({
             "stdout_snippet": null,
             "stderr_snippet": null,

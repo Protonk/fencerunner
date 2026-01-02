@@ -5,6 +5,4 @@ tmp/
 # Added by cargo
 
 /target
-bin/*
-!bin/.gitkeep
-!bin/probe-contract-gate
+/bin/

@@ -4,36 +4,34 @@
 // consistent command execution. These are intentionally small so test logic
 // stays readable and focused on contracts rather than boilerplate.
 use anyhow::{Context, Result, bail};
-use fencerunner::repo_tools::find_repo_root;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Mutex, OnceLock};
 
-/// Locate the repository root using the same heuristics as production code.
-/// This keeps tests honest about how helpers find the repo.
+/// Locate the repository root for integration tests.
+///
+/// Tests are compiled from the repository checkout, so the build-time manifest
+/// directory is a stable, unambiguous root.
 pub fn repo_root() -> PathBuf {
-    find_repo_root().expect("tests require repository root")
+    std::fs::canonicalize(env!("CARGO_MANIFEST_DIR"))
+        .unwrap_or_else(|_| PathBuf::from(env!("CARGO_MANIFEST_DIR")))
 }
 
 /// Resolve a helper binary by name, after ensuring helpers are built.
-/// This mirrors the harness helper search order: target/ builds and then bin/.
-pub fn helper_binary(repo_root: &Path, name: &str) -> PathBuf {
-    ensure_helpers_built(repo_root).expect("failed to build helper binaries");
+/// This mirrors the harness helper search order: target/ builds.
+pub fn fencerunner_binary(repo_root: &Path) -> PathBuf {
+    ensure_helpers_built(repo_root).expect("failed to build fencerunner");
     let candidates = [
-        repo_root.join("target").join("debug").join(name),
-        repo_root.join("target").join("release").join(name),
-        repo_root.join("bin").join(name),
+        repo_root.join("target").join("debug").join("fencerunner"),
+        repo_root.join("target").join("release").join("fencerunner"),
     ];
     for candidate in candidates {
         if candidate.is_file() {
             return candidate;
         }
     }
-    panic!(
-        "unable to locate helper {} (checked target/debug, target/release, bin)",
-        name
-    );
+    panic!("unable to locate fencerunner (checked target/debug, target/release)");
 }
 
 /// Run a command and convert non-zero exits into detailed errors.
@@ -67,7 +65,7 @@ pub fn make_executable(path: &Path) -> Result<()> {
     Ok(())
 }
 
-/// Build helper binaries once per test run to keep `bin/` and `target/` in sync.
+/// Build helper binaries once per test run.
 /// The AtomicBool avoids repeated work; the Mutex prevents concurrent builds.
 fn ensure_helpers_built(repo_root: &Path) -> Result<()> {
     static BUILT: AtomicBool = AtomicBool::new(false);
@@ -86,11 +84,12 @@ fn ensure_helpers_built(repo_root: &Path) -> Result<()> {
 
     let status = Command::new("cargo")
         .arg("build")
-        .arg("--bins")
+        .arg("--bin")
+        .arg("fencerunner")
         .arg("--quiet")
         .current_dir(repo_root)
         .status()
-        .context("failed to compile helper binaries")?;
+        .context("failed to compile fencerunner")?;
     if status.success() {
         BUILT.store(true, Ordering::SeqCst);
         Ok(())
