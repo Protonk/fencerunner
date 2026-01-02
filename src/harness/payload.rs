@@ -1,8 +1,8 @@
 //! Shared helpers for building boundary-object payloads and validating inputs.
 //!
-//! These functions back `emit-record`. They focus on enforcing the script
-//! contract (single payload source, bounded size) while
-//! keeping the CLI parsing code readable.
+//! These functions back `emit-record` and supervised synthetic record payload
+//! building. They focus on enforcing the script contract (single payload
+//! source, bounded size) while keeping the CLI parsing code readable.
 
 use anyhow::{Context, Result, anyhow, bail};
 use serde_json::{Map, Value, json};

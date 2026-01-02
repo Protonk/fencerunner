@@ -15,7 +15,7 @@ use fencerunner::boundary::{
 };
 use fencerunner::commands;
 use fencerunner::commitments::model::CommitmentHelp;
-use fencerunner::harness::payload::validate_outcome;
+use fencerunner::harness::payload::{PayloadArgs, TextSource, validate_outcome};
 use fencerunner::harness::run_dir_plan::{RunDirPlan, plan_scripts, preflight_run_dirs};
 use fencerunner::harness::runner_root::RunnerRoot;
 use fencerunner::scripts::discovery::Script;
@@ -468,8 +468,7 @@ fn synthetic_boundary_object(
     stderr_bytes: &[u8],
     details: ResultDetails,
 ) -> BoundaryObject {
-    let stdout_snippet = String::from_utf8_lossy(stdout_bytes).to_string();
-    let stderr_snippet = String::from_utf8_lossy(stderr_bytes).to_string();
+    let payload = build_synthetic_payload(stdout_bytes, stderr_bytes, run_dir, script);
 
     BoundaryObject {
         script: ScriptInfo {
@@ -493,22 +492,57 @@ fn synthetic_boundary_object(
             stack: None,
             extra: Default::default(),
         },
-        payload: json!({
-            "stdout_snippet": stdout_snippet,
-            "stderr_snippet": stderr_snippet,
-            // Raw details keep the supervised record traceable without logs.
-            "raw": {
-                "supervised": {
-                    "run_dir": run_dir.display().to_string(),
-                    "script_path": script.path.display().to_string(),
-                }
-            }
-        }),
+        payload,
         extensions: Some(json!({
             "synthetic": {
                 "emitted_by": "fencerunner",
             }
         })),
+    }
+}
+
+fn build_synthetic_payload(
+    stdout_bytes: &[u8],
+    stderr_bytes: &[u8],
+    run_dir: &Path,
+    script: &Script,
+) -> Value {
+    // Keep supervised payload behavior aligned with `emit-record` by using the
+    // shared payload builder (snippet truncation + payload size cap).
+    let stdout = String::from_utf8_lossy(stdout_bytes).to_string();
+    let stderr = String::from_utf8_lossy(stderr_bytes).to_string();
+    let supervised_raw = json!({
+        "supervised": {
+            "run_dir": run_dir.display().to_string(),
+            "script_path": script.path.display().to_string(),
+        }
+    });
+
+    let payload = (|| -> Result<Value> {
+        let mut args = PayloadArgs::default();
+        args.set_stdout(TextSource::Inline(stdout))?;
+        args.set_stderr(TextSource::Inline(stderr))?;
+        args.raw_mut().merge_json_string(
+            &serde_json::to_string(&supervised_raw).context("serialize supervised payload raw")?,
+            "payload raw supervised",
+        )?;
+        args.build()
+    })();
+
+    match payload {
+        Ok(value) => value,
+        Err(err) => {
+            eprintln!(
+                "fencerunner: supervised: failed to build synthetic payload; omitting snippets: {err:#}"
+            );
+            // Fallback: keep the required payload shape but omit snippets so the
+            // synthetic record can still be emitted.
+            json!({
+                "stdout_snippet": "",
+                "stderr_snippet": "",
+                "raw": supervised_raw,
+            })
+        }
     }
 }
 

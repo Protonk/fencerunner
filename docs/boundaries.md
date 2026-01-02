@@ -7,14 +7,17 @@ Boundary output is **NDJSON on stdout**: one JSON object per line.
 The contract is intentionally **flexible but enforceable**: a run dir can pick
 its own `record_schema` (and evolve it over time), but emitted records must
 still include a small required core so downstream tooling always has stable
-identity/outcome/enrollment/payload channels.
+identity/outcome/enrollment/payload channels. `result.outcome` is also treated
+as a stable enum: `fencerunner` enforces the fixed vocabulary
+`success|denied|partial|error` even if a run dir’s `record_schema` is
+permissive.
 
 ## Required core (baseline policy)
 
 Every run dir’s `record_schema` must require:
 
 - `script.id` (string)
-- `result.outcome` (string)
+- `result.outcome` (string; fixed vocabulary enforced by the runner)
 - `/context/commitments` (array of `{id, helps[]}` enrollment pairs; empty allowed)
 - `/payload/stdout_snippet` (string; empty allowed)
 - `/payload/stderr_snippet` (string; empty allowed)
@@ -22,9 +25,11 @@ Every run dir’s `record_schema` must require:
 The meta-schema at [`schema/boundaries.json`](../schema/boundaries.json) enforces that your `record_schema`
 is written in a way that preserves these fields.
 
-## Payload constraints (emit-record)
+## Payload constraints (emit-record + supervised)
 
-If you use the runner-provided `emit-record` helper, it keeps boundary records compact and predictable:
+`emit-record` keeps boundary records compact and predictable. In `--supervised`
+mode, synthetic records use the same payload builder so the same constraints
+apply:
 
 - `payload` (as serialized JSON) is capped at 16 KiB.
 - `payload.stdout_snippet` and `payload.stderr_snippet` are NUL-stripped and truncated to 2000 characters (with an ellipsis).
@@ -75,7 +80,10 @@ Minimal `boundaries.json` (requires only the core fields and otherwise stays per
         "type": "object",
         "required": ["outcome"],
         "properties": {
-          "outcome": { "type": "string" }
+          "outcome": {
+            "type": "string",
+            "enum": ["success", "denied", "partial", "error"]
+          }
         }
       },
       "payload": {

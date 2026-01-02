@@ -1101,9 +1101,9 @@ Keep this in the “advanced” bucket unless you have consumers that require �
 
 >Loose ends worth validating.
 
-### Payload size limits (emit-record)
+### Payload size limits
 
-`emit-record` keeps records compact and predictable by enforcing a size limit and truncating snippets:
+`emit-record` (and supervised synthetic records) keep records compact and predictable by enforcing a size limit and truncating snippets:
 
  - `payload` (as serialized JSON) is capped at 16 KiB (16384 bytes).
 - `payload.stdout_snippet` and `payload.stderr_snippet` are NUL-stripped and truncated to 2000 characters (with an ellipsis).

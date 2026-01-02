@@ -558,6 +558,77 @@ exit 0
     Ok(())
 }
 
+// Supervised synthetic records should keep payloads compact and predictable:
+// snippets are truncated and the payload stays under the same cap enforced by
+// `emit-record`.
+#[test]
+fn fencerunner_supervised_truncates_and_caps_synthetic_payload_snippets() -> Result<()> {
+    let repo_root = repo_root();
+    let _guard = repo_guard();
+    let run_dir = FixtureRunDir::new(&repo_root)?;
+    let contents = r#"#!/usr/bin/env bash
+set -euo pipefail
+
+# Emit a large non-JSON stdout payload to force a synthetic record.
+printf 'A%.0s' {1..20000}
+exit 0
+"#;
+    let probe = FixtureScript::install_from_contents_in_run_dir(
+        run_dir.path(),
+        "tests_huge_stdout_probe",
+        contents,
+    )?;
+
+    let runner = fencerunner_binary(&repo_root);
+    let mut cmd = Command::new(&runner);
+    cmd.arg("--supervised")
+        .arg(run_dir.path())
+        .current_dir(&repo_root);
+    let output = run_command(cmd)?;
+    assert!(
+        output.status.success(),
+        "supervised mode should exit 0 for a script-level contract break"
+    );
+
+    let stdout = String::from_utf8(output.stdout).context("target stdout utf-8")?;
+    let lines: Vec<&str> = stdout
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty())
+        .collect();
+    assert_eq!(lines.len(), 1, "expected exactly one record");
+
+    let (record, value) = parse_boundary_object(lines[0].as_bytes())?;
+    assert_eq!(record.script.id, probe.script_id());
+    assert_eq!(record.operation.kind, "harness.supervised");
+    assert_eq!(record.result.outcome, "error");
+
+    let stdout_snippet = value
+        .pointer("/payload/stdout_snippet")
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
+    assert!(
+        stdout_snippet.ends_with('\u{2026}'),
+        "expected truncated stdout_snippet to end with an ellipsis"
+    );
+    assert_eq!(
+        stdout_snippet.chars().count(),
+        2001,
+        "expected stdout_snippet to be truncated to 2000 chars plus ellipsis"
+    );
+
+    let payload = value
+        .get("payload")
+        .context("boundary record missing payload")?;
+    let payload_bytes = serde_json::to_vec(payload).context("serialize payload")?;
+    assert!(
+        payload_bytes.len() <= 16 * 1024,
+        "expected synthetic payload to be capped at 16KiB"
+    );
+
+    Ok(())
+}
+
 // If a probe enrolls in commitments and then breaks the stdout contract,
 // supervised mode should emit a synthetic record that still carries those
 // enrollments in /context/commitments.
