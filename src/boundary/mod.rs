@@ -8,6 +8,7 @@ pub mod types;
 
 pub use contract::{BoundaryContract, BoundaryContractIndex, BoundaryStdout};
 pub use types::{
-    BoundaryObject, CommitmentEnrollment, ContextInfo, OperationInfo, ProbeInfo, ResultDetails,
+    BoundaryObject, CommitmentEnrollment, ContextInfo, OperationInfo, ResultDetails,
     ResultInfo, RunInfo, StackInfo,
+    ScriptInfo,
 };

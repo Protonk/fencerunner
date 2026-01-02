@@ -1,4 +1,4 @@
-//! Indexed view of a probe commitments registry.
+//! Indexed view of a script commitments registry.
 //!
 //! The index enforces the schema version, validates the registry against the
 //! bundled JSON schema, and rejects duplicate commitment ids within a single
@@ -14,7 +14,7 @@ use std::io::BufReader;
 use std::path::Path;
 
 const DEFAULT_SCHEMA_VERSION: &str = "commitments_v1";
-const REGISTRY_SCHEMA_TITLE: &str = "Probe commitments registry (v1)";
+const REGISTRY_SCHEMA_TITLE: &str = "Script commitments registry (v1)";
 const REGISTRY_SCHEMA_REQUIRED_POINTERS: [&str; 3] = [
     "/properties/schema_version/const",
     "/properties/commitments",

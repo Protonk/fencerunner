@@ -19,24 +19,25 @@ The system’s posture assumes **authors are cooperating** (instrumentation, not
 
 ## What's here
 
->Fencerunner runs run dirs: flat directories containing *.sh probes and three local contracts.
+>fencerunner runs run dirs: flat directories containing `*.sh` scripts and three local contracts.
 
 | Path | Purpose |
 | --- | --- |
 | `schema/` | Meta-schemas for run-dir contracts: `schema/commitments.json`, `schema/gates.json`, `schema/boundaries.json`. |
 | `docs/` | Narrative docs for run-dir authors: `docs/commitments.md`, `docs/gates.md`, `docs/boundaries.md`. |
-| `probes/` | Default/example run dir shipped with the repo (and used by tests): `probes/{commitments,gates,boundaries}.json` + `probes/*.sh`. |
-| `lib/` | Runner-owned probe library: `lib/library.sh` (Bash 3.2 compatible). |
+| `scripts/` | Default/example run dir shipped with the repo (and used by tests): `scripts/{commitments,gates,boundaries}.json` + `scripts/*.sh`. |
+| `lib/` | Runner-owned script library: `lib/library.sh` (Bash 3.2 compatible). |
 | `src/` | Rust crate. `src/bin/fencerunner.rs` is the only installed binary. |
-| `tests/` | Contract gate: integration tests that build/run the real binary and execute real probes. |
+| `tests/` | Contract gate: integration tests that build/run the real binary and execute real scripts. |
 | `vendor/` | Vendored crates for offline builds; keep in sync with `Cargo.lock`. |
 
 This repo vendors its Rust dependencies under `vendor/` and forces offline builds via `.cargo/config.toml`. If you update dependencies, keep `Cargo.lock` and `vendor/` in sync by running `cargo vendor vendor --locked`.
 
 ### Run-dir shape
-- Run dirs are **flat**: every top-level `*.sh` is a probe; subdirectories are ignored.
-- Probe ids come from filenames (`<probe_id>.sh`) and must be **globally unique across all run dirs** in one run.
-- Probe scripts must be **executable**; otherwise the run is a preflight/runner failure (even in `--supervised`).
+- Run dirs are **flat**: every top-level `*.sh` is a script; subdirectories are ignored.
+- Script ids come from filenames (`<script_id>.sh`) and must be **globally unique across all run dirs** in one run.
+- Scripts must be **executable**; otherwise the run is a preflight/runner failure (even in `--supervised`).
+- Scripts execute with **CWD set to the run dir**; relative paths resolve there.
 
 ## How the pieces fit
 
@@ -44,13 +45,13 @@ This repo vendors its Rust dependencies under `vendor/` and forces offline build
 
 - `schema/*.json` are the **meta-schemas**. They define what a run-dir contract file is allowed to look like.
 - The runner **embeds** these schemas and validates `<RUN_DIR>/{commitments,gates,boundaries}.json` at preflight.
-- Probes source the runner library (`${FENCERUNNER_ROOT}/lib/library.sh`) and use runner shims:
-  - `commit_help_me <ensure|detect|emit> <commitment.id>` records enrollments for the current probe run.
+- Scripts source the runner library (`${FENCERUNNER_ROOT}/lib/library.sh`) and use runner shims:
+  - `commit_help_me <ensure|detect|emit> <commitment.id>` records enrollments for the current script run.
   - `emit-record ...` emits a boundary object and serializes enrollments into `/context/commitments`.
-- `cargo test` exercises the whole stack end-to-end (including the repo’s minimal example probe). If a contract changes, tests should force you to update code and docs deliberately.
+- `cargo test` exercises the whole stack end-to-end (including the repo’s minimal example script). If a contract changes, tests should force you to update code and docs deliberately.
 
 ### Output contract
-- Probes emit **one boundary record per probe** as NDJSON to stdout (strict enforces “parse + validate”; supervised synthesizes records for probe-level breaks).
+- Scripts emit **one boundary record per script** as NDJSON to stdout (strict enforces “parse + validate”; supervised synthesizes records for script-level breaks).
 - Boundary records must include a `context.commitments` array (empty allowed). Commitments are recorded as `(id, helps[])` pairs.
 - Stderr is diagnostic; it should never be treated as a structured output channel.
 

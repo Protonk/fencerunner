@@ -2,11 +2,11 @@
 #![allow(dead_code)]
 
 // Shared fixtures and builders for integration tests. These helpers centralize
-// temp dirs, probe fixtures, and sample boundary objects so tests stay focused
+// temp dirs, script fixtures, and sample boundary objects so tests stay focused
 // on contract behavior instead of setup details.
 use anyhow::{Context, Result, bail};
 use fencerunner::boundary::{
-    BoundaryObject, ContextInfo, OperationInfo, ProbeInfo, ResultDetails, ResultInfo, RunInfo,
+    BoundaryObject, ContextInfo, OperationInfo, ResultDetails, ResultInfo, RunInfo, ScriptInfo,
     StackInfo,
 };
 use serde_json::{Value, json};
@@ -19,20 +19,20 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Mutex, MutexGuard, OnceLock};
 use tempfile::TempDir;
 
-// Fixture probes are installed into probes/ so we can exercise real probe
-// discovery paths. Drop removes them to keep the repo clean between tests.
-// Helper for installing temporary probe mocks under probes/ and cleaning them
+// Fixture scripts are installed into scripts/ so we can exercise real discovery
+// paths. Drop removes them to keep the repo clean between tests.
+// Helper for installing temporary script mocks under scripts/ and cleaning them
 // up after each test.
-pub struct FixtureProbe {
+pub struct FixtureScript {
     path: PathBuf,
     name: String,
 }
 
-impl FixtureProbe {
-    /// Install the minimal probe fixture with a new name under probes/.
+impl FixtureScript {
+    /// Install the minimal script fixture with a new name under scripts/.
     pub fn install(repo_root: &Path, name: &str) -> Result<Self> {
-        let source = repo_root.join("probes/minimal_example.sh");
-        let dest = repo_root.join("probes").join(format!("{name}.sh"));
+        let source = repo_root.join("scripts/minimal_example.sh");
+        let dest = repo_root.join("scripts").join(format!("{name}.sh"));
         if dest.exists() {
             bail!("fixture already exists at {}", dest.display());
         }
@@ -47,9 +47,9 @@ impl FixtureProbe {
         })
     }
 
-    /// Install the minimal probe fixture with a new name under the provided run dir.
+    /// Install the minimal script fixture with a new name under the provided run dir.
     pub fn install_in_run_dir(repo_root: &Path, run_dir: &Path, name: &str) -> Result<Self> {
-        let source = repo_root.join("probes/minimal_example.sh");
+        let source = repo_root.join("scripts/minimal_example.sh");
         let dest = run_dir.join(format!("{name}.sh"));
         if dest.exists() {
             bail!("fixture already exists at {}", dest.display());
@@ -65,9 +65,9 @@ impl FixtureProbe {
         })
     }
 
-    /// Write a custom fixture script to probes/ with executable permissions.
+    /// Write a custom fixture script to scripts/ with executable permissions.
     pub fn install_from_contents(repo_root: &Path, name: &str, contents: &str) -> Result<Self> {
-        let dest = repo_root.join("probes").join(format!("{name}.sh"));
+        let dest = repo_root.join("scripts").join(format!("{name}.sh"));
         if dest.exists() {
             bail!("fixture already exists at {}", dest.display());
         }
@@ -103,14 +103,14 @@ impl FixtureProbe {
         })
     }
 
-    /// Return the probe id (derived from the filename stem).
-    pub fn probe_id(&self) -> &str {
+    /// Return the script id (derived from the filename stem).
+    pub fn script_id(&self) -> &str {
         &self.name
     }
 }
 
-impl Drop for FixtureProbe {
-    // RAII cleanup makes probe fixtures safe in parallel test runs.
+impl Drop for FixtureScript {
+    // RAII cleanup makes script fixtures safe in parallel test runs.
     fn drop(&mut self) {
         let _ = fs::remove_file(&self.path);
     }
@@ -129,7 +129,7 @@ impl Drop for FileGuard {
     }
 }
 
-// RepoGuard serializes tests that mutate probes/ or other shared repo paths.
+// RepoGuard serializes tests that mutate scripts/ or other shared repo paths.
 // Using a Mutex ensures concurrent tests don't stomp on each other's fixtures.
 // Serializes repository-mutating tests so fixture installs do not conflict.
 pub struct RepoGuard {
@@ -169,7 +169,7 @@ impl TempRepo {
         static COUNTER: AtomicUsize = AtomicUsize::new(0);
         let mut dir = env::temp_dir();
         dir.push(format!(
-            "probe-helper-test-{}-{}",
+            "script-helper-test-{}-{}",
             std::process::id(),
             COUNTER.fetch_add(1, Ordering::SeqCst)
         ));
@@ -185,10 +185,10 @@ impl Drop for TempRepo {
     }
 }
 
-/// Ephemeral probe run directory rooted under the repo's `tmp/`.
+/// Ephemeral script run directory rooted under the repo's `tmp/`.
 ///
 /// The run dir is flat and includes the required `gates.json`,
-/// `commitments.json`, and `boundaries.json` files so fixture probes can be
+/// `commitments.json`, and `boundaries.json` files so fixture scripts can be
 /// executed via `fencerunner`.
 pub struct FixtureRunDir {
     temp: TempDir,
@@ -204,17 +204,17 @@ impl FixtureRunDir {
             .context("failed to create temp run dir")?;
 
         fs::copy(
-            repo_root.join("probes/commitments.json"),
+            repo_root.join("scripts/commitments.json"),
             temp.path().join("commitments.json"),
         )
         .with_context(|| "copy commitments.json".to_string())?;
         fs::copy(
-            repo_root.join("probes/boundaries.json"),
+            repo_root.join("scripts/boundaries.json"),
             temp.path().join("boundaries.json"),
         )
         .with_context(|| "copy boundaries.json".to_string())?;
         fs::copy(
-            repo_root.join("probes/gates.json"),
+            repo_root.join("scripts/gates.json"),
             temp.path().join("gates.json"),
         )
         .with_context(|| "copy gates.json".to_string())?;
@@ -233,11 +233,12 @@ pub fn empty_json_object() -> Value {
 }
 
 /// A minimal but valid boundary object for serde round-trip tests.
-/// This is not meant to represent a real probe; it only exercises struct wiring.
+/// This is not meant to represent a real script; it only exercises struct wiring.
+/// Payload is required, even when the snippets are empty.
 pub fn sample_boundary_object() -> BoundaryObject {
     BoundaryObject {
-        probe: ProbeInfo {
-            id: "probe".to_string(),
+        script: ScriptInfo {
+            id: "script".to_string(),
         },
         operation: OperationInfo {
             kind: "fs.read".to_string(),
@@ -262,11 +263,11 @@ pub fn sample_boundary_object() -> BoundaryObject {
             }),
             extra: BTreeMap::new(),
         },
-        payload: Some(json!({
-            "stdout_snippet": null,
-            "stderr_snippet": null,
+        payload: json!({
+            "stdout_snippet": "",
+            "stderr_snippet": "",
             "raw": {}
-        })),
+        }),
         extensions: None,
     }
 }

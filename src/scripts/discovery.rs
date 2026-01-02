@@ -1,6 +1,6 @@
-//! Resolve and enumerate probe scripts under a run directory.
+//! Resolve and enumerate scripts under a run directory.
 //!
-//! Probe resolution is intentionally strict: anything outside the run dir is
+//! Script resolution is intentionally strict: anything outside the run dir is
 //! rejected to keep the harness contract enforceable and to avoid symlink
 //! escapes.
 
@@ -10,7 +10,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 #[derive(Debug, Clone)]
-pub struct Probe {
+pub struct Script {
     pub id: String,
     pub path: PathBuf,
 }
@@ -25,17 +25,17 @@ pub fn canonical_run_dir(run_dir: &Path) -> Result<PathBuf> {
     Ok(canonical)
 }
 
-/// Resolve a probe identifier to a script under `run_dir`.
+/// Resolve a script identifier to a script under `run_dir`.
 ///
 /// The resolver enforces the workspace boundary by canonicalizing each
 /// candidate and rejecting anything outside `run_dir`, guarding against
 /// symlinks or relative paths that would escape the contract in
 /// `docs/gates.md`.
-pub fn resolve_probe(run_dir: &Path, identifier: &str) -> Result<Probe> {
+pub fn resolve_script(run_dir: &Path, identifier: &str) -> Result<Script> {
     let run_root = canonical_run_dir(run_dir)?;
     let trimmed = identifier.trim();
     if trimmed.is_empty() {
-        bail!("Empty probe identifier requested");
+        bail!("Empty script identifier requested");
     }
     let trimmed = trimmed.strip_prefix("./").unwrap_or(trimmed);
 
@@ -56,9 +56,9 @@ pub fn resolve_probe(run_dir: &Path, identifier: &str) -> Result<Probe> {
         if candidate.is_file() {
             if let Ok(canonical) = fs::canonicalize(&candidate) {
                 if canonical.starts_with(&run_root) {
-                    ensure_probe_executable(&canonical)?;
+                    ensure_script_executable(&canonical)?;
                     if let Some(stem) = canonical.file_stem().and_then(|s| s.to_str()) {
-                        return Ok(Probe {
+                        return Ok(Script {
                             id: stem.to_string(),
                             path: canonical,
                         });
@@ -68,18 +68,18 @@ pub fn resolve_probe(run_dir: &Path, identifier: &str) -> Result<Probe> {
         }
     }
 
-    bail!("Probe not found: {identifier}")
+    bail!("Script not found: {identifier}")
 }
 
-/// List all probe scripts under `run_dir`.
+/// List all scripts under `run_dir`.
 ///
-/// Only `.sh` files are considered, and the file stem becomes the probe id.
-/// Missing probes are treated as an error because downstream tooling expects at
+/// Only `.sh` files are considered, and the file stem becomes the script id.
+/// Missing scripts are treated as an error because downstream tooling expects at
 /// least the fixtures to exist.
-pub fn list_probes(run_dir: &Path) -> Result<Vec<Probe>> {
+pub fn list_scripts(run_dir: &Path) -> Result<Vec<Script>> {
     let run_root = canonical_run_dir(run_dir)?;
     // BTreeMap keeps ordering stable across platforms and filesystems.
-    let mut results: BTreeMap<String, Probe> = BTreeMap::new();
+    let mut results: BTreeMap<String, Script> = BTreeMap::new();
     for entry in fs::read_dir(&run_root)? {
         let entry = entry?;
         let path = entry.path();
@@ -92,16 +92,16 @@ pub fn list_probes(run_dir: &Path) -> Result<Vec<Probe>> {
         let canonical = fs::canonicalize(&path)?;
         if !canonical.starts_with(&run_root) {
             bail!(
-                "Probe path escapes run dir: {} -> {}",
+                "Script path escapes run dir: {} -> {}",
                 path.display(),
                 canonical.display()
             );
         }
-        ensure_probe_executable(&canonical)?;
+        ensure_script_executable(&canonical)?;
         if let Some(stem) = canonical.file_stem().and_then(|s| s.to_str()) {
             results.insert(
                 stem.to_string(),
-                Probe {
+                Script {
                     id: stem.to_string(),
                     path: canonical,
                 },
@@ -110,24 +110,24 @@ pub fn list_probes(run_dir: &Path) -> Result<Vec<Probe>> {
     }
 
     if results.is_empty() {
-        bail!("No probes found under {}", run_root.to_string_lossy());
+        bail!("No scripts found under {}", run_root.to_string_lossy());
     }
 
     Ok(results.into_values().collect())
 }
 
-fn ensure_probe_executable(path: &Path) -> Result<()> {
+fn ensure_script_executable(path: &Path) -> Result<()> {
     let metadata = fs::metadata(path)
-        .with_context(|| format!("probe not found or not executable: {}", path.display()))?;
+        .with_context(|| format!("script not found or not executable: {}", path.display()))?;
     if !metadata.is_file() {
-        bail!("probe not found or not executable: {}", path.display());
+        bail!("script not found or not executable: {}", path.display());
     }
 
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
         if metadata.permissions().mode() & 0o111 == 0 {
-            bail!("probe is not executable: {}", path.display());
+            bail!("script is not executable: {}", path.display());
         }
     }
 

@@ -39,9 +39,9 @@ fn emit_record_rejects_duplicate_commitment_enrollment() -> Result<()> {
             "FENCERUNNER_COMMITMENT_ENROLLMENTS_PATH",
             enrollments_file.path(),
         )
-        .env("FENCERUNNER_RUN_DIR", repo_root.join("probes"))
+        .env("FENCERUNNER_RUN_DIR", repo_root.join("scripts"))
         .arg("__emit-record")
-        .arg("--probe-name")
+        .arg("--script-name")
         .arg("tests_duplicate_commitment_help")
         .arg("--command")
         .arg("true")
@@ -51,6 +51,10 @@ fn emit_record_rejects_duplicate_commitment_enrollment() -> Result<()> {
         .arg("/tmp")
         .arg("--outcome")
         .arg("success")
+        .arg("--payload-stdout")
+        .arg("")
+        .arg("--payload-stderr")
+        .arg("")
         .arg("--operation-args")
         .arg("{}")
         .output()
@@ -78,9 +82,9 @@ fn emit_record_omits_workspace_root_by_default() -> Result<()> {
 
     let output = Command::new(&fencerunner)
         .current_dir(&pwd)
-        .env("FENCERUNNER_RUN_DIR", repo_root.join("probes"))
+        .env("FENCERUNNER_RUN_DIR", repo_root.join("scripts"))
         .arg("__emit-record")
-        .arg("--probe-name")
+        .arg("--script-name")
         .arg("tests_workspace_fallback")
         .arg("--command")
         .arg("true")
@@ -90,6 +94,10 @@ fn emit_record_omits_workspace_root_by_default() -> Result<()> {
         .arg("/tmp")
         .arg("--outcome")
         .arg("success")
+        .arg("--payload-stdout")
+        .arg("")
+        .arg("--payload-stderr")
+        .arg("")
         .arg("--operation-args")
         .arg("{}")
         .output()
@@ -105,6 +113,43 @@ fn emit_record_omits_workspace_root_by_default() -> Result<()> {
         workspace_root.is_none(),
         "expected workspace_root to be omitted, got: {workspace_root:?}"
     );
+    Ok(())
+}
+
+// emit-record should require stdout/stderr payload snippets to keep payload shape uniform.
+#[test]
+fn emit_record_requires_payload_snippets() -> Result<()> {
+    let repo_root = repo_root();
+    let fencerunner = fencerunner_binary(&repo_root);
+
+    let output = Command::new(&fencerunner)
+        .env("FENCERUNNER_RUN_DIR", repo_root.join("scripts"))
+        .arg("__emit-record")
+        .arg("--script-name")
+        .arg("tests_missing_payload")
+        .arg("--command")
+        .arg("true")
+        .arg("--operation-kind")
+        .arg("fs.read")
+        .arg("--target")
+        .arg("/tmp")
+        .arg("--outcome")
+        .arg("success")
+        .arg("--operation-args")
+        .arg("{}")
+        .output()
+        .context("failed to execute emit-record without payload snippets")?;
+
+    assert!(
+        !output.status.success(),
+        "emit-record should fail when payload snippets are missing"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("payload-stdout") || stderr.contains("payload-stderr"),
+        "expected missing payload hint; stderr was: {stderr}"
+    );
+
     Ok(())
 }
 

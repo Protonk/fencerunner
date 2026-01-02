@@ -1,6 +1,6 @@
 #![cfg(unix)]
 
-// Probe commitments registry guard rails.
+// Script commitments registry guard rails.
 mod support;
 
 use anyhow::Result;
@@ -13,7 +13,7 @@ use tempfile::NamedTempFile;
 #[test]
 fn load_default_commitments_registry_smoke() -> Result<()> {
     let repo_root = repo_root();
-    let registry_path = repo_root.join("probes/commitments.json");
+    let registry_path = repo_root.join("scripts/commitments.json");
     let index = CommitmentIndex::load(&registry_path)?;
     assert!(index.supports_help("emit.record", CommitmentHelp::Emit));
     assert!(index.supports_help("python3", CommitmentHelp::Ensure));

@@ -1,36 +1,36 @@
 #![cfg(unix)]
 
-// Helper utilities and compiled probe guard rails.
+// Helper utilities and compiled script guard rails.
 #[path = "support/common.rs"]
 mod common;
 mod support;
 
 use anyhow::Result;
 use fencerunner::harness::payload::{JsonObjectBuilder, PayloadArgs, TextSource};
-use fencerunner::probes::discovery::{list_probes, resolve_probe};
+use fencerunner::scripts::discovery::{list_scripts, resolve_script};
 use serde_json::Value;
 use std::fs;
 use support::make_executable;
 
 use common::TempRepo;
 
-// list_probes and resolve_probe should agree on how ids and extensions behave.
+// list_scripts and resolve_script should agree on how ids and extensions behave.
 #[test]
-fn list_and_resolve_probes_share_semantics() -> Result<()> {
+fn list_and_resolve_scripts_share_semantics() -> Result<()> {
     let temp = TempRepo::new();
-    let probes_dir = temp.root.join("probes");
-    fs::create_dir_all(&probes_dir)?;
-    let script = probes_dir.join("example.sh");
+    let scripts_dir = temp.root.join("scripts");
+    fs::create_dir_all(&scripts_dir)?;
+    let script = scripts_dir.join("example.sh");
     fs::write(&script, "#!/usr/bin/env bash\nexit 0\n")?;
     make_executable(&script)?;
 
-    let probes = list_probes(&probes_dir)?;
-    assert_eq!(probes.len(), 1);
-    assert_eq!(probes[0].id, "example");
+    let scripts = list_scripts(&scripts_dir)?;
+    assert_eq!(scripts.len(), 1);
+    assert_eq!(scripts[0].id, "example");
 
-    let resolved = resolve_probe(&probes_dir, "example")?;
+    let resolved = resolve_script(&scripts_dir, "example")?;
     assert_eq!(resolved.path, fs::canonicalize(&script)?);
-    let resolved_with_ext = resolve_probe(&probes_dir, "example.sh")?;
+    let resolved_with_ext = resolve_script(&scripts_dir, "example.sh")?;
     assert_eq!(resolved_with_ext.path, resolved.path);
     Ok(())
 }
@@ -65,6 +65,7 @@ fn json_object_builder_overrides_fields() -> Result<()> {
 #[test]
 fn payload_builder_accepts_inline_snippets() -> Result<()> {
     let mut payload = PayloadArgs::default();
+    // stdout/stderr snippets are required even when empty.
     payload.set_stdout(TextSource::Inline("hello".to_string()))?;
     payload.set_stderr(TextSource::Inline("stderr".to_string()))?;
     payload.raw_mut().insert_null("raw_key".to_string());
@@ -90,6 +91,8 @@ fn payload_builder_accepts_inline_snippets() -> Result<()> {
 #[test]
 fn payload_builder_rejects_large_payloads() -> Result<()> {
     let mut payload = PayloadArgs::default();
+    payload.set_stdout(TextSource::Inline("".to_string()))?;
+    payload.set_stderr(TextSource::Inline("".to_string()))?;
     payload
         .raw_mut()
         .insert_string("big".to_string(), "a".repeat(5000));

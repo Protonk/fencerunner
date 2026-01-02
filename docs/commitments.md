@@ -1,8 +1,8 @@
 # Commitments
 
 Commitments are **run-dir-local declared dependencies**: intentional
-commitments that probes rely on when they need help that cannot be expressed
-purely inside the probe script.
+commitments that scripts rely on when they need help that cannot be expressed
+purely inside the script.
 
 - Declared in `<RUN_DIR>/commitments.json`.
 - Validated by the meta-schema at [`schema/commitments.json`](../schema/commitments.json).
@@ -16,8 +16,8 @@ validated, and what “extension” means for run-dir authors.
 
 1. The run dir’s `commitments.json` is validated against [`schema/commitments.json`](../schema/commitments.json).
 2. Runners preflight and require `commitments.json` (missing/invalid is a hard error).
-3. During probe execution:
-   - `commit_help_me` records `(commitment.id, help)` enrollments for the current probe run (returns `0` on success, `1` on error).
+3. During script execution:
+   - `commit_help_me` records `(commitment.id, help)` enrollments for the current script run (returns `0` on success, `1` on error).
    - `emit-record` reads those enrollments via `FENCERUNNER_COMMITMENT_ENROLLMENTS_PATH` and serializes them into `/context/commitments`.
 
 `commit_help_me` does **not** validate enrollments against `commitments.json` at runtime; `commitments.json` is a structured dependency registry for run-dir authors and downstream consumers.
@@ -31,7 +31,7 @@ Top level:
 
 Each commitment definition:
 
-- `id` — identifier (run-dir-local namespace; referenced by probes).
+- `id` — identifier (run-dir-local namespace; referenced by scripts).
 - `provider` — one of `runner`, `system`, `user`.
 - `helps[]` — one or more verbs from `{ensure, detect, emit}` (unique).
 - `is` — short human description (max 100 chars).
@@ -60,7 +60,7 @@ prove a `system` or `user` dependency exists).
 ### `helps[]`
 
 `helps[]` is the explicit list of supported verbs for the dependency description.
-Probes enroll by choosing a verb and id at the callsite (`commit_help_me <verb> <id>`).
+Scripts enroll by choosing a verb and id at the callsite (`commit_help_me <verb> <id>`).
 
 The runner does not currently enforce that the requested verb appears in the
 declared `helps[]`; `commit_help_me` only validates that `<verb>` is one of
@@ -87,7 +87,7 @@ to humans and downstream tooling.
 
 ## Enrollment and recording
 
-When a probe enrolls in a commitment via `commit_help_me`, the enrollment is meant
+When a script enrolls in a commitment via `commit_help_me`, the enrollment is meant
 to show up in the boundary object as a `(id, helps[])` pair under
 `/context/commitments`.
 
@@ -136,7 +136,7 @@ A run dir that declares the record emitter plus one system runtime:
 For run-dir authors today, “extension” means:
 
 - adding new commitment entries under `commitments[]`,
-- adding additional verbs to `helps[]` (when your probes actually use them),
+- adding additional verbs to `helps[]` (when your scripts actually use them),
 - versioning/changing `is`/`at`/`version` as your run dir evolves.
 
 `commitments_v1` is intentionally strict: commitment definitions cannot carry
@@ -145,7 +145,7 @@ change.
 
 ## Philosophy
 
-- High level: **Declared dependencies, not inferred reality** — commitments are an authoring-time declaration (“this probe expects help from X”) and a trustworthy signal from a willing author, not a security boundary or a detector of what the host *actually* provides.
+- High level: **Declared dependencies, not inferred reality** — commitments are an authoring-time declaration (“this script expects help from X”) and a trustworthy signal from a willing author, not a security boundary or a detector of what the host *actually* provides.
 
 Lower-level opinions:
 

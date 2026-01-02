@@ -39,7 +39,7 @@ fn boundary_object_schema() -> Result<()> {
     let mut emit_cmd = std::process::Command::new(&fencerunner);
     emit_cmd
         .arg("__emit-record")
-        .arg("--probe-name")
+        .arg("--script-name")
         .arg("schema_test_fixture")
         .arg("--command")
         .arg("printf fixture")
@@ -61,11 +61,11 @@ fn boundary_object_schema() -> Result<()> {
         "FENCERUNNER_COMMITMENT_ENROLLMENTS_PATH",
         enrollments_file.path(),
     );
-    emit_cmd.env("FENCERUNNER_RUN_DIR", repo_root.join("probes"));
+    emit_cmd.env("FENCERUNNER_RUN_DIR", repo_root.join("scripts"));
     let output = run_command(emit_cmd)?;
 
     let (record, value) = parse_boundary_object(&output.stdout)?;
-    assert_eq!(record.probe.id, "schema_test_fixture");
+    assert_eq!(record.script.id, "schema_test_fixture");
     assert_eq!(record.operation.kind, "fs.read");
     assert_eq!(record.operation.target, "/dev/null");
 
@@ -88,7 +88,7 @@ fn boundary_object_schema() -> Result<()> {
     // Cache schema parsing across tests; JSONSchema compilation is expensive.
     static BOUNDARY_CONTRACT: OnceLock<BoundaryContractIndex> = OnceLock::new();
     let contract = BOUNDARY_CONTRACT.get_or_init(|| {
-        let path = repo_root.join("probes/boundaries.json");
+        let path = repo_root.join("scripts/boundaries.json");
         BoundaryContractIndex::load(&path).expect("load boundary contract")
     });
     contract.validate_record(&value)?;
@@ -145,7 +145,7 @@ fn schema_validate_boundary_contract_smoke() -> Result<()> {
         .arg("--mode")
         .arg("boundaries-contract")
         .arg("--file")
-        .arg("probes/boundaries.json")
+        .arg("scripts/boundaries.json")
         .current_dir(&repo_root)
         .output()
         .context("failed to execute schema_validate boundaries-contract")?;
@@ -170,7 +170,7 @@ fn schema_validate_boundary_accepts_stdin() -> Result<()> {
         .arg("--mode")
         .arg("boundary")
         .arg("--contract")
-        .arg("probes/boundaries.json")
+        .arg("scripts/boundaries.json")
         .current_dir(&repo_root)
         .stdin(std::process::Stdio::piped())
         .stdout(std::process::Stdio::piped())

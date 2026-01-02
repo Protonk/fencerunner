@@ -1,18 +1,18 @@
-//! Internal subcommand that translates probe CLI inputs into a boundary record.
+//! Internal subcommand that translates script CLI inputs into a boundary record.
 //!
-//! This is the authoritative serializer for probe output. Probes should call
+//! This is the authoritative serializer for script output. Scripts should call
 //! the runner-provided `emit-record` shim so records stay schema-valid and
 //! consistent with the run-dir `boundaries.json` contract.
 
 use crate::boundary::{
     BoundaryContractIndex, BoundaryObject, CommitmentEnrollment, ContextInfo, OperationInfo,
-    ProbeInfo, ResultDetails, ResultInfo, RunInfo,
+    ResultDetails, ResultInfo, RunInfo, ScriptInfo,
 };
 use crate::commitments::model::CommitmentHelp;
 use crate::harness::payload::{
     JsonObjectBuilder, PayloadArgs, TextSource, not_empty, validate_outcome,
 };
-use crate::probes::discovery::canonical_run_dir;
+use crate::scripts::discovery::canonical_run_dir;
 use crate::repo_tools::{boundaries_contract_path, split_list};
 use anyhow::{Context, Result, anyhow, bail};
 use std::collections::{BTreeMap, BTreeSet};
@@ -34,7 +34,7 @@ pub fn run(args: &[OsString]) -> Result<()> {
         .with_context(|| format!("loading {}", boundaries_path.display()))?;
 
     let CliArgs {
-        probe_name,
+        script_name,
         operation_kind,
         target,
         outcome,
@@ -48,6 +48,7 @@ pub fn run(args: &[OsString]) -> Result<()> {
         ..
     } = args;
 
+    // commit-help-me writes enrollments to a temp file; read and merge them here.
     let mut commitments = Vec::new();
     merge_commitment_enrollments_from_env(&mut commitments)?;
 
@@ -71,7 +72,7 @@ pub fn run(args: &[OsString]) -> Result<()> {
         };
 
     let record = BoundaryObject {
-        probe: ProbeInfo { id: probe_name },
+        script: ScriptInfo { id: script_name },
         operation: OperationInfo {
             kind: operation_kind,
             target,
@@ -87,10 +88,11 @@ pub fn run(args: &[OsString]) -> Result<()> {
             stack: None,
             extra: BTreeMap::new(),
         },
-        payload: Some(payload),
+        payload,
         extensions: None,
     };
 
+    // Validate against the run-dir-specific contract before emitting.
     let record_json = serde_json::to_value(&record)?;
     boundaries_contract
         .validate_record(&record_json)
@@ -205,8 +207,9 @@ fn merge_commitment_enrollments(
 }
 
 fn resolve_run_dir() -> Result<PathBuf> {
+    // fencerunner sets FENCERUNNER_RUN_DIR; emit-record is not meant to run standalone.
     let Some(value) = env::var_os("FENCERUNNER_RUN_DIR") else {
-        bail!("FENCERUNNER_RUN_DIR is not set (run probes via fencerunner)");
+        bail!("FENCERUNNER_RUN_DIR is not set (run scripts via fencerunner)");
     };
     if value.is_empty() {
         bail!("FENCERUNNER_RUN_DIR is empty");
@@ -217,7 +220,7 @@ fn resolve_run_dir() -> Result<PathBuf> {
 }
 
 struct CliArgs {
-    probe_name: String,
+    script_name: String,
     operation_kind: String,
     target: String,
     outcome: String,
@@ -238,8 +241,8 @@ impl CliArgs {
         while let Some(arg_os) = args.next() {
             let arg = os_to_string(arg_os);
             match arg.as_str() {
-                "--probe-name" | "--probe-id" => {
-                    config.probe_name = Some(next_value(&mut args, arg.as_str())?)
+                "--script-name" | "--script-id" => {
+                    config.script_name = Some(next_value(&mut args, arg.as_str())?)
                 }
                 "--operation-kind" => {
                     config.operation_kind = Some(next_value(&mut args, "--operation-kind")?)
@@ -374,7 +377,7 @@ impl CliArgs {
 
 #[derive(Default)]
 struct PartialArgs {
-    probe_name: Option<String>,
+    script_name: Option<String>,
     operation_kind: Option<String>,
     target: Option<String>,
     outcome: Option<String>,
@@ -390,7 +393,7 @@ struct PartialArgs {
 impl PartialArgs {
     fn build(self) -> Result<CliArgs> {
         let PartialArgs {
-            probe_name,
+            script_name,
             operation_kind,
             target,
             outcome,
@@ -404,7 +407,7 @@ impl PartialArgs {
         } = self;
 
         Ok(CliArgs {
-            probe_name: Self::require("--probe-name", probe_name)?,
+            script_name: Self::require("--script-name", script_name)?,
             operation_kind: Self::require("--operation-kind", operation_kind)?,
             target: Self::require("--target", target)?,
             outcome: Self::require("--outcome", outcome)?,
@@ -532,5 +535,5 @@ fn print_usage() {
 }
 
 fn usage() -> &'static str {
-    "Usage: emit-record --probe-name NAME --command COMMAND \\\n  --operation-kind KIND --target TARGET --outcome OUTCOME [options]\n\nOptions:\n  --errno ERRNO\n  --message MESSAGE\n  --exit-code CODE\n  --error-detail TEXT\n  --payload-file PATH (JSON object)\n  --payload-stdout TEXT | --payload-stdout-file PATH\n  --payload-stderr TEXT | --payload-stderr-file PATH\n  --payload-raw JSON_OBJECT | --payload-raw-file PATH\n  --payload-raw-field KEY VALUE\n  --payload-raw-field-json KEY JSON_VALUE\n  --payload-raw-null KEY\n  --payload-raw-list KEY \"a,b,c\"\n  --operation-args JSON_OBJECT | --operation-args-file PATH\n  --operation-arg KEY VALUE\n  --operation-arg-json KEY JSON_VALUE\n  --operation-arg-null KEY\n  --operation-arg-list KEY \"a,b,c\"\n"
+    "Usage: emit-record --script-name NAME --command COMMAND \\\n  --operation-kind KIND --target TARGET --outcome OUTCOME [options]\n\nOptions:\n  --errno ERRNO\n  --message MESSAGE\n  --exit-code CODE\n  --error-detail TEXT\n  --payload-file PATH (JSON object with stdout_snippet/stderr_snippet)\n  --payload-stdout TEXT | --payload-stdout-file PATH (required unless --payload-file)\n  --payload-stderr TEXT | --payload-stderr-file PATH (required unless --payload-file)\n  --payload-raw JSON_OBJECT | --payload-raw-file PATH\n  --payload-raw-field KEY VALUE\n  --payload-raw-field-json KEY JSON_VALUE\n  --payload-raw-null KEY\n  --payload-raw-list KEY \"a,b,c\"\n  --operation-args JSON_OBJECT | --operation-args-file PATH\n  --operation-arg KEY VALUE\n  --operation-arg-json KEY JSON_VALUE\n  --operation-arg-null KEY\n  --operation-arg-list KEY \"a,b,c\"\n"
 }

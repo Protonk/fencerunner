@@ -1,6 +1,6 @@
-//! Internal subcommand backing the probe library enrollment helper.
+//! Internal subcommand backing the script library enrollment helper.
 //!
-//! This records a single `(commitment_id, help)` pair for the current probe run.
+//! This records a single `(commitment_id, help)` pair for the current script run.
 //! It does *not* validate the pair against `<RUN_DIR>/commitments.json`; the
 //! project treats enrollments as a trustworthy signal from a willing author.
 //!
@@ -87,7 +87,7 @@ fn append_enrollment(path: &Path, commitment_id: &str, help: CommitmentHelp) -> 
     let pair = format!("{commitment_id}|{}", help_label(help));
 
     // Best-effort duplicate detection by scanning the existing file.
-    // This stays intentionally simple; probes are expected to call commit_help_me
+    // This stays intentionally simple; scripts are expected to call commit_help_me
     // in a single-process flow.
     if let Ok(existing) = fs::read_to_string(path) {
         for line in existing.lines() {

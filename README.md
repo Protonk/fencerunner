@@ -1,41 +1,34 @@
-# Fencerunner
+# fencerunner
 
-Fencerunner is a flexible probe runner built to instrument potentially noisy probes. Probes can be “wild” Bash scripts that do anything the host and sandbox allow, but fencerunner turns the run into a clean, machine-readable stream of what happened.
+`fencerunner` instruments Bash scripts on macOS like Peter Sellers in Being There, quietly opinionated about a small core of restrictions in the simplest manner possible whilst scripts go about their business. It is not oblivious; no matter what scripts do, fencerunner summarizes the attempt in a shape that downstream tools can validate and consume deterministically. Use it to help organize messy collections of scripts into a suite of instruments on your own terms and you may find life is a state of mind. 
 
-The core promise is output rigor: one boundary record per probe, streamed as NDJSON to stdout. Each record summarizes the attempted operation and observed outcome in a shape that downstream tools can validate and consume deterministically.
+Asking questions about macOS can be challenging, especially if you care about the answer. A useful way to share questions and check answers is to write in `Bash 3.2`, which will run the same<sup>*</sup> regardless of local color. Trouble is, collect enough questions and you'll discover bags of random Bash scripts are idiosyncratic and ornery about it. The old way around this would be to sigh and learn some useful logging or instrumentation framework, tolerating whatever opinions it had in order to avoid organizing a Borgean library. You can still do that. But it is 2026;<sup>**</sup> we have frontier models that can write code to any imaginable degree of articulation. fencerunner makes generating and coalescing wild scripts into a system of instruments with the magic of science feel like greased lightning.
 
-Runs are defined by run dirs: flat directories of probe scripts plus three contracts. A run dir declares the commitments a probe intends to rely on (runner helpers and external runtimes), the gates it wants treated as hard failures, and the boundaries it commits to publishing as output. This design is about instrumentation, not containment.
-
-The goal is build-time flexibility coupled with run-time rigidity. Strict mode treats contract breaks as failures; supervised runs prioritize a well-formed NDJSON stream over perfect probe behavior.
+It achieves this by orienting itself toward agentic coders. Contracts and validation pipelines are clearly laid out on disc; documentation is profuse, literal and tied to code; and a posture of build-time flexibility coupled with run-time rigidity affords useful feedback loops with clear test targets. Scripts are run in flat directories containing three contracts with commitments to declare, gates to be treated as hard failures, and boundaries of the output. The content of those contracts is almost entirely up to the user, with validation against a small json schema via a clear, mechanical pipeline. Your agent doesn't need to learn fencerunner. It already knows it. 
 
 ## Use
 
-Run `fencerunner` with one or more run dirs. By default it runs in strict mode, treating contract breaks as failures; use `--supervised` when keeping a well-formed NDJSON boundary stream matters more than perfect probe behavior.
+Run `fencerunner` with one or more run dirs. By default it runs in strict mode, treating contract breaks as failures; use `--supervised` when keeping a well-formed NDJSON boundary stream matters more than perfect script behavior.
 
 ```sh
-fencerunner probes
-fencerunner ./probes /tmp/other-run-dir
+fencerunner scripts
+fencerunner ./scripts /tmp/other-run-dir
 ```
 
 ## What makes a RUN_DIR
 
-A run dir is a flat directory you pass to `fencerunner`. It bundles probe scripts with three run-dir-local contracts: **commitments**, **gates**, and **boundaries**.
+A run dir is a flat (subdirectories are ignored) directory you pass to `fencerunner`. It bundles shell scripts with three run-dir-local contracts: **commitments**, **gates**, and **boundaries**. Fencerunner accepts mulitple run dirs, but script ids are derived from filenames and must be unique across all run dirs in a single run. A minimal run dir contains:
 
-A minimal run dir contains:
-
-- `commitments.json` — a registry of declared commitments a probe may rely on (runner helpers and external runtimes) and the help verbs they support.
-- `gates.json` — optional gate enrollments that tighten the probe contract for this run dir (for example enforcing `stderr.empty`).
+- `commitments.json` — a registry of declared commitments a script may rely on (runner helpers and external runtimes) and the help verbs they support.
+- `gates.json` — optional gate enrollments that tighten the script contract for this run dir (for example enforcing `stderr.empty`).
 - `boundaries.json` — the output contract for boundary records (stdout format and the schema each record must satisfy).
-- one or more executable `*.sh` files — each `*.sh` at the top level is a probe; subdirectories are ignored.
-
-Conventions and constraints:
-
-- Probe ids are derived from filenames (`<probe_id>.sh`) and must be unique across all run dirs in a single run.
-- Probes should source the runner library at startup, then emit exactly one boundary record to stdout (and nothing else on stdout).
-- In strict runs, contract breaks are failures. In supervised runs, probe-level contract breaks are converted into synthetic error records so the NDJSON stream stays well-formed (preflight/runner failures still abort).
+- one or more executable `*.sh` files — each `*.sh` at the top level is a script
 
 ## Tests
 
-Tests in this repo act more like a contract gate than a coverage exercise: they assert on the externally observable surfaces (schemas, helper CLI behavior, exit codes, and the NDJSON boundary stream) and fail hard when those surfaces drift or when a promised contract can no longer be validated.
+Tests here act more like a contract gate than a coverage exercise: they assert on the externally observable surfaces (schemas, helper CLI behavior, exit codes, and the NDJSON boundary stream) and fail hard when those surfaces drift or when a promised contract can no longer be validated.
 
-The posture is integration-forward and deterministic. Tests build and run the real binaries, execute fixture probes (including the repo’s minimal example probe) inside temporary run dirs/workspaces, and validate that stdout stays a well-formed boundary-record stream while stderr remains a diagnostic channel.
+The posture is integration-forward and deterministic. Tests build and run the real binaries, execute fixture scripts (including the repo’s minimal example script) inside temporary run dirs/workspaces, and validate that stdout stays a well-formed boundary-record stream while stderr remains a diagnostic channel.
+
+<sup>*</sup>: No.
+<sup>**</sup>: Yes.

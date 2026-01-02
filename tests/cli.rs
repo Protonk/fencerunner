@@ -13,13 +13,13 @@ use std::process::Command;
 use support::{fencerunner_binary, repo_root, run_command};
 use tempfile::TempDir;
 
-use common::{FixtureProbe, FixtureRunDir, parse_boundary_object, repo_guard};
+use common::{FixtureScript, FixtureRunDir, parse_boundary_object, repo_guard};
 
 // Ensures fencerunner --strict surfaces malformed probe output without blocking
 // the remaining probes from running. The runner should still emit valid records
 // from other probes.
 #[test]
-fn fencerunner_strict_continues_after_malformed_probe() -> Result<()> {
+fn fencerunner_strict_continues_after_malformed_script() -> Result<()> {
     let repo_root = repo_root();
     let _guard = repo_guard();
     let run_dir = FixtureRunDir::new(&repo_root)?;
@@ -31,12 +31,12 @@ set -euo pipefail
 echo not-json
 exit 0
 "#;
-    let broken = FixtureProbe::install_from_contents_in_run_dir(
+    let broken = FixtureScript::install_from_contents_in_run_dir(
         run_dir.path(),
         "aaa_malformed_probe",
         broken_contents,
     )?;
-    let good = FixtureProbe::install_in_run_dir(&repo_root, run_dir.path(), "zzz_fixture_probe")?;
+    let good = FixtureScript::install_in_run_dir(&repo_root, run_dir.path(), "zzz_fixture_probe")?;
 
     let runner = fencerunner_binary(&repo_root);
     let mut cmd = Command::new(&runner);
@@ -63,11 +63,11 @@ exit 0
         "expected only the valid probe output to remain on stdout"
     );
     let (record, _) = parse_boundary_object(lines[0].as_bytes())?;
-    assert_eq!(record.probe.id, good.probe_id());
+    assert_eq!(record.script.id, good.script_id());
 
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(
-        stderr.contains(broken.probe_id()),
+        stderr.contains(broken.script_id()),
         "stderr should mention the malformed probe id; stderr was: {stderr}"
     );
 
@@ -77,12 +77,12 @@ exit 0
 // Smoke-tests fencerunner end-to-end with a run dir containing a single probe.
 // This validates helper resolution, probe execution, and NDJSON output format.
 #[test]
-fn fencerunner_runs_single_probe_in_run_dir() -> Result<()> {
+fn fencerunner_runs_single_script_in_run_dir() -> Result<()> {
     let repo_root = repo_root();
     let _guard = repo_guard();
     let run_dir = FixtureRunDir::new(&repo_root)?;
     let fixture =
-        FixtureProbe::install_in_run_dir(&repo_root, run_dir.path(), "tests_fixture_probe")?;
+        FixtureScript::install_in_run_dir(&repo_root, run_dir.path(), "tests_fixture_probe")?;
 
     let runner = fencerunner_binary(&repo_root);
     let mut cmd = Command::new(&runner);
@@ -100,7 +100,7 @@ fn fencerunner_runs_single_probe_in_run_dir() -> Result<()> {
         "expected exactly one record for a single probe"
     );
     let (record, _) = parse_boundary_object(lines[0].as_bytes())?;
-    assert_eq!(record.probe.id, fixture.probe_id());
+    assert_eq!(record.script.id, fixture.script_id());
     assert!(
         record
             .context
@@ -114,17 +114,67 @@ fn fencerunner_runs_single_probe_in_run_dir() -> Result<()> {
     Ok(())
 }
 
+// Scripts should run with CWD set to the run dir so relative paths land there.
+#[test]
+fn fencerunner_runs_script_with_run_dir_cwd() -> Result<()> {
+    let repo_root = repo_root();
+    let _guard = repo_guard();
+    let run_dir = FixtureRunDir::new(&repo_root)?;
+    let contents = r#"#!/usr/bin/env bash
+set -euo pipefail
+
+source "${FENCERUNNER_ROOT}/lib/library.sh"
+
+probe_id="$(basename "${BASH_SOURCE[0]}" .sh)"
+pwd > cwd.marker
+
+emit-record \
+  --script-name "${probe_id}" \
+  --command "pwd > cwd.marker" \
+  --operation-kind "fs.write" \
+  --target "cwd.marker" \
+  --outcome success \
+  --exit-code 0 \
+  --payload-stdout "" \
+  --payload-stderr ""
+"#;
+
+    let _probe =
+        FixtureScript::install_from_contents_in_run_dir(run_dir.path(), "cwd_probe", contents)?;
+
+    let runner = fencerunner_binary(&repo_root);
+    let mut cmd = Command::new(&runner);
+    cmd.arg(run_dir.path()).current_dir(&repo_root);
+    let _output = run_command(cmd)?;
+
+    let marker_path = run_dir.path().join("cwd.marker");
+    assert!(
+        marker_path.exists(),
+        "expected script to create cwd marker at {}",
+        marker_path.display()
+    );
+    let recorded = fs::read_to_string(&marker_path).context("read cwd marker")?;
+    let recorded = recorded.trim_end();
+    assert_eq!(
+        recorded,
+        run_dir.path().display().to_string(),
+        "expected cwd marker to match the run-dir path"
+    );
+
+    Ok(())
+}
+
 // Smoke-tests fencerunner over an isolated run dir with multiple probes.
 // This validates multi-probe NDJSON streaming.
 #[test]
-fn fencerunner_runs_all_probes_in_run_dir() -> Result<()> {
+fn fencerunner_runs_all_scripts_in_run_dir() -> Result<()> {
     let repo_root = repo_root();
     let _guard = repo_guard();
     let run_dir = FixtureRunDir::new(&repo_root)?;
     let first =
-        FixtureProbe::install_in_run_dir(&repo_root, run_dir.path(), "tests_fixture_probe_first")?;
+        FixtureScript::install_in_run_dir(&repo_root, run_dir.path(), "tests_fixture_probe_first")?;
     let second =
-        FixtureProbe::install_in_run_dir(&repo_root, run_dir.path(), "tests_fixture_probe_second")?;
+        FixtureScript::install_in_run_dir(&repo_root, run_dir.path(), "tests_fixture_probe_second")?;
 
     let runner = fencerunner_binary(&repo_root);
     let mut cmd = Command::new(&runner);
@@ -154,10 +204,10 @@ fn fencerunner_runs_all_probes_in_run_dir() -> Result<()> {
             .unwrap_or(false);
         assert!(has_command);
 
-        if record.probe.id == first.probe_id() {
+        if record.script.id == first.script_id() {
             saw_first = true;
         }
-        if record.probe.id == second.probe_id() {
+        if record.script.id == second.script_id() {
             saw_second = true;
         }
     }
@@ -169,12 +219,12 @@ fn fencerunner_runs_all_probes_in_run_dir() -> Result<()> {
 
 // Run dirs are flat: nested subdirectories are ignored during probe discovery.
 #[test]
-fn fencerunner_ignores_nested_probe_scripts() -> Result<()> {
+fn fencerunner_ignores_nested_scripts() -> Result<()> {
     let repo_root = repo_root();
     let _guard = repo_guard();
     let run_dir = FixtureRunDir::new(&repo_root)?;
     let top_level =
-        FixtureProbe::install_in_run_dir(&repo_root, run_dir.path(), "tests_fixture_probe")?;
+        FixtureScript::install_in_run_dir(&repo_root, run_dir.path(), "tests_fixture_probe")?;
 
     let nested_dir = run_dir.path().join("nested");
     fs::create_dir_all(&nested_dir).context("create nested directory")?;
@@ -188,7 +238,7 @@ source "${FENCERUNNER_ROOT}/lib/library.sh"
 touch "${FENCERUNNER_RUN_DIR}/nested_probe_ran.marker"
 
 emit-record \
-  --probe-name "should_not_run" \
+  --script-name "should_not_run" \
   --command "true" \
   --operation-kind "test.nested" \
   --target "nested" \
@@ -223,7 +273,7 @@ emit-record \
         "expected only top-level probes to run, nested scripts should be ignored"
     );
     let (record, _) = parse_boundary_object(lines[0].as_bytes())?;
-    assert_eq!(record.probe.id, top_level.probe_id());
+    assert_eq!(record.script.id, top_level.script_id());
 
     assert!(
         !marker.exists(),
@@ -242,7 +292,7 @@ fn fencerunner_supervised_forwards_boundary_object_from_run_dir() -> Result<()> 
     let _guard = repo_guard();
     let run_dir = FixtureRunDir::new(&repo_root)?;
     let fixture =
-        FixtureProbe::install_in_run_dir(&repo_root, run_dir.path(), "tests_fixture_probe")?;
+        FixtureScript::install_in_run_dir(&repo_root, run_dir.path(), "tests_fixture_probe")?;
 
     let runner = fencerunner_binary(&repo_root);
     let mut cmd = Command::new(&runner);
@@ -258,7 +308,7 @@ fn fencerunner_supervised_forwards_boundary_object_from_run_dir() -> Result<()> 
         .collect();
     assert_eq!(lines.len(), 1, "expected exactly one record");
     let (record, _) = parse_boundary_object(lines[0].as_bytes())?;
-    assert_eq!(record.probe.id, fixture.probe_id());
+    assert_eq!(record.script.id, fixture.script_id());
     Ok(())
 }
 
@@ -266,7 +316,7 @@ fn fencerunner_supervised_forwards_boundary_object_from_run_dir() -> Result<()> 
 // probe emits pretty-printed (multi-line) JSON. The runner should normalize
 // the record to a single NDJSON line.
 #[test]
-fn fencerunner_supervised_outputs_single_line_ndjson_when_probe_emits_pretty_json() -> Result<()> {
+fn fencerunner_supervised_outputs_single_line_ndjson_when_script_emits_pretty_json() -> Result<()> {
     let repo_root = repo_root();
     let _guard = repo_guard();
     let run_dir = FixtureRunDir::new(&repo_root)?;
@@ -275,16 +325,18 @@ set -euo pipefail
 
 probe_id="$(basename "${BASH_SOURCE[0]}" .sh)"
 
+# Payload is required even when empty, so include empty snippets.
 cat <<EOF
 {
-  "probe": { "id": "${probe_id}" },
+  "script": { "id": "${probe_id}" },
   "operation": { "kind": "test.pretty", "target": "x" },
   "result": { "outcome": "success" },
-  "context": { "commitments": [] }
+  "context": { "commitments": [] },
+  "payload": { "stdout_snippet": "", "stderr_snippet": "" }
 }
 EOF
 "#;
-    let probe = FixtureProbe::install_from_contents_in_run_dir(
+    let probe = FixtureScript::install_from_contents_in_run_dir(
         run_dir.path(),
         "tests_pretty_json_probe",
         contents,
@@ -305,7 +357,7 @@ EOF
         .collect();
     assert_eq!(lines.len(), 1, "expected exactly one NDJSON line");
     let (record, _) = parse_boundary_object(lines[0].as_bytes())?;
-    assert_eq!(record.probe.id, probe.probe_id());
+    assert_eq!(record.script.id, probe.script_id());
     Ok(())
 }
 
@@ -313,7 +365,7 @@ EOF
 // stderr), supervised mode emits a synthetic boundary object so downstream
 // tooling still gets one record per probe.
 #[test]
-fn fencerunner_supervised_emits_synthetic_record_when_probe_only_writes_stderr() -> Result<()> {
+fn fencerunner_supervised_emits_synthetic_record_when_script_only_writes_stderr() -> Result<()> {
     let repo_root = repo_root();
     let _guard = repo_guard();
     let run_dir = FixtureRunDir::new(&repo_root)?;
@@ -322,7 +374,7 @@ set -euo pipefail
 echo "probe wrote to stderr" >&2
 exit 0
 "#;
-    let probe = FixtureProbe::install_from_contents_in_run_dir(
+    let probe = FixtureScript::install_from_contents_in_run_dir(
         run_dir.path(),
         "tests_stderr_only_probe",
         contents,
@@ -344,7 +396,7 @@ exit 0
     assert_eq!(lines.len(), 1, "expected exactly one record");
 
     let (record, value) = parse_boundary_object(lines[0].as_bytes())?;
-    assert_eq!(record.probe.id, probe.probe_id());
+    assert_eq!(record.script.id, probe.script_id());
     assert_eq!(record.result.outcome, "error");
     assert_eq!(record.operation.kind, "harness.supervised");
     assert!(
@@ -394,7 +446,7 @@ commit_help_me ensure python3
 echo not-json
 exit 0
 "#;
-    let probe = FixtureProbe::install_from_contents_in_run_dir(
+    let probe = FixtureScript::install_from_contents_in_run_dir(
         run_dir.path(),
         "tests_enrollment_before_failure",
         contents,
@@ -416,7 +468,7 @@ exit 0
     assert_eq!(lines.len(), 1, "expected exactly one record");
 
     let (record, _) = parse_boundary_object(lines[0].as_bytes())?;
-    assert_eq!(record.probe.id, probe.probe_id());
+    assert_eq!(record.script.id, probe.script_id());
     assert_eq!(record.result.outcome, "error");
     assert!(
         record
@@ -434,32 +486,33 @@ exit 0
     Ok(())
 }
 
-// If a probe emits a schema-valid record whose probe.id does not match the
-// script filename stem, treat it as a contract break.
+// If a script emits a schema-valid record whose script.id does not match the
+// filename stem, treat it as a contract break.
 #[test]
-fn fencerunner_supervised_emits_synthetic_record_when_probe_id_mismatches_filename() -> Result<()> {
+fn fencerunner_supervised_emits_synthetic_record_when_script_id_mismatches_filename() -> Result<()>
+{
     let repo_root = repo_root();
     let _guard = repo_guard();
     let run_dir = FixtureRunDir::new(&repo_root)?;
     let contents = r#"#!/usr/bin/env bash
 set -euo pipefail
 
-probe_id="$(basename "${BASH_SOURCE[0]}" .sh)"
+script_id="$(basename "${BASH_SOURCE[0]}" .sh)"
 
 emit-record \
-  --probe-name "wrong_id" \
+  --script-name "wrong_id" \
   --command "true" \
   --operation-kind "test.identity" \
-  --target "probe.id" \
+  --target "script.id" \
   --outcome success \
   --exit-code 0 \
   --payload-stdout "" \
   --payload-stderr "" \
-  --payload-raw-field "example" "probe-id-mismatch"
+  --payload-raw-field "example" "script-id-mismatch"
 "#;
-    let probe = FixtureProbe::install_from_contents_in_run_dir(
+    let script = FixtureScript::install_from_contents_in_run_dir(
         run_dir.path(),
-        "tests_probe_id_mismatch",
+        "tests_script_id_mismatch",
         contents,
     )?;
 
@@ -480,9 +533,9 @@ emit-record \
 
     let (record, _) = parse_boundary_object(lines[0].as_bytes())?;
     assert_eq!(
-        record.probe.id,
-        probe.probe_id(),
-        "synthetic record should use the script-derived probe id"
+        record.script.id,
+        script.script_id(),
+        "synthetic record should use the filename-derived script id"
     );
     assert_eq!(record.result.outcome, "error");
     assert!(
@@ -492,16 +545,16 @@ emit-record \
             .as_ref()
             .and_then(|details| details.message.as_deref())
             .unwrap_or("")
-            .contains("does not match script id"),
+            .contains("does not match filename id"),
         "expected synthetic record to explain the id mismatch"
     );
 
     Ok(())
 }
 
-// Strict mode treats probe.id mismatches as failures and does not emit a record.
+// Strict mode treats script.id mismatches as failures and does not emit a record.
 #[test]
-fn fencerunner_strict_fails_when_probe_id_mismatches_filename() -> Result<()> {
+fn fencerunner_strict_fails_when_script_id_mismatches_filename() -> Result<()> {
     let repo_root = repo_root();
     let _guard = repo_guard();
     let run_dir = FixtureRunDir::new(&repo_root)?;
@@ -509,19 +562,19 @@ fn fencerunner_strict_fails_when_probe_id_mismatches_filename() -> Result<()> {
 set -euo pipefail
 
 emit-record \
-  --probe-name "wrong_id" \
+  --script-name "wrong_id" \
   --command "true" \
   --operation-kind "test.identity" \
-  --target "probe.id" \
+  --target "script.id" \
   --outcome success \
   --exit-code 0 \
   --payload-stdout "" \
   --payload-stderr "" \
-  --payload-raw-field "example" "probe-id-mismatch"
+  --payload-raw-field "example" "script-id-mismatch"
 "#;
-    let probe = FixtureProbe::install_from_contents_in_run_dir(
+    let script = FixtureScript::install_from_contents_in_run_dir(
         run_dir.path(),
-        "tests_probe_id_mismatch_strict",
+        "tests_script_id_mismatch_strict",
         contents,
     )?;
 
@@ -531,51 +584,51 @@ emit-record \
         .arg(run_dir.path())
         .current_dir(&repo_root)
         .output()
-        .context("failed to execute fencerunner --strict with probe.id mismatch")?;
+        .context("failed to execute fencerunner --strict with script.id mismatch")?;
 
     assert!(
         !output.status.success(),
-        "fencerunner --strict should fail when probe.id does not match filename"
+        "fencerunner --strict should fail when script.id does not match filename"
     );
     assert!(
         output.stdout.is_empty(),
-        "strict mode should not emit a record for a probe.id mismatch"
+        "strict mode should not emit a record for a script.id mismatch"
     );
 
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(
-        stderr.contains(probe.probe_id()),
-        "stderr should mention the probe id; stderr was: {stderr}"
+        stderr.contains(script.script_id()),
+        "stderr should mention the script id; stderr was: {stderr}"
     );
     assert!(
-        stderr.contains("does not match script id"),
+        stderr.contains("does not match filename id"),
         "stderr should mention the mismatch; stderr was: {stderr}"
     );
 
     Ok(())
 }
 
-// If a probe script is not executable, that probe cannot be spawned; treat it
-// as a preflight/runner failure (non-zero exit) rather than a synthetic probe
+// If a script is not executable, it cannot be spawned; treat it as a
+// preflight/runner failure (non-zero exit) rather than a synthetic boundary
 // record.
 #[test]
-fn fencerunner_supervised_fails_when_probe_is_not_executable() -> Result<()> {
+fn fencerunner_supervised_fails_when_script_is_not_executable() -> Result<()> {
     let repo_root = repo_root();
     let _guard = repo_guard();
     let run_dir = FixtureRunDir::new(&repo_root)?;
 
-    let probe_id = "tests_non_executable_probe";
-    let probe_path = run_dir.path().join(format!("{probe_id}.sh"));
+    let script_id = "tests_non_executable_script";
+    let script_path = run_dir.path().join(format!("{script_id}.sh"));
     fs::write(
-        &probe_path,
+        &script_path,
         r#"#!/usr/bin/env bash
 set -euo pipefail
 exit 0
 "#,
     )?;
-    let mut perms = fs::metadata(&probe_path)?.permissions();
+    let mut perms = fs::metadata(&script_path)?.permissions();
     perms.set_mode(0o644);
-    fs::set_permissions(&probe_path, perms)?;
+    fs::set_permissions(&script_path, perms)?;
 
     let runner = fencerunner_binary(&repo_root);
     let output = Command::new(&runner)
@@ -583,14 +636,14 @@ exit 0
         .arg(run_dir.path())
         .current_dir(&repo_root)
         .output()
-        .context("failed to execute fencerunner --supervised with non-executable probe")?;
+        .context("failed to execute fencerunner --supervised with non-executable script")?;
     assert!(
         !output.status.success(),
-        "fencerunner --supervised should fail when a probe cannot be spawned"
+        "fencerunner --supervised should fail when a script cannot be spawned"
     );
     assert!(
         output.stdout.is_empty(),
-        "expected no stdout when probe spawn fails"
+        "expected no stdout when script spawn fails"
     );
 
     let stderr = String::from_utf8_lossy(&output.stderr);
@@ -605,7 +658,8 @@ exit 0
 // Preflight should fail before running any probes when a run dir is missing a
 // required contract file (boundaries.json, commitments.json, gates.json).
 #[test]
-fn fencerunner_strict_aborts_on_missing_boundaries_contract_without_running_probes() -> Result<()> {
+fn fencerunner_strict_aborts_on_missing_boundaries_contract_without_running_scripts() -> Result<()>
+{
     let repo_root = repo_root();
     let _guard = repo_guard();
     let run_dir = FixtureRunDir::new(&repo_root)?;
@@ -621,7 +675,7 @@ exit 0
 "#,
         marker = marker.display()
     );
-    let _probe = FixtureProbe::install_from_contents_in_run_dir(
+    let _probe = FixtureScript::install_from_contents_in_run_dir(
         run_dir.path(),
         "zzz_should_not_run",
         &probe_contents,
@@ -659,7 +713,7 @@ exit 0
 }
 
 #[test]
-fn fencerunner_strict_aborts_on_missing_commitments_contract_without_running_probes() -> Result<()>
+fn fencerunner_strict_aborts_on_missing_commitments_contract_without_running_scripts() -> Result<()>
 {
     let repo_root = repo_root();
     let _guard = repo_guard();
@@ -676,7 +730,7 @@ exit 0
 "#,
         marker = marker.display()
     );
-    let _probe = FixtureProbe::install_from_contents_in_run_dir(
+    let _probe = FixtureScript::install_from_contents_in_run_dir(
         run_dir.path(),
         "zzz_should_not_run",
         &probe_contents,
@@ -713,7 +767,7 @@ exit 0
 }
 
 #[test]
-fn fencerunner_strict_aborts_on_missing_gates_contract_without_running_probes() -> Result<()> {
+fn fencerunner_strict_aborts_on_missing_gates_contract_without_running_scripts() -> Result<()> {
     let repo_root = repo_root();
     let _guard = repo_guard();
     let run_dir = FixtureRunDir::new(&repo_root)?;
@@ -729,7 +783,7 @@ exit 0
 "#,
         marker = marker.display()
     );
-    let _probe = FixtureProbe::install_from_contents_in_run_dir(
+    let _probe = FixtureScript::install_from_contents_in_run_dir(
         run_dir.path(),
         "zzz_should_not_run",
         &probe_contents,
@@ -766,7 +820,7 @@ exit 0
 }
 
 #[test]
-fn fencerunner_supervised_aborts_on_missing_boundaries_contract_without_running_probes()
+fn fencerunner_supervised_aborts_on_missing_boundaries_contract_without_running_scripts()
 -> Result<()> {
     let repo_root = repo_root();
     let _guard = repo_guard();
@@ -783,7 +837,7 @@ exit 0
 "#,
         marker = marker.display()
     );
-    let _probe = FixtureProbe::install_from_contents_in_run_dir(
+    let _probe = FixtureScript::install_from_contents_in_run_dir(
         run_dir.path(),
         "zzz_should_not_run",
         &probe_contents,
@@ -820,7 +874,7 @@ exit 0
 }
 
 #[test]
-fn fencerunner_supervised_aborts_on_missing_commitments_contract_without_running_probes()
+fn fencerunner_supervised_aborts_on_missing_commitments_contract_without_running_scripts()
 -> Result<()> {
     let repo_root = repo_root();
     let _guard = repo_guard();
@@ -837,7 +891,7 @@ exit 0
 "#,
         marker = marker.display()
     );
-    let _probe = FixtureProbe::install_from_contents_in_run_dir(
+    let _probe = FixtureScript::install_from_contents_in_run_dir(
         run_dir.path(),
         "zzz_should_not_run",
         &probe_contents,
@@ -874,7 +928,7 @@ exit 0
 }
 
 #[test]
-fn fencerunner_supervised_aborts_on_missing_gates_contract_without_running_probes() -> Result<()> {
+fn fencerunner_supervised_aborts_on_missing_gates_contract_without_running_scripts() -> Result<()> {
     let repo_root = repo_root();
     let _guard = repo_guard();
     let run_dir = FixtureRunDir::new(&repo_root)?;
@@ -890,7 +944,7 @@ exit 0
 "#,
         marker = marker.display()
     );
-    let _probe = FixtureProbe::install_from_contents_in_run_dir(
+    let _probe = FixtureScript::install_from_contents_in_run_dir(
         run_dir.path(),
         "zzz_should_not_run",
         &probe_contents,
@@ -927,7 +981,7 @@ exit 0
 }
 
 #[test]
-fn fencerunner_strict_aborts_on_invalid_gates_contract_without_running_probes() -> Result<()> {
+fn fencerunner_strict_aborts_on_invalid_gates_contract_without_running_scripts() -> Result<()> {
     let repo_root = repo_root();
     let _guard = repo_guard();
     let run_dir = FixtureRunDir::new(&repo_root)?;
@@ -952,7 +1006,7 @@ exit 0
 "#,
         marker = marker.display()
     );
-    let _probe = FixtureProbe::install_from_contents_in_run_dir(
+    let _probe = FixtureScript::install_from_contents_in_run_dir(
         run_dir.path(),
         "zzz_should_not_run",
         &probe_contents,
@@ -987,7 +1041,7 @@ exit 0
 }
 
 #[test]
-fn fencerunner_strict_aborts_on_invalid_commitments_contract_without_running_probes() -> Result<()>
+fn fencerunner_strict_aborts_on_invalid_commitments_contract_without_running_scripts() -> Result<()>
 {
     let repo_root = repo_root();
     let _guard = repo_guard();
@@ -1011,7 +1065,7 @@ exit 0
 "#,
         marker = marker.display()
     );
-    let _probe = FixtureProbe::install_from_contents_in_run_dir(
+    let _probe = FixtureScript::install_from_contents_in_run_dir(
         run_dir.path(),
         "zzz_should_not_run",
         &probe_contents,
@@ -1046,7 +1100,7 @@ exit 0
 }
 
 #[test]
-fn fencerunner_strict_aborts_on_invalid_boundaries_contract_without_running_probes() -> Result<()> {
+fn fencerunner_strict_aborts_on_invalid_boundaries_contract_without_running_scripts() -> Result<()> {
     let repo_root = repo_root();
     let _guard = repo_guard();
     let run_dir = FixtureRunDir::new(&repo_root)?;
@@ -1057,9 +1111,9 @@ fn fencerunner_strict_aborts_on_invalid_boundaries_contract_without_running_prob
         "record_schema": {
             "$schema": "http://json-schema.org/draft-07/schema#",
             "type": "object",
-            "required": ["probe", "result", "context"],
+            "required": ["script", "result", "context"],
             "properties": {
-                "probe": { "type": "object", "required": ["id"], "properties": { "id": { "type": "string" } } },
+                "script": { "type": "object", "required": ["id"], "properties": { "id": { "type": "string" } } },
                 "result": { "type": "object", "required": ["outcome"], "properties": { "outcome": { "type": "string" } } },
                 "context": { "type": "object", "required": ["commitments"], "properties": { "commitments": { "type": "array" } } }
             }
@@ -1079,7 +1133,7 @@ exit 0
 "#,
         marker = marker.display()
     );
-    let _probe = FixtureProbe::install_from_contents_in_run_dir(
+    let _probe = FixtureScript::install_from_contents_in_run_dir(
         run_dir.path(),
         "zzz_should_not_run",
         &probe_contents,
@@ -1145,7 +1199,7 @@ echo "probe produced stderr noise" >&2
  commit_help_me emit emit.record
 
 emit-record \
-  --probe-name "${probe_id}" \
+  --script-name "${probe_id}" \
   --command "true" \
   --operation-kind "test.gate" \
   --target "stderr.empty" \
@@ -1155,7 +1209,7 @@ emit-record \
   --payload-stderr "" \
   --payload-raw-field "example" "stderr-empty-gate"
 "#;
-    let probe = FixtureProbe::install_from_contents_in_run_dir(
+    let probe = FixtureScript::install_from_contents_in_run_dir(
         run_dir.path(),
         "tests_stderr_empty_enforced",
         probe_contents,
@@ -1177,7 +1231,7 @@ emit-record \
     assert_eq!(lines.len(), 1, "expected exactly one record");
 
     let (record, value) = parse_boundary_object(lines[0].as_bytes())?;
-    assert_eq!(record.probe.id, probe.probe_id());
+    assert_eq!(record.script.id, probe.script_id());
     assert_eq!(record.operation.kind, "harness.supervised");
     assert_eq!(record.result.outcome, "error");
     assert!(
@@ -1232,7 +1286,7 @@ echo "probe produced stderr noise" >&2
 echo "{}"
 exit 0
 "#;
-    let _probe = FixtureProbe::install_from_contents_in_run_dir(
+    let _probe = FixtureScript::install_from_contents_in_run_dir(
         run_dir.path(),
         "tests_stderr_empty_enforced_strict",
         probe_contents,
@@ -1269,12 +1323,12 @@ exit 0
     Ok(())
 }
 
-// In supervised mode, fencerunner validates probe output against the run-dir
-// boundaries contract; if the probe emits JSON that parses but violates
+// In supervised mode, fencerunner validates script output against the run-dir
+// boundaries contract; if the script emits JSON that parses but violates
 // boundaries.json, it emits a synthetic record rather than forwarding the
 // invalid JSON.
 #[test]
-fn fencerunner_supervised_emits_synthetic_record_when_probe_emits_schema_invalid_json() -> Result<()>
+fn fencerunner_supervised_emits_synthetic_record_when_script_emits_schema_invalid_json() -> Result<()>
 {
     let repo_root = repo_root();
     let _guard = repo_guard();
@@ -1283,13 +1337,14 @@ fn fencerunner_supervised_emits_synthetic_record_when_probe_emits_schema_invalid
     let probe_contents = r#"#!/usr/bin/env bash
 set -euo pipefail
 
-probe_id="$(basename "${BASH_SOURCE[0]}" .sh)"
+script_id="$(basename "${BASH_SOURCE[0]}" .sh)"
 
 # Valid JSON object, but invalid boundary record: /context/commitments is missing.
-echo "{\"probe\":{\"id\":\"${probe_id}\"},\"operation\":{\"kind\":\"test.schema\",\"target\":\"x\"},\"result\":{\"outcome\":\"success\"},\"context\":{}}"
+# Payload is present so the failure is about commitments, not payload shape.
+echo "{\"script\":{\"id\":\"${script_id}\"},\"operation\":{\"kind\":\"test.schema\",\"target\":\"x\"},\"result\":{\"outcome\":\"success\"},\"context\":{},\"payload\":{\"stdout_snippet\":\"\",\"stderr_snippet\":\"\"}}"
 exit 0
 "#;
-    let probe = FixtureProbe::install_from_contents_in_run_dir(
+    let script = FixtureScript::install_from_contents_in_run_dir(
         run_dir.path(),
         "tests_schema_invalid_record",
         probe_contents,
@@ -1311,7 +1366,7 @@ exit 0
     assert_eq!(lines.len(), 1, "expected exactly one record");
 
     let (record, value) = parse_boundary_object(lines[0].as_bytes())?;
-    assert_eq!(record.probe.id, probe.probe_id());
+    assert_eq!(record.script.id, script.script_id());
     assert_eq!(record.operation.kind, "harness.supervised");
     assert_eq!(record.result.outcome, "error");
     assert!(
@@ -1356,9 +1411,9 @@ fn fencerunner_errors_when_no_run_dirs_provided() -> Result<()> {
     Ok(())
 }
 
-// Error handling: a run dir must contain one or more executable *.sh probes.
+// Error handling: a run dir must contain one or more executable *.sh scripts.
 #[test]
-fn fencerunner_errors_when_run_dir_has_no_probes() -> Result<()> {
+fn fencerunner_errors_when_run_dir_has_no_scripts() -> Result<()> {
     let repo_root = repo_root();
     let _guard = repo_guard();
     let run_dir = FixtureRunDir::new(&repo_root)?;
@@ -1372,50 +1427,50 @@ fn fencerunner_errors_when_run_dir_has_no_probes() -> Result<()> {
 
     assert!(
         !output.status.success(),
-        "fencerunner should fail when a run dir contains no probes"
+        "fencerunner should fail when a run dir contains no scripts"
     );
     assert!(
         output.stdout.is_empty(),
-        "expected no stdout when a run dir contains no probes"
+        "expected no stdout when a run dir contains no scripts"
     );
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(
-        stderr.contains("No probes found"),
+        stderr.contains("No scripts found"),
         "stderr should explain the empty run dir; got: {stderr}"
     );
 
     Ok(())
 }
 
-// Error handling: probe ids are global; duplicates across run dirs are rejected.
+// Error handling: script ids are global; duplicates across run dirs are rejected.
 #[test]
-fn fencerunner_errors_on_duplicate_probe_ids_across_run_dirs() -> Result<()> {
+fn fencerunner_errors_on_duplicate_script_ids_across_run_dirs() -> Result<()> {
     let repo_root = repo_root();
     let _guard = repo_guard();
     let runner = fencerunner_binary(&repo_root);
     let run_dir_a = FixtureRunDir::new(&repo_root)?;
     let run_dir_b = FixtureRunDir::new(&repo_root)?;
-    let _a = FixtureProbe::install_in_run_dir(&repo_root, run_dir_a.path(), "tests_fixture_probe")?;
-    let _b = FixtureProbe::install_in_run_dir(&repo_root, run_dir_b.path(), "tests_fixture_probe")?;
+    let _a = FixtureScript::install_in_run_dir(&repo_root, run_dir_a.path(), "tests_fixture_probe")?;
+    let _b = FixtureScript::install_in_run_dir(&repo_root, run_dir_b.path(), "tests_fixture_probe")?;
 
     let output = Command::new(&runner)
         .arg(run_dir_a.path())
         .arg(run_dir_b.path())
         .current_dir(&repo_root)
         .output()
-        .context("failed to execute fencerunner with duplicate probe ids")?;
+        .context("failed to execute fencerunner with duplicate script ids")?;
     assert!(
         !output.status.success(),
-        "fencerunner should fail when probe ids collide across run dirs"
+        "fencerunner should fail when script ids collide across run dirs"
     );
     assert!(
         output.stdout.is_empty(),
-        "expected no stdout when probe ids collide"
+        "expected no stdout when script ids collide"
     );
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(
-        stderr.contains("Duplicate probe id"),
-        "stderr should explain the probe id collision; got: {stderr}"
+        stderr.contains("Duplicate script id"),
+        "stderr should explain the script id collision; got: {stderr}"
     );
     Ok(())
 }
@@ -1441,7 +1496,7 @@ probe_id="$(basename "${BASH_SOURCE[0]}" .sh)"
 commit_help_me ensure shared-commitment
 
 emit-record \
-  --probe-name "${probe_id}" \
+  --script-name "${probe_id}" \
   --command "true" \
   --operation-kind "test.commitments" \
   --target "shared-commitment" \
@@ -1449,15 +1504,15 @@ emit-record \
   --exit-code 0 \
   --payload-stdout "" \
   --payload-stderr "" \
-  --payload-raw-field "probe" "fixture"
+  --payload-raw-field "script" "fixture"
 "#;
 
-    let _a = FixtureProbe::install_from_contents_in_run_dir(
+    let _a = FixtureScript::install_from_contents_in_run_dir(
         run_dir_a.path(),
         "cap_fixture_a",
         probe_contents,
     )?;
-    let _b = FixtureProbe::install_from_contents_in_run_dir(
+    let _b = FixtureScript::install_from_contents_in_run_dir(
         run_dir_b.path(),
         "cap_fixture_b",
         probe_contents,
@@ -1530,19 +1585,19 @@ fn fencerunner_accepts_run_dir_outside_repo() -> Result<()> {
 
     let run_dir = TempDir::new().context("failed to allocate temp run dir")?;
     fs::copy(
-        repo_root.join("probes/commitments.json"),
+        repo_root.join("scripts/commitments.json"),
         run_dir.path().join("commitments.json"),
     )?;
     fs::copy(
-        repo_root.join("probes/gates.json"),
+        repo_root.join("scripts/gates.json"),
         run_dir.path().join("gates.json"),
     )?;
     fs::copy(
-        repo_root.join("probes/boundaries.json"),
+        repo_root.join("scripts/boundaries.json"),
         run_dir.path().join("boundaries.json"),
     )?;
     let probe =
-        FixtureProbe::install_in_run_dir(&repo_root, run_dir.path(), "tests_fixture_probe")?;
+        FixtureScript::install_in_run_dir(&repo_root, run_dir.path(), "tests_fixture_probe")?;
 
     let mut cmd = Command::new(&runner);
     cmd.arg(run_dir.path()).current_dir(&repo_root);
@@ -1555,7 +1610,7 @@ fn fencerunner_accepts_run_dir_outside_repo() -> Result<()> {
         .collect();
     assert_eq!(lines.len(), 1, "expected exactly one record");
     let (record, _) = parse_boundary_object(lines[0].as_bytes())?;
-    assert_eq!(record.probe.id, probe.probe_id());
+    assert_eq!(record.script.id, probe.script_id());
 
     Ok(())
 }

@@ -1,9 +1,9 @@
 //! Runner-owned, ephemeral "root" directory materialized at runtime.
 //!
-//! The probe contract expects probes to source `${FENCERUNNER_ROOT}/lib/library.sh`.
+//! The script contract expects scripts to source `${FENCERUNNER_ROOT}/lib/library.sh`.
 //! When fencerunner is installed, those assets are not available on disk, so
 //! fencerunner materializes a temporary tree containing:
-//! - `lib/library.sh` (probe library)
+//! - `lib/library.sh` (script library)
 //! - `bin/emit-record` (shim to fencerunner internal subcommand)
 //! - `bin/commit-help-me` (shim to fencerunner internal subcommand)
 

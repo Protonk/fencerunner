@@ -1,6 +1,6 @@
 #![cfg(unix)]
 
-// Probe execution guard rails.
+// Script execution guard rails.
 #[path = "support/common.rs"]
 mod common;
 mod support;
@@ -14,17 +14,17 @@ use tempfile::TempDir;
 
 use common::{FileGuard, FixtureRunDir, repo_guard};
 
-// Exercises the guard rails that keep probe execution inside a run dir by
+// Exercises the guard rails that keep script execution inside a run dir by
 // rejecting symlinks that escape the run dir tree.
 #[test]
-fn probe_resolution_guards() -> Result<()> {
+fn script_resolution_guards() -> Result<()> {
     let repo_root = repo_root();
     let _guard = repo_guard();
     let run_dir = FixtureRunDir::new(&repo_root)?;
 
     let outside = TempDir::new().context("failed to allocate outside dir")?;
     let marker = outside.path().join("should_never_run.marker");
-    let outside_script = outside.path().join("outside_probe.sh");
+    let outside_script = outside.path().join("outside_script.sh");
     fs::write(
         &outside_script,
         format!(
@@ -39,7 +39,7 @@ echo ran > "{marker}"
     perms.set_mode(0o755);
     fs::set_permissions(&outside_script, perms)?;
 
-    let symlink_path = run_dir.path().join("tests_probe_resolution_symlink.sh");
+    let symlink_path = run_dir.path().join("tests_script_resolution_symlink.sh");
     if symlink_path.exists() {
         bail!(
             "symlink fixture already exists at {}",
@@ -66,7 +66,7 @@ echo ran > "{marker}"
     );
     assert!(
         !marker.exists(),
-        "outside probe should not run when it escapes the run dir"
+        "outside script should not run when it escapes the run dir"
     );
 
     Ok(())

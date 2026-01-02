@@ -11,29 +11,29 @@ Front door for:
 
 - `fencerunner [--strict|--supervised] <RUN_DIR>...`
 
-`fencerunner` performs run-dir preflight, executes each `*.sh` probe, and
+`fencerunner` performs run-dir preflight, executes each `*.sh` script, and
 streams boundary records as NDJSON on stdout.
 
 - **Strict mode (default):** contract breaks are failures (non-zero exit).
 - **Supervised mode (`--supervised`):** contract breaks become synthetic error
   records; exit 0 unless preflight/runner fails.
 
-## Runner-owned shims (probe-facing)
+## Runner-owned shims (script-facing)
 
-Probes call a small set of runner-provided helper commands, but they are not
+Scripts call a small set of runner-provided helper commands, but they are not
 installed as standalone binaries. Instead, fencerunner materializes an
 ephemeral `FENCERUNNER_ROOT` at runtime (see `harness/runner_root`) containing:
 
-- `${FENCERUNNER_ROOT}/lib/library.sh` — probe library, sourced by every probe.
+- `${FENCERUNNER_ROOT}/lib/library.sh` — script library, sourced by every script.
 - `${FENCERUNNER_ROOT}/bin/emit-record` — shim that execs `fencerunner __emit-record`.
 - `${FENCERUNNER_ROOT}/bin/commit-help-me` — shim that execs `fencerunner __commit-help-me`.
 
-These shims rely on `FENCERUNNER_BIN` being set by the runner so probes always
+These shims rely on `FENCERUNNER_BIN` being set by the runner so scripts always
 invoke the correct fencerunner binary.
 
 ## Expectations across binaries
-- Subscribe to shared logic in `harness/binaries`, `harness/workspace`,
-  `repo_tools`, and `lib.rs` instead of rolling your own path/sandbox handling.
+- Subscribe to shared logic in `repo_tools` and `lib.rs` instead of rolling your own
+  path/sandbox handling.
 - Keep argument parsing explicit and defensive; surface actionable errors.
 - Reflect behavioral changes in the narrative guides and tests so shell callers stay in sync.
 - Portability is non-negotiable: binaries must run on macOS `/bin/bash 3.2` and

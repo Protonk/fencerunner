@@ -1,4 +1,4 @@
-//! Harness-level helpers for locating and running probe-related binaries.
+//! Harness-level helpers for locating and running script-related binaries.
 //!
 //! Groups helper resolution, payload building, and contract enforcement so
 //! binaries reuse a single source of truth.

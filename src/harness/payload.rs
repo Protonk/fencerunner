@@ -1,19 +1,19 @@
 //! Shared helpers for building boundary-object payloads and validating inputs.
 //!
-//! These functions back `emit-record`. They focus on enforcing the probe
+//! These functions back `emit-record`. They focus on enforcing the script
 //! contract (single payload source, bounded size) while
 //! keeping the CLI parsing code readable.
 
-use anyhow::{Context, Result, bail};
+use anyhow::{Context, Result, anyhow, bail};
 use serde_json::{Map, Value, json};
 use std::fs;
 use std::path::{Path, PathBuf};
 
-// Keep payloads small and predictable; probes should emit summaries, not logs.
+// Keep payloads small and predictable; scripts should emit summaries, not logs.
 const PAYLOAD_MAX_BYTES: usize = 4096;
 
 #[derive(Default, Clone)]
-/// Builder for probe payloads that enforces “single source of truth” rules.
+/// Builder for script payloads that enforces “single source of truth” rules.
 ///
 /// The CLI is allowed to specify either a JSON file or inline snippets; mixing
 /// both is a contract violation because it makes emitted records ambiguous.
@@ -57,8 +57,18 @@ impl PayloadArgs {
             if !path.is_file() {
                 bail!("Payload file not found: {}", path.display());
             }
-            read_json_file(path)?
+            let payload = read_json_file(path)?;
+            // Payload files must still include the required stdout/stderr keys.
+            require_snippets(&payload)?;
+            payload
         } else {
+            if self.stdout.is_none() {
+                bail!("Missing required flag: --payload-stdout or --payload-stdout-file");
+            }
+            if self.stderr.is_none() {
+                bail!("Missing required flag: --payload-stderr or --payload-stderr-file");
+            }
+            // Inline snippets are mandatory to keep a uniform payload shape.
             let stdout_snippet = build_snippet_value(self.stdout)?;
             let stderr_snippet = build_snippet_value(self.stderr)?;
             let raw = self.raw.build("payload raw object")?;
@@ -70,6 +80,8 @@ impl PayloadArgs {
             })
         };
 
+        // Enforce the required fields even when payload JSON is provided inline.
+        require_snippets(&payload)?;
         // Apply the size limit to the final serialized JSON to match what is
         // actually emitted on stdout.
         enforce_payload_size(&payload)?;
@@ -188,11 +200,28 @@ fn merge_object(target: &mut Map<String, Value>, source: &Map<String, Value>) ->
 
 fn build_snippet_value(source: Option<TextSource>) -> Result<Value> {
     let Some(src) = source else {
-        return Ok(Value::Null);
+        bail!("Missing required payload snippet");
     };
     // Snippets are cleaned and truncated to keep boundary objects compact.
     let text = read_text_source(&src)?;
     Ok(Value::String(truncate_snippet(&text)))
+}
+
+fn require_snippets(payload: &Value) -> Result<()> {
+    let obj = payload
+        .as_object()
+        .ok_or_else(|| anyhow!("Payload must be a JSON object"))?;
+    let stdout = obj
+        .get("stdout_snippet")
+        .and_then(Value::as_str)
+        .ok_or_else(|| anyhow!("Payload missing required stdout_snippet string"))?;
+    let stderr = obj
+        .get("stderr_snippet")
+        .and_then(Value::as_str)
+        .ok_or_else(|| anyhow!("Payload missing required stderr_snippet string"))?;
+    // Allow empty strings but disallow invalid types to keep shape stable.
+    let _ = (stdout, stderr);
+    Ok(())
 }
 
 fn read_text_source(source: &TextSource) -> Result<String> {
@@ -209,7 +238,7 @@ fn read_text_source(source: &TextSource) -> Result<String> {
 }
 
 fn clean_text(raw: &str) -> String {
-    // Some probes can emit NULs; strip them so JSON output stays valid.
+    // Some scripts can emit NULs; strip them so JSON output stays valid.
     raw.replace('\0', "")
 }
 

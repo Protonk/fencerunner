@@ -3,13 +3,13 @@
   "stdout": { "format": "ndjson" },
   "record_schema": {
     "$schema": "http://json-schema.org/draft-07/schema#",
-    "title": "Boundary object schema (default probes/ contract)",
-    "description": "Default boundary record contract shipped with the repository. Run dirs may supply their own boundaries.json with a different record_schema as long as it preserves /probe/id, /result/outcome, and /context/commitments.",
+    "title": "Boundary object schema (default scripts/ contract)",
+    "description": "Default boundary record contract shipped with the repository. Run dirs may supply their own boundaries.json with a different record_schema as long as it preserves /script/id, /result/outcome, and /context/commitments.",
     "type": "object",
     "additionalProperties": false,
-    "required": ["probe", "operation", "result", "context"],
+    "required": ["script", "operation", "result", "context", "payload"],
     "properties": {
-      "probe": {
+      "script": {
         "type": "object",
         "additionalProperties": false,
         "required": ["id"],
@@ -124,7 +124,21 @@
       },
       "payload": {
         "type": "object",
-        "description": "Optional probe-specific payload data."
+        "description": "Captured stdout/stderr snippets plus optional raw payload fields.",
+        "additionalProperties": true,
+        "required": ["stdout_snippet", "stderr_snippet"],
+        "properties": {
+          "stdout_snippet": {
+            "type": "string"
+          },
+          "stderr_snippet": {
+            "type": "string"
+          },
+          "raw": {
+            "type": "object",
+            "description": "Optional script-specific payload data."
+          }
+        }
       },
       "extensions": {
         "type": "object",

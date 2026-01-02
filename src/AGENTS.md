@@ -11,15 +11,15 @@ fast without spelunking.
 - **Boundary object types and boundary contracts**
   - `src/boundary/types.rs` (record structs)
   - `src/boundary/contract.rs` (BoundaryContractIndex)
-- **Probe commitment registry**
+- **Script commitments registry**
   - `src/commitments/model.rs` (registry structs)
   - `src/commitments/index.rs` (CommitmentIndex + schema enforcement)
-- **Probe discovery**
-  - `src/probes/discovery.rs` (resolve/list probes)
-- **Probe gate enrollment (`gates.json`)**
+- **Script discovery**
+  - `src/scripts/discovery.rs` (resolve/list scripts)
+- **Script gate enrollment (`gates.json`)**
   - `src/gates/contract.rs` (GatesContractIndex)
 - **Harness/runtime helpers**
-  - `src/harness/run_dir_plan.rs` (run-dir preflight + probe planning)
+  - `src/harness/run_dir_plan.rs` (run-dir preflight + script planning)
   - `src/harness/payload.rs` (emit-record payload builders + validation)
 - **Shared JSON Schema loader**
   - `src/schema/loader.rs`
@@ -27,7 +27,7 @@ fast without spelunking.
   - `src/lib.rs`, `src/*/mod.rs`
 
 ## Patterns to preserve
-- One source of truth per concern: do not duplicate path resolution, probe
+- One source of truth per concern: do not duplicate path resolution, script
   lookup, or schema validation in binaries.
 - Keep errors actionable and consistent; binaries surface these directly.
 - Portability is part of the contract: macOS 13-era hosts and CI containers

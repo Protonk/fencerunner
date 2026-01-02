@@ -43,24 +43,26 @@
             "type": "string"
           },
           "allOf": [
-            { "contains": { "const": "probe" } },
+            { "contains": { "const": "script" } },
             { "contains": { "const": "result" } },
-            { "contains": { "const": "context" } }
+            { "contains": { "const": "context" } },
+            { "contains": { "const": "payload" } }
           ]
         },
         "properties": {
           "type": "object",
           "additionalProperties": true,
-          "required": ["probe", "result", "context"],
+          "required": ["script", "result", "context", "payload"],
           "properties": {
-            "probe": { "$ref": "#/$defs/probe_schema" },
+            "script": { "$ref": "#/$defs/script_schema" },
             "result": { "$ref": "#/$defs/result_schema" },
-            "context": { "$ref": "#/$defs/context_schema" }
+            "context": { "$ref": "#/$defs/context_schema" },
+            "payload": { "$ref": "#/$defs/payload_schema" }
           }
         }
       }
     },
-    "probe_schema": {
+    "script_schema": {
       "type": "object",
       "additionalProperties": true,
       "required": ["type", "required", "properties"],
@@ -119,6 +121,31 @@
           "required": ["commitments"],
           "properties": {
             "commitments": { "$ref": "#/$defs/commitments_schema" }
+          }
+        }
+      }
+    },
+    "payload_schema": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["type", "required", "properties"],
+      "properties": {
+        "type": { "type": "string", "const": "object" },
+        "required": {
+          "type": "array",
+          "items": { "type": "string" },
+          "allOf": [
+            { "contains": { "const": "stdout_snippet" } },
+            { "contains": { "const": "stderr_snippet" } }
+          ]
+        },
+        "properties": {
+          "type": "object",
+          "additionalProperties": true,
+          "required": ["stdout_snippet", "stderr_snippet"],
+          "properties": {
+            "stdout_snippet": { "$ref": "#/$defs/string_schema" },
+            "stderr_snippet": { "$ref": "#/$defs/string_schema" }
           }
         }
       }

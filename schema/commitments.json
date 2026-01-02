@@ -1,7 +1,7 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "https://fencerunner.dev/schemas/commitments_v1.json",
-  "title": "Probe commitments registry (v1)",
+  "title": "Script commitments registry (v1)",
   "type": "object",
   "additionalProperties": false,
   "required": ["schema_version", "commitments"],

@@ -1,4 +1,4 @@
-//! Contracted probe runner.
+//! Contracted script runner.
 //!
 //! Public CLI:
 //!   fencerunner [--strict|--supervised] <RUN_DIR>...
@@ -10,14 +10,14 @@
 
 use anyhow::{Context, Result, anyhow, bail};
 use fencerunner::boundary::{
-    BoundaryObject, CommitmentEnrollment, ContextInfo, OperationInfo, ProbeInfo, ResultDetails,
-    ResultInfo, RunInfo,
+    BoundaryObject, CommitmentEnrollment, ContextInfo, OperationInfo, ResultDetails, ResultInfo,
+    RunInfo, ScriptInfo,
 };
 use fencerunner::commands;
 use fencerunner::commitments::model::CommitmentHelp;
-use fencerunner::harness::run_dir_plan::{RunDirPlan, plan_probes, preflight_run_dirs};
+use fencerunner::harness::run_dir_plan::{RunDirPlan, plan_scripts, preflight_run_dirs};
 use fencerunner::harness::runner_root::RunnerRoot;
-use fencerunner::probes::discovery::Probe;
+use fencerunner::scripts::discovery::Script;
 use serde_json::{Value, json};
 use std::collections::{BTreeMap, BTreeSet};
 use std::env;
@@ -108,7 +108,7 @@ impl Cli {
 
 fn usage(code: i32) -> ! {
     eprintln!(
-        "Usage: fencerunner [--strict|--supervised] <RUN_DIR>...\n\nRuns every *.sh probe inside each run directory (flat; non-recursive) and streams boundary objects as NDJSON.\n\nModes:\n  --strict        Treat contract breaks as failures (default).\n  --supervised    Emit synthetic boundary records on contract breaks; exit 0 unless preflight/runner fails.\n\nOptions:\n  -h, --help      Show this help text.\n  -V, --version   Show the version.\n\nExamples:\n  fencerunner probes\n  fencerunner ./probes /tmp/other-run-dir\n  fencerunner --supervised probes"
+        "Usage: fencerunner [--strict|--supervised] <RUN_DIR>...\n\nRuns every *.sh script inside each run directory (flat; non-recursive) and streams boundary objects as NDJSON.\n\nModes:\n  --strict        Treat contract breaks as failures (default).\n  --supervised    Emit synthetic boundary records on contract breaks; exit 0 unless preflight/runner fails.\n\nOptions:\n  -h, --help      Show this help text.\n  -V, --version   Show the version.\n\nExamples:\n  fencerunner scripts\n  fencerunner ./scripts /tmp/other-run-dir\n  fencerunner --supervised scripts"
     );
     std::process::exit(code);
 }
@@ -125,11 +125,12 @@ const ENV_FENCERUNNER_BIN: &str = "FENCERUNNER_BIN";
 
 fn run_fencerunner(cli: &Cli) -> Result<()> {
     let run_dir_paths: Vec<PathBuf> = cli.run_dirs.iter().map(PathBuf::from).collect();
+    // Preflight validates run-dir contracts before any scripts execute.
     let run_dirs = preflight_run_dirs(&run_dir_paths)?;
-    let execution_plan = plan_probes(&run_dirs)?;
+    // Script planning enforces global id uniqueness and stable ordering.
+    let execution_plan = plan_scripts(&run_dirs)?;
     let total = execution_plan.len();
 
-    let invocation_root = env::current_dir().context("resolving current directory")?;
     let runner_root = RunnerRoot::create()?;
     let fencerunner_bin = env::current_exe().context("resolving fencerunner binary path")?;
     let scratch_dir = tempfile::Builder::new()
@@ -139,38 +140,36 @@ fn run_fencerunner(cli: &Cli) -> Result<()> {
 
     if cli.mode == RunMode::Supervised {
         eprintln!(
-            "fencerunner: supervised: running {total} probe(s) across {} run dir(s)",
+            "fencerunner: supervised: running {total} script(s) across {} run dir(s)",
             run_dirs.len()
         );
     }
 
     let mut errors: Vec<String> = Vec::new();
-    for (idx, (run_dir_idx, probe)) in execution_plan.iter().enumerate() {
+    for (idx, (run_dir_idx, script)) in execution_plan.iter().enumerate() {
         let run_dir = &run_dirs[*run_dir_idx];
         match cli.mode {
             RunMode::Strict => {
-                if let Err(err) = run_probe_strict(
-                    &invocation_root,
+                if let Err(err) = run_script_strict(
                     &runner_root,
                     &fencerunner_bin,
                     scratch_dir.path(),
                     run_dir,
-                    probe,
+                    script,
                 ) {
-                    let message = format!("probe {} failed: {err:#}", probe.id);
+                    let message = format!("script {} failed: {err:#}", script.id);
                     eprintln!("fencerunner: {message}");
                     errors.push(message);
                 }
             }
             RunMode::Supervised => {
-                eprintln!("fencerunner: [{}/{}] {}", idx + 1, total, probe.id);
-                run_probe_supervised(
-                    &invocation_root,
+                eprintln!("fencerunner: [{}/{}] {}", idx + 1, total, script.id);
+                run_script_supervised(
                     &runner_root,
                     &fencerunner_bin,
                     scratch_dir.path(),
                     run_dir,
-                    probe,
+                    script,
                 )?;
             }
         }
@@ -178,7 +177,7 @@ fn run_fencerunner(cli: &Cli) -> Result<()> {
 
     if cli.mode == RunMode::Strict && !errors.is_empty() {
         bail!(
-            "{} probe(s) failed; see stderr for details:\n{}",
+            "{} script(s) failed; see stderr for details:\n{}",
             errors.len(),
             errors.join("\n")
         );
@@ -187,26 +186,25 @@ fn run_fencerunner(cli: &Cli) -> Result<()> {
     Ok(())
 }
 
-fn run_probe_strict(
-    invocation_root: &Path,
+fn run_script_strict(
     runner_root: &RunnerRoot,
     fencerunner_bin: &Path,
     scratch_dir: &Path,
     run_dir: &RunDirPlan,
-    probe: &Probe,
+    script: &Script,
 ) -> Result<()> {
-    ensure_probe_executable(&probe.path)?;
+    ensure_script_executable(&script.path)?;
+    // commit-help-me writes enrollments here; emit-record reads them back.
     let enrollments_file = TempBuilder::new()
         .prefix("fencerunner-commitments.")
         .tempfile_in(scratch_dir)
         .context("allocating commitment enrollment file")?;
-    let output = run_probe_command(
-        invocation_root,
+    let output = run_script_command(
         runner_root,
         fencerunner_bin,
         scratch_dir,
         run_dir,
-        probe,
+        script,
         enrollments_file.path(),
     )?;
 
@@ -214,57 +212,56 @@ fn run_probe_strict(
         io::stderr()
             .lock()
             .write_all(&output.stderr)
-            .context("forward probe stderr")?;
+            .context("forward script stderr")?;
     }
 
     if run_dir.enforce_stderr_empty && !output.stderr.is_empty() {
-        bail!("probe wrote to stderr but gates.json enforces stderr.empty");
+        bail!("script wrote to stderr but gates.json enforces stderr.empty");
     }
 
     if !output.status.success() {
         let code = output.status.code().unwrap_or(-1);
-        bail!("probe returned non-zero exit code {code}");
+        bail!("script returned non-zero exit code {code}");
     }
 
     let value: Value = serde_json::from_slice(&output.stdout)
-        .with_context(|| "failed to parse boundary object from probe stdout")?;
+        .with_context(|| "failed to parse boundary object from script stdout")?;
     run_dir
         .boundary
         .validate_record(&value)
-        .context("probe emitted a record that violates boundaries.json")?;
+        .context("script emitted a record that violates boundaries.json")?;
 
-    ensure_record_probe_id_matches_script(probe, &value)?;
+    ensure_record_script_id_matches_file(script, &value)?;
 
     println!("{}", serde_json::to_string(&value)?);
     Ok(())
 }
 
-fn run_probe_supervised(
-    invocation_root: &Path,
+fn run_script_supervised(
     runner_root: &RunnerRoot,
     fencerunner_bin: &Path,
     scratch_dir: &Path,
     run_dir: &RunDirPlan,
-    probe: &Probe,
+    script: &Script,
 ) -> Result<()> {
-    ensure_probe_executable(&probe.path)?;
+    ensure_script_executable(&script.path)?;
+    // commit-help-me writes enrollments here; synthetic records read it back.
     let enrollments_file = TempBuilder::new()
         .prefix("fencerunner-commitments.")
         .tempfile_in(scratch_dir)
         .context("allocating commitment enrollment file")?;
-    let output = run_probe_command(
-        invocation_root,
+    let output = run_script_command(
         runner_root,
         fencerunner_bin,
         scratch_dir,
         run_dir,
-        probe,
+        script,
         enrollments_file.path(),
     )?;
     let enrollments = load_commitment_enrollments(enrollments_file.path()).unwrap_or_else(|err| {
         eprintln!(
-            "fencerunner: probe {}: failed to parse commitment enrollments: {err:#}",
-            probe.id
+            "fencerunner: script {}: failed to parse commitment enrollments: {err:#}",
+            script.id
         );
         Vec::new()
     });
@@ -272,7 +269,8 @@ fn run_probe_supervised(
     let status_code = output.status.code();
 
     if !output.stderr.is_empty() {
-        eprintln!("fencerunner: probe {} stderr:", probe.id);
+        // Preserve script stderr for diagnostics without treating it as output.
+        eprintln!("fencerunner: script {} stderr:", script.id);
         eprint!("{}", String::from_utf8_lossy(&output.stderr));
         if !output.stderr.ends_with(b"\n") {
             eprintln!();
@@ -281,17 +279,18 @@ fn run_probe_supervised(
 
     if run_dir.enforce_stderr_empty && !output.stderr.is_empty() {
         emit_synthetic(
-            probe,
+            script,
             run_dir,
             enrollments,
             &output.stdout,
             &output.stderr,
             status_code,
-            "probe wrote to stderr but gates.json enforces stderr.empty".to_string(),
+            "script wrote to stderr but gates.json enforces stderr.empty".to_string(),
         )?;
         return Ok(());
     }
 
+    // Whitespace-only stdout counts as "no record emitted."
     let stdout_is_empty = output.stdout.iter().all(|byte| byte.is_ascii_whitespace());
 
     if output.status.success() && !stdout_is_empty {
@@ -299,7 +298,7 @@ fn run_probe_supervised(
             Ok(value) if value.is_object() => {
                 if let Err(err) = run_dir.boundary.validate_record(&value) {
                     emit_synthetic(
-                        probe,
+                        script,
                         run_dir,
                         enrollments,
                         &output.stdout,
@@ -310,9 +309,9 @@ fn run_probe_supervised(
                     return Ok(());
                 }
 
-                if let Err(err) = ensure_record_probe_id_matches_script(probe, &value) {
+                if let Err(err) = ensure_record_script_id_matches_file(script, &value) {
                     emit_synthetic(
-                        probe,
+                        script,
                         run_dir,
                         enrollments,
                         &output.stdout,
@@ -325,30 +324,30 @@ fn run_probe_supervised(
 
                 let outcome = extract_outcome(&value).unwrap_or_else(|| "unknown".to_string());
                 println!("{}", serde_json::to_string(&value)?);
-                eprintln!("fencerunner: probe {} -> {}", probe.id, outcome);
+                eprintln!("fencerunner: script {} -> {}", script.id, outcome);
                 return Ok(());
             }
             Ok(_) => {
                 emit_synthetic(
-                    probe,
+                    script,
                     run_dir,
                     enrollments,
                     &output.stdout,
                     &output.stderr,
                     status_code,
-                    "probe emitted non-object JSON to stdout".to_string(),
+                    "script emitted non-object JSON to stdout".to_string(),
                 )?;
                 return Ok(());
             }
             Err(err) => {
                 emit_synthetic(
-                    probe,
+                    script,
                     run_dir,
                     enrollments,
                     &output.stdout,
                     &output.stderr,
                     status_code,
-                    format!("probe emitted invalid JSON: {err}"),
+                    format!("script emitted invalid JSON: {err}"),
                 )?;
                 return Ok(());
             }
@@ -357,15 +356,15 @@ fn run_probe_supervised(
 
     let reason = if !output.status.success() {
         match status_code {
-            Some(code) => format!("probe exited non-zero ({code})"),
-            None => "probe terminated by signal".to_string(),
+            Some(code) => format!("script exited non-zero ({code})"),
+            None => "script terminated by signal".to_string(),
         }
     } else {
-        "probe emitted no boundary object on stdout".to_string()
+        "script emitted no boundary object on stdout".to_string()
     };
 
     emit_synthetic(
-        probe,
+        script,
         run_dir,
         enrollments,
         &output.stdout,
@@ -376,18 +375,18 @@ fn run_probe_supervised(
     Ok(())
 }
 
-fn run_probe_command(
-    invocation_root: &Path,
+fn run_script_command(
     runner_root: &RunnerRoot,
     fencerunner_bin: &Path,
     scratch_dir: &Path,
     run_dir: &RunDirPlan,
-    probe: &Probe,
+    script: &Script,
     enrollments_path: &Path,
 ) -> Result<std::process::Output> {
-    let mut command = Command::new(&probe.path);
+    let mut command = Command::new(&script.path);
     command
-        .current_dir(invocation_root)
+        // Run scripts from the run dir so relative paths stay local.
+        .current_dir(&run_dir.path)
         .env(ENV_RUN_DIR, &run_dir.path)
         .env(ENV_ENROLLMENTS_PATH, enrollments_path.as_os_str())
         .env(ENV_FENCERUNNER_BIN, fencerunner_bin)
@@ -399,6 +398,7 @@ fn run_probe_command(
         path_entries.extend(env::split_paths(&existing));
     }
     command.env(
+        // Runner shims come first so scripts always hit the right helpers.
         "PATH",
         env::join_paths(path_entries).context("joining PATH entries")?,
     );
@@ -408,7 +408,7 @@ fn run_probe_command(
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .output()
-        .with_context(|| format!("failed to execute {}", probe.path.display()))
+        .with_context(|| format!("failed to execute {}", script.path.display()))
 }
 
 fn extract_outcome(value: &Value) -> Option<String> {
@@ -420,7 +420,7 @@ fn extract_outcome(value: &Value) -> Option<String> {
 }
 
 fn emit_synthetic(
-    probe: &Probe,
+    script: &Script,
     run_dir: &RunDirPlan,
     commitments: Vec<CommitmentEnrollment>,
     stdout_bytes: &[u8],
@@ -436,7 +436,7 @@ fn emit_synthetic(
     };
 
     let synthetic = synthetic_boundary_object(
-        probe,
+        script,
         &run_dir.path,
         commitments,
         stdout_bytes,
@@ -446,18 +446,18 @@ fn emit_synthetic(
     let value = serde_json::to_value(&synthetic)?;
     if let Err(err) = run_dir.boundary.validate_record(&value) {
         eprintln!(
-            "fencerunner: synthetic record for probe {} violates boundaries.json: {err:#}",
-            probe.id
+            "fencerunner: synthetic record for script {} violates boundaries.json: {err:#}",
+            script.id
         );
     }
 
     println!("{}", serde_json::to_string(&synthetic)?);
-    eprintln!("fencerunner: probe {} -> synthetic(error)", probe.id);
+    eprintln!("fencerunner: script {} -> synthetic(error)", script.id);
     Ok(())
 }
 
 fn synthetic_boundary_object(
-    probe: &Probe,
+    script: &Script,
     run_dir: &Path,
     commitments: Vec<CommitmentEnrollment>,
     stdout_bytes: &[u8],
@@ -468,12 +468,12 @@ fn synthetic_boundary_object(
     let stderr_snippet = String::from_utf8_lossy(stderr_bytes).to_string();
 
     BoundaryObject {
-        probe: ProbeInfo {
-            id: probe.id.clone(),
+        script: ScriptInfo {
+            id: script.id.clone(),
         },
         operation: OperationInfo {
             kind: "harness.supervised".to_string(),
-            target: probe.path.display().to_string(),
+            target: script.path.display().to_string(),
             args: None,
         },
         result: ResultInfo {
@@ -484,21 +484,22 @@ fn synthetic_boundary_object(
             commitments,
             run: Some(RunInfo {
                 workspace_root: None,
-                command: probe.path.display().to_string(),
+                command: script.path.display().to_string(),
             }),
             stack: None,
             extra: Default::default(),
         },
-        payload: Some(json!({
+        payload: json!({
             "stdout_snippet": stdout_snippet,
             "stderr_snippet": stderr_snippet,
+            // Raw details keep the supervised record traceable without logs.
             "raw": {
                 "supervised": {
                     "run_dir": run_dir.display().to_string(),
-                    "probe_path": probe.path.display().to_string(),
+                    "script_path": script.path.display().to_string(),
                 }
             }
-        })),
+        }),
         extensions: Some(json!({
             "synthetic": {
                 "emitted_by": "fencerunner",
@@ -507,14 +508,14 @@ fn synthetic_boundary_object(
     }
 }
 
-fn ensure_probe_executable(path: &Path) -> Result<()> {
+fn ensure_script_executable(path: &Path) -> Result<()> {
     let metadata = std::fs::metadata(path)
-        .with_context(|| format!("probe not found or not executable: {}", path.display()))?;
+        .with_context(|| format!("script not found or not executable: {}", path.display()))?;
     if !metadata.is_file() {
-        bail!("probe not found or not executable: {}", path.display());
+        bail!("script not found or not executable: {}", path.display());
     }
     if !has_execute_bit(&metadata) {
-        bail!("probe is not executable: {}", path.display());
+        bail!("script is not executable: {}", path.display());
     }
     Ok(())
 }
@@ -531,20 +532,20 @@ fn has_execute_bit(metadata: &std::fs::Metadata) -> bool {
     }
 }
 
-fn ensure_record_probe_id_matches_script(probe: &Probe, record: &Value) -> Result<()> {
+fn ensure_record_script_id_matches_file(script: &Script, record: &Value) -> Result<()> {
     let Some(record_id) = record
-        .get("probe")
-        .and_then(|probe| probe.get("id"))
+        .get("script")
+        .and_then(|script| script.get("id"))
         .and_then(Value::as_str)
     else {
-        bail!("boundary record missing probe.id");
+        bail!("boundary record missing script.id");
     };
 
-    if record_id != probe.id {
+    if record_id != script.id {
         bail!(
-            "boundary record probe.id '{}' does not match script id '{}'",
+            "boundary record script.id '{}' does not match filename id '{}'",
             record_id,
-            probe.id
+            script.id
         );
     }
     Ok(())
@@ -555,6 +556,7 @@ fn load_commitment_enrollments(path: &Path) -> Result<Vec<CommitmentEnrollment>>
         return Ok(Vec::new());
     }
 
+    // The file is newline-separated "id|help" entries written by commit-help-me.
     let contents = std::fs::read_to_string(path)
         .with_context(|| format!("reading commitment enrollments {}", path.display()))?;
     if contents.trim().is_empty() {

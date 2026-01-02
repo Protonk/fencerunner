@@ -1,6 +1,6 @@
 //! Small path helpers and parsing utilities.
 //!
-//! The installed runner and probe-facing shims embed the assets they need and
+//! The installed runner and script-facing shims embed the assets they need and
 //! do not require a checked out repository on disk.
 
 use std::path::{Path, PathBuf};

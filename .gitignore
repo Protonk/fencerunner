@@ -1,6 +1,6 @@
 tmp/
 .DS_Store
-
+.cargo/
 
 # Added by cargo
 

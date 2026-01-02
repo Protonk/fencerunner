@@ -7,7 +7,7 @@
 //!
 //! The contract is validated against the repo-shipped meta-schema at
 //! `schema/boundaries.json`, then the embedded `record_schema` is compiled
-//! so runners can validate probe output deterministically.
+//! so runners can validate script output deterministically.
 
 use crate::schema::loader::{SchemaLoadOptions, load_json_schema_str};
 use anyhow::{Context, Result, anyhow, bail};

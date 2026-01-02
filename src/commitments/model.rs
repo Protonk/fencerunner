@@ -1,4 +1,4 @@
-//! Deserializable representation of a probe commitments registry.
+//! Deserializable representation of a script commitments registry.
 //!
 //! The structs in this module mirror `schema/commitments.json`.
 

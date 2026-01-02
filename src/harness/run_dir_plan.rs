@@ -1,18 +1,18 @@
-//! Run-dir planning shared by the probe runners.
+//! Run-dir planning shared by the script runners.
 //!
 //! A run dir is a flat directory containing:
 //! - `gates.json`
 //! - `commitments.json`
 //! - `boundaries.json`
-//! - one or more executable `*.sh` probe scripts
+//! - one or more executable `*.sh` scripts
 //!
-//! This module centralizes the preflight and probe-discovery logic so runner
+//! This module centralizes the preflight and script-discovery logic so runner
 //! binaries (currently `fencerunner`) do not drift.
 
 use crate::boundary::BoundaryContractIndex;
 use crate::commitments::index::CommitmentIndex;
 use crate::gates::contract::GatesContractIndex;
-use crate::probes::discovery::{Probe, canonical_run_dir, list_probes};
+use crate::scripts::discovery::{Script, canonical_run_dir, list_scripts};
 use crate::repo_tools::{boundaries_contract_path, commitments_registry_path, gates_contract_path};
 use anyhow::{Context, Result, bail};
 use std::collections::BTreeMap;
@@ -41,6 +41,7 @@ pub fn preflight_run_dirs(raw: &[PathBuf]) -> Result<Vec<RunDirPlan>> {
         let enforce_stderr_empty = gates_contract.enforces_stderr_empty();
 
         let registry_path = commitments_registry_path(&run_dir);
+        // Commitments are validated at preflight even though enrollment is runtime-only.
         CommitmentIndex::load(&registry_path)
             .with_context(|| format!("loading {}", registry_path.display()))?;
 
@@ -57,28 +58,28 @@ pub fn preflight_run_dirs(raw: &[PathBuf]) -> Result<Vec<RunDirPlan>> {
     Ok(run_dirs)
 }
 
-/// List every probe across all run dirs and reject id collisions.
+/// List every script across all run dirs and reject id collisions.
 ///
-/// The returned plan is stable: within each run dir probes are sorted by id,
+/// The returned plan is stable: within each run dir scripts are sorted by id,
 /// and run dirs preserve the caller-provided ordering.
-pub fn plan_probes(run_dirs: &[RunDirPlan]) -> Result<Vec<(usize, Probe)>> {
-    let mut seen_probe_ids: BTreeMap<String, PathBuf> = BTreeMap::new();
-    let mut execution_plan: Vec<(usize, Probe)> = Vec::new();
+pub fn plan_scripts(run_dirs: &[RunDirPlan]) -> Result<Vec<(usize, Script)>> {
+    let mut seen_script_ids: BTreeMap<String, PathBuf> = BTreeMap::new();
+    let mut execution_plan: Vec<(usize, Script)> = Vec::new();
 
     for (idx, run_dir) in run_dirs.iter().enumerate() {
-        let probes = list_probes(&run_dir.path)
-            .with_context(|| format!("listing probes under {}", run_dir.path.display()))?;
-        for probe in probes {
-            if let Some(existing) = seen_probe_ids.get(&probe.id) {
+        let scripts = list_scripts(&run_dir.path)
+            .with_context(|| format!("listing scripts under {}", run_dir.path.display()))?;
+        for script in scripts {
+            if let Some(existing) = seen_script_ids.get(&script.id) {
                 bail!(
-                    "Duplicate probe id '{}' found in {} and {}",
-                    probe.id,
+                    "Duplicate script id '{}' found in {} and {}",
+                    script.id,
                     existing.display(),
-                    probe.path.display()
+                    script.path.display()
                 );
             }
-            seen_probe_ids.insert(probe.id.clone(), probe.path.clone());
-            execution_plan.push((idx, probe));
+            seen_script_ids.insert(script.id.clone(), script.path.clone());
+            execution_plan.push((idx, script));
         }
     }
 

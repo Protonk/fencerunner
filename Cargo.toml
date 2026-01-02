@@ -1,9 +1,9 @@
 [package]
 name = "fencerunner"
-version = "0.8.0"
+version = "1.0.0"
 edition = "2024"
 rust-version = "1.85"
-description = "Portable probe harness to determine ambient permissions by testing them directly."
+description = "Portable script harness to determine ambient permissions by testing them directly."
 readme = "README.md"
 license = "Apache-2.0"
 repository = "https://github.com/Protonk/fencerunner"

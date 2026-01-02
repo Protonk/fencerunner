@@ -2,7 +2,7 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "https://fencerunner.dev/schemas/gates_v1.json",
   "title": "Gates contract (v1)",
-  "description": "Schema for gates.json (run-dir-local probe contract enrollment).",
+  "description": "Schema for gates.json (run-dir-local script contract enrollment).",
   "type": "object",
   "additionalProperties": true,
   "required": ["schema_version"],

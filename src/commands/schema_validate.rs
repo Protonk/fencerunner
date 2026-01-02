@@ -1,6 +1,6 @@
 //! Internal schema validation helper.
 //!
-//! This is used by tests and by probe-facing shims to validate run-dir-local
+//! This is used by tests and by script-facing shims to validate run-dir-local
 //! contracts and boundary records without relying on repo-relative paths.
 
 use crate::boundary::BoundaryContractIndex;

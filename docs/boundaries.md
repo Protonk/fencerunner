@@ -7,15 +7,17 @@ Boundary output is **NDJSON on stdout**: one JSON object per line.
 The contract is intentionally **flexible but enforceable**: a run dir can pick
 its own `record_schema` (and evolve it over time), but emitted records must
 still include a small required core so downstream tooling always has stable
-identity/outcome/enrollment channels.
+identity/outcome/enrollment/payload channels.
 
 ## Required core (baseline policy)
 
 Every run dir’s `record_schema` must require:
 
-- `probe.id` (string)
+- `script.id` (string)
 - `result.outcome` (string)
 - `/context/commitments` (array of `{id, helps[]}` enrollment pairs; empty allowed)
+- `/payload/stdout_snippet` (string; empty allowed)
+- `/payload/stderr_snippet` (string; empty allowed)
 
 The meta-schema at [`schema/boundaries.json`](../schema/boundaries.json) enforces that your `record_schema`
 is written in a way that preserves these fields.
@@ -53,9 +55,9 @@ Minimal `boundaries.json` (requires only the core fields and otherwise stays per
   "record_schema": {
     "$schema": "http://json-schema.org/draft-07/schema#",
     "type": "object",
-    "required": ["probe", "result", "context"],
+    "required": ["script", "result", "context", "payload"],
     "properties": {
-      "probe": {
+      "script": {
         "type": "object",
         "required": ["id"],
         "properties": {
@@ -67,6 +69,14 @@ Minimal `boundaries.json` (requires only the core fields and otherwise stays per
         "required": ["outcome"],
         "properties": {
           "outcome": { "type": "string" }
+        }
+      },
+      "payload": {
+        "type": "object",
+        "required": ["stdout_snippet", "stderr_snippet"],
+        "properties": {
+          "stdout_snippet": { "type": "string" },
+          "stderr_snippet": { "type": "string" }
         }
       },
       "context": {
@@ -111,9 +121,9 @@ A stricter `boundaries.json` (requires an `operation` envelope and constrains `o
   "record_schema": {
     "$schema": "http://json-schema.org/draft-07/schema#",
     "type": "object",
-    "required": ["probe", "operation", "result", "context"],
+    "required": ["script", "operation", "result", "context", "payload"],
     "properties": {
-      "probe": {
+      "script": {
         "type": "object",
         "required": ["id"],
         "properties": {
@@ -139,6 +149,14 @@ A stricter `boundaries.json` (requires an `operation` envelope and constrains `o
             "type": "string",
             "enum": ["success", "denied", "partial", "error"]
           }
+        }
+      },
+      "payload": {
+        "type": "object",
+        "required": ["stdout_snippet", "stderr_snippet"],
+        "properties": {
+          "stdout_snippet": { "type": "string" },
+          "stderr_snippet": { "type": "string" }
         }
       },
       "context": {
@@ -184,5 +202,5 @@ For run-dir authors, “extension” is primarily about evolving `record_schema`
 - Decide how permissive the schema should be (`additionalProperties`).
 
 If you use the repo’s `emit-record` helper, keep your `record_schema`
-compatible with what it emits (it includes `probe`, `operation`, `result`,
-`context`, and `payload`).
+compatible with what it emits (it includes `script`, `operation`, `result`,
+`context`, and `payload` with `stdout_snippet`/`stderr_snippet`).
