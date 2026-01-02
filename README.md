@@ -6,23 +6,34 @@ Asking questions about macOS can be challenging, especially if you care about th
 
 It achieves this by orienting itself toward agentic coders and treating them as willing participants. A posture of build-time flexibility coupled with run-time rigidity affords useful feedback loops with clear test targets. Contracts clearly laid out on disc and easy to opt into--scripts are run in flat directories containing three contracts with commitments to declare, gates to be treated as hard failures, and boundaries of the output. The content of those contracts is almost entirely up to the user, with validation against a small json schema via a clear, mechanical pipeline. Your agent doesn't need to learn fencerunner. It already knows it. 
 
-## Use
+Follow the [user guide](docs/fencerunner-user.md) for detailed instruction and examples. 
 
-Run `fencerunner` with one or more run dirs. By default it runs in strict mode, treating contract breaks as failures; use `--supervised` when keeping a well-formed NDJSON boundary stream matters more than perfect script behavior.
+## Three contracts
 
-```sh
-fencerunner scripts
-fencerunner ./scripts /tmp/other-run-dir
-```
+A *run directory* is a flat directory of scripts (`*.sh`) plus three run-dir-local JSON contracts: `commitments.json`, `gates.json`, and `boundaries.json`. Collectively, the triad is the user-facing API surface of fencerunner. The runner validates all three before any script runs. If any contract is missing or invalid, the run aborts early. Each contract is opted in to at the directory level. 
 
-### What makes a RUN_DIR
+### `commitments.json` — declared dependencies
 
-A run dir is a flat (subdirectories are ignored) directory you pass to `fencerunner`. It bundles shell scripts with three run-dir-local contracts: **commitments**, **gates**, and **boundaries**. Fencerunner accepts mulitple run dirs, but script ids are derived from filenames and must be unique across all run dirs in a single run. A minimal run dir contains:
+`commitments.json` declares dependencies scripts may rely on: runner helpers, host runtimes, or operator-installed tools. It is a registry for humans and downstream consumers: scripts enroll in commitments at runtime and those enrollments are serialized into each boundary record under `/context/commitments`.
 
-- `commitments.json` — a registry of declared commitments a script may rely on (runner helpers and external runtimes) and the help verbs they support.
-- `gates.json` — optional gate enrollments that tighten the script contract for this run dir (for example enforcing `stderr.empty`).
-- `boundaries.json` — the output contract for boundary records (stdout format and the schema each record must satisfy).
-- one or more executable `*.sh` files — each `*.sh` at the top level is a script
+- Schema: `schema/commitments.json`
+- Narrative guide: [docs/commitments.md](docs/commitments.md)
+
+### `gates.json` — optional enforced checks
+
+`gates.json` is where a run dir opts into additional checks enforced by the runner. Gates are intentionally small and explicit: they tighten the script contract without adding hidden coupling between scripts and the runner.
+
+- Schema: `schema/gates.json`
+- Narrative guide: [docs/gates.md](docs/gates.md)
+
+### `boundaries.json` — output contract
+
+`boundaries.json` defines the shape of the boundary records emitted on stdout. It is flexible-but-enforceable: each run dir provides its own `record_schema` (a JSON Schema), but the runner’s meta-schema requires a small stable core so downstream tools always have consistent identity/outcome/enrollment/payload channels.
+
+This is enforced in two layers. First, `boundaries.json` itself is validated against `schema/boundaries.json`. Then, each record emitted by a script is validated against the run dir’s `record_schema` at runtime. The user guide shows how to author and evolve these contracts deliberately, and how to keep multiple run dirs producing a clean, unified NDJSON stream.
+
+- Schema: `schema/boundaries.json`
+- Narrative guide: [docs/boundaries.md](docs/boundaries.md)
 
 ## Tests
 
