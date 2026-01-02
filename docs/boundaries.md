@@ -22,6 +22,13 @@ Every run dir’s `record_schema` must require:
 The meta-schema at [`schema/boundaries.json`](../schema/boundaries.json) enforces that your `record_schema`
 is written in a way that preserves these fields.
 
+## Payload constraints (emit-record)
+
+If you use the runner-provided `emit-record` helper, it keeps boundary records compact and predictable:
+
+- `payload` (as serialized JSON) is capped at 16 KiB.
+- `payload.stdout_snippet` and `payload.stderr_snippet` are NUL-stripped and truncated to 2000 characters (with an ellipsis).
+
 ## Two-layer validation (schema → contract → records)
 
 Validation is **two-layer**:

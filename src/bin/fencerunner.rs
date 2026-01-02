@@ -3,7 +3,7 @@
 //! Public CLI:
 //!   fencerunner [--strict|--supervised] <RUN_DIR>...
 //!
-//! In strict mode (default), contract breaks are failures (non-zero exit).
+//! In strict mode (default), contract breaks fail fast (non-zero exit).
 //! In supervised mode, contract breaks are converted into synthetic boundary
 //! records so stdout remains well-formed NDJSON; supervised exits 0 unless
 //! preflight or the runner itself fails.
@@ -15,6 +15,7 @@ use fencerunner::boundary::{
 };
 use fencerunner::commands;
 use fencerunner::commitments::model::CommitmentHelp;
+use fencerunner::harness::payload::validate_outcome;
 use fencerunner::harness::run_dir_plan::{RunDirPlan, plan_scripts, preflight_run_dirs};
 use fencerunner::harness::runner_root::RunnerRoot;
 use fencerunner::scripts::discovery::Script;
@@ -48,7 +49,6 @@ fn dispatch() -> Result<()> {
         match first {
             "__emit-record" => return commands::emit_record::run(&args[1..]),
             "__commit-help-me" => return commands::commit_help_me::run(&args[1..]),
-            "__schema-validate" => return commands::schema_validate::run(&args[1..]),
             other => bail!("unknown internal subcommand: {other}"),
         }
     }
@@ -108,7 +108,7 @@ impl Cli {
 
 fn usage(code: i32) -> ! {
     eprintln!(
-        "Usage: fencerunner [--strict|--supervised] <RUN_DIR>...\n\nRuns every *.sh script inside each run directory (flat; non-recursive) and streams boundary objects as NDJSON.\n\nModes:\n  --strict        Treat contract breaks as failures (default).\n  --supervised    Emit synthetic boundary records on contract breaks; exit 0 unless preflight/runner fails.\n\nOptions:\n  -h, --help      Show this help text.\n  -V, --version   Show the version.\n\nExamples:\n  fencerunner scripts\n  fencerunner ./scripts /tmp/other-run-dir\n  fencerunner --supervised scripts"
+        "Usage: fencerunner [--strict|--supervised] <RUN_DIR>...\n\nRuns every *.sh script inside each run directory (flat; non-recursive) and streams boundary objects as NDJSON.\n\nModes:\n  --strict        Treat contract breaks as failures and stop at first failure (default).\n  --supervised    Emit synthetic boundary records on contract breaks; exit 0 unless preflight/runner fails.\n\nOptions:\n  -h, --help      Show this help text.\n  -V, --version   Show the version.\n\nExamples:\n  fencerunner scripts\n  fencerunner ./scripts /tmp/other-run-dir\n  fencerunner --supervised scripts"
     );
     std::process::exit(code);
 }
@@ -127,7 +127,9 @@ fn run_fencerunner(cli: &Cli) -> Result<()> {
     let run_dir_paths: Vec<PathBuf> = cli.run_dirs.iter().map(PathBuf::from).collect();
     // Preflight validates run-dir contracts before any scripts execute.
     let run_dirs = preflight_run_dirs(&run_dir_paths)?;
-    // Script planning enforces global id uniqueness and stable ordering.
+    // Script planning enforces global id uniqueness and stable ordering: within
+    // each run dir scripts run in lexicographic id order, and run dirs run in
+    // CLI argument order.
     let execution_plan = plan_scripts(&run_dirs)?;
     let total = execution_plan.len();
 
@@ -145,22 +147,20 @@ fn run_fencerunner(cli: &Cli) -> Result<()> {
         );
     }
 
-    let mut errors: Vec<String> = Vec::new();
     for (idx, (run_dir_idx, script)) in execution_plan.iter().enumerate() {
         let run_dir = &run_dirs[*run_dir_idx];
         match cli.mode {
             RunMode::Strict => {
-                if let Err(err) = run_script_strict(
+                // Strict mode fails fast: stop executing scripts on the first
+                // contract break and return non-zero.
+                run_script_strict(
                     &runner_root,
                     &fencerunner_bin,
                     scratch_dir.path(),
                     run_dir,
                     script,
-                ) {
-                    let message = format!("script {} failed: {err:#}", script.id);
-                    eprintln!("fencerunner: {message}");
-                    errors.push(message);
-                }
+                )
+                .with_context(|| format!("script {} failed", script.id))?;
             }
             RunMode::Supervised => {
                 eprintln!("fencerunner: [{}/{}] {}", idx + 1, total, script.id);
@@ -173,14 +173,6 @@ fn run_fencerunner(cli: &Cli) -> Result<()> {
                 )?;
             }
         }
-    }
-
-    if cli.mode == RunMode::Strict && !errors.is_empty() {
-        bail!(
-            "{} script(s) failed; see stderr for details:\n{}",
-            errors.len(),
-            errors.join("\n")
-        );
     }
 
     Ok(())
@@ -232,6 +224,9 @@ fn run_script_strict(
         .context("script emitted a record that violates boundaries.json")?;
 
     ensure_record_script_id_matches_file(script, &value)?;
+    // Enforce the runner's fixed outcome vocabulary even if boundaries.json is
+    // permissive; downstream tooling treats outcome as a stable enum.
+    ensure_record_outcome_is_known(&value)?;
 
     println!("{}", serde_json::to_string(&value)?);
     Ok(())
@@ -322,7 +317,24 @@ fn run_script_supervised(
                     return Ok(());
                 }
 
-                let outcome = extract_outcome(&value).unwrap_or_else(|| "unknown".to_string());
+                // Enforce the runner's fixed outcome vocabulary even if the run
+                // dir schema is permissive; unknown outcomes become a synthetic
+                // error record in supervised mode.
+                let outcome = match ensure_record_outcome_is_known(&value) {
+                    Ok(outcome) => outcome.to_string(),
+                    Err(err) => {
+                        emit_synthetic(
+                            script,
+                            run_dir,
+                            enrollments,
+                            &output.stdout,
+                            &output.stderr,
+                            status_code,
+                            format!("{err:#}"),
+                        )?;
+                        return Ok(());
+                    }
+                };
                 println!("{}", serde_json::to_string(&value)?);
                 eprintln!("fencerunner: script {} -> {}", script.id, outcome);
                 return Ok(());
@@ -409,14 +421,6 @@ fn run_script_command(
         .stderr(Stdio::piped())
         .output()
         .with_context(|| format!("failed to execute {}", script.path.display()))
-}
-
-fn extract_outcome(value: &Value) -> Option<String> {
-    value
-        .get("result")
-        .and_then(|result| result.get("outcome"))
-        .and_then(|outcome| outcome.as_str())
-        .map(|s| s.to_string())
 }
 
 fn emit_synthetic(
@@ -551,6 +555,21 @@ fn ensure_record_script_id_matches_file(script: &Script, record: &Value) -> Resu
     Ok(())
 }
 
+fn ensure_record_outcome_is_known(record: &Value) -> Result<&str> {
+    let Some(outcome) = record
+        .get("result")
+        .and_then(|result| result.get("outcome"))
+        .and_then(Value::as_str)
+    else {
+        bail!("boundary record missing result.outcome");
+    };
+
+    validate_outcome(outcome).with_context(|| {
+        format!("boundary record result.outcome '{outcome}' is not in the fixed vocabulary")
+    })?;
+    Ok(outcome)
+}
+
 fn load_commitment_enrollments(path: &Path) -> Result<Vec<CommitmentEnrollment>> {
     if !path.exists() {
         return Ok(Vec::new());
@@ -619,6 +638,7 @@ fn parse_commitment_help(value: &str) -> Result<CommitmentHelp> {
 }
 
 fn validate_commitment_id(value: &str) -> Result<()> {
+    // Keep in sync with `commit-help-me` and the JSON schemas.
     if value.trim().is_empty() {
         bail!("commitment id must not be empty");
     }

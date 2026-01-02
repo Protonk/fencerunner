@@ -22,7 +22,7 @@ A run dir is flat and contains:
 - `gates.json`
 - `commitments.json`
 - `boundaries.json`
-- `*.sh` scripts (every `*.sh` file directly under the run dir is considered a script)
+- `*.sh` scripts (regular files only; symlinked scripts are rejected)
 
 The runner also provides a shared script library at `lib/library.sh`. Scripts
 must start by sourcing it via:
@@ -84,7 +84,9 @@ Opt into stricter stderr behavior:
 ### Discovery and identity
 
 - Every `*.sh` file directly under the run dir is a script.
+- Scripts must be regular files; symlinked scripts are rejected.
 - The script id is the filename stem: `<script_id>.sh`.
+- Scripts execute in lexicographic id order within a run dir; across multiple run dirs, run dirs execute in CLI argument order.
 - Boundary objects must record this identity under `script.id`.
 
 When multiple run dirs are executed together, **script id collisions are

@@ -15,17 +15,16 @@ use tempfile::TempDir;
 
 use common::{FixtureScript, FixtureRunDir, parse_boundary_object, repo_guard};
 
-// Ensures fencerunner --strict surfaces malformed probe output without blocking
-// the remaining probes from running. The runner should still emit valid records
-// from other probes.
+// Ensures fencerunner --strict fails fast: if the first probe violates the
+// boundary record contract, the runner returns non-zero immediately and does
+// not execute later probes.
 #[test]
-fn fencerunner_strict_continues_after_malformed_script() -> Result<()> {
+fn fencerunner_strict_fails_fast_on_malformed_script() -> Result<()> {
     let repo_root = repo_root();
     let _guard = repo_guard();
     let run_dir = FixtureRunDir::new(&repo_root)?;
     // Name the malformed probe so it sorts first; this makes the test
-    // non-vacuous by ensuring fencerunner --strict still runs later probes after
-    // an early failure.
+    // non-vacuous by ensuring fencerunner --strict hits the failure early.
     let broken_contents = r#"#!/usr/bin/env bash
 set -euo pipefail
 echo not-json
@@ -36,7 +35,8 @@ exit 0
         "aaa_malformed_probe",
         broken_contents,
     )?;
-    let good = FixtureScript::install_in_run_dir(&repo_root, run_dir.path(), "zzz_fixture_probe")?;
+    let _good =
+        FixtureScript::install_in_run_dir(&repo_root, run_dir.path(), "zzz_fixture_probe")?;
 
     let runner = fencerunner_binary(&repo_root);
     let mut cmd = Command::new(&runner);
@@ -59,16 +59,146 @@ exit 0
         .collect();
     assert_eq!(
         lines.len(),
-        1,
-        "expected only the valid probe output to remain on stdout"
+        0,
+        "expected no stdout because strict mode fails fast before later probes run"
     );
-    let (record, _) = parse_boundary_object(lines[0].as_bytes())?;
-    assert_eq!(record.script.id, good.script_id());
 
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(
         stderr.contains(broken.script_id()),
         "stderr should mention the malformed probe id; stderr was: {stderr}"
+    );
+
+    Ok(())
+}
+
+// fencerunner enforces a fixed outcome vocabulary (success|denied|partial|error)
+// even if boundaries.json allows arbitrary outcome strings.
+#[test]
+fn fencerunner_strict_fails_on_unknown_outcome_even_if_schema_allows_it() -> Result<()> {
+    let repo_root = repo_root();
+    let _guard = repo_guard();
+    let run_dir = FixtureRunDir::new(&repo_root)?;
+
+    // Use the default boundaries.json but relax the schema to allow any string
+    // outcome. This ensures the runner's vocabulary enforcement is tested even
+    // when the run dir schema would accept the record.
+    let boundaries_path = run_dir.path().join("boundaries.json");
+    let boundaries_contents =
+        fs::read_to_string(&boundaries_path).context("read boundaries.json")?;
+    let mut boundaries: serde_json::Value =
+        serde_json::from_str(&boundaries_contents).context("parse boundaries.json")?;
+    let outcome_schema = boundaries
+        .get_mut("record_schema")
+        .and_then(|schema| schema.get_mut("properties"))
+        .and_then(|properties| properties.get_mut("result"))
+        .and_then(|result| result.get_mut("properties"))
+        .and_then(|properties| properties.get_mut("outcome"))
+        .context("locate record_schema.properties.result.properties.outcome")?;
+    *outcome_schema = serde_json::json!({ "type": "string" });
+    fs::write(
+        &boundaries_path,
+        serde_json::to_string_pretty(&boundaries).context("serialize boundaries.json")?,
+    )
+    .context("write modified boundaries.json")?;
+
+    let contents = r#"#!/usr/bin/env bash
+set -euo pipefail
+
+probe_id="$(basename "${BASH_SOURCE[0]}" .sh)"
+cat <<EOF
+{"script":{"id":"${probe_id}"},"operation":{"kind":"test.outcome","target":"x"},"result":{"outcome":"weird"},"context":{"commitments":[]},"payload":{"stdout_snippet":"","stderr_snippet":""}}
+EOF
+"#;
+    let _probe =
+        FixtureScript::install_from_contents_in_run_dir(run_dir.path(), "tests_unknown_outcome", contents)?;
+
+    let runner = fencerunner_binary(&repo_root);
+    let output = Command::new(&runner)
+        .arg("--strict")
+        .arg(run_dir.path())
+        .current_dir(&repo_root)
+        .output()
+        .context("failed to execute fencerunner --strict with unknown outcome")?;
+
+    assert!(
+        !output.status.success(),
+        "fencerunner --strict should fail on unknown outcome"
+    );
+    assert!(
+        output.stdout.is_empty(),
+        "expected no stdout when strict fails on unknown outcome"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("Unknown outcome"),
+        "expected stderr to mention unknown outcome; stderr was: {stderr}"
+    );
+
+    Ok(())
+}
+
+#[test]
+fn fencerunner_supervised_emits_synthetic_record_when_outcome_is_unknown() -> Result<()> {
+    let repo_root = repo_root();
+    let _guard = repo_guard();
+    let run_dir = FixtureRunDir::new(&repo_root)?;
+
+    // Use the default boundaries.json but relax the schema to allow any string
+    // outcome. This ensures supervised mode falls back to a synthetic record
+    // specifically because the vocabulary is unknown, not because schema
+    // validation rejected the payload.
+    let boundaries_path = run_dir.path().join("boundaries.json");
+    let boundaries_contents =
+        fs::read_to_string(&boundaries_path).context("read boundaries.json")?;
+    let mut boundaries: serde_json::Value =
+        serde_json::from_str(&boundaries_contents).context("parse boundaries.json")?;
+    let outcome_schema = boundaries
+        .get_mut("record_schema")
+        .and_then(|schema| schema.get_mut("properties"))
+        .and_then(|properties| properties.get_mut("result"))
+        .and_then(|result| result.get_mut("properties"))
+        .and_then(|properties| properties.get_mut("outcome"))
+        .context("locate record_schema.properties.result.properties.outcome")?;
+    *outcome_schema = serde_json::json!({ "type": "string" });
+    fs::write(
+        &boundaries_path,
+        serde_json::to_string_pretty(&boundaries).context("serialize boundaries.json")?,
+    )
+    .context("write modified boundaries.json")?;
+
+    let contents = r#"#!/usr/bin/env bash
+set -euo pipefail
+
+probe_id="$(basename "${BASH_SOURCE[0]}" .sh)"
+cat <<EOF
+{"script":{"id":"${probe_id}"},"operation":{"kind":"test.outcome","target":"x"},"result":{"outcome":"weird"},"context":{"commitments":[]},"payload":{"stdout_snippet":"","stderr_snippet":""}}
+EOF
+"#;
+    let probe =
+        FixtureScript::install_from_contents_in_run_dir(run_dir.path(), "tests_unknown_outcome", contents)?;
+
+    let runner = fencerunner_binary(&repo_root);
+    let mut cmd = Command::new(&runner);
+    cmd.arg("--supervised").arg(run_dir.path()).current_dir(&repo_root);
+    let output = run_command(cmd)?;
+
+    let stdout = String::from_utf8(output.stdout).context("target stdout utf-8")?;
+    let lines: Vec<&str> = stdout
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty())
+        .collect();
+    assert_eq!(lines.len(), 1, "expected exactly one record");
+    let (record, _) = parse_boundary_object(lines[0].as_bytes())?;
+    assert_eq!(record.script.id, probe.script_id());
+    assert_eq!(record.operation.kind, "harness.supervised");
+    assert_eq!(record.result.outcome, "error");
+    let details = record.result.details.expect("synthetic record details");
+    let message = details.message.unwrap_or_default();
+    assert!(
+        message.contains("Unknown outcome"),
+        "expected synthetic details to mention unknown outcome; message was: {message}"
     );
 
     Ok(())

@@ -95,7 +95,7 @@ fn payload_builder_rejects_large_payloads() -> Result<()> {
     payload.set_stderr(TextSource::Inline("".to_string()))?;
     payload
         .raw_mut()
-        .insert_string("big".to_string(), "a".repeat(5000));
+        .insert_string("big".to_string(), "a".repeat(20_000));
     let err = payload
         .build()
         .expect_err("expected payload size enforcement to fail");

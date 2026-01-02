@@ -43,8 +43,19 @@ Each commitment definition:
 ### `id`
 
 - Keep it stable: it becomes the durable key recorded in `/context/commitments`.
-- Must match `^[A-Za-z0-9_.-]+$`.
+- Must match `^[A-Za-z0-9_.-]+$` (letters/digits plus `_`, `.`, `-`).
 - Uniqueness is required **within a single run dir**.
+
+Why the tight alphabet: commitment ids are designed to be portable, queryable
+tokens that work well in Bash, JSON, and downstream tools. Keeping ids free of
+whitespace, slashes, and shell-significant punctuation avoids quoting
+surprises, keeps enrollment recording simple (`id|help` lines), and reduces
+“looks the same but isn’t” issues when agents are generating or editing run
+dirs.
+
+Runtime note: the runner and helpers enforce the same id contract at runtime.
+If a script calls `commit_help_me` with an invalid id, enrollment fails and the
+script should treat that as a hard error.
 
 ### `provider`
 

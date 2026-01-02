@@ -1,23 +1,60 @@
-# fencerunner user guide (macOS / Apple Silicon)
+# fencerunner user guide
 
-This guide assumes:
+>Run Bash scripts as a deterministic NDJSON stream.
 
-- macOS (tested on Apple Silicon / `arm64`).
-- Your scripts run under macOS `/bin/bash` (Bash 3.2).
-- You install `fencerunner` by downloading a release binary and putting it on your `PATH`.
+Use this guide when you want a directory of scripts to behave like a single instrumented suite. You point `fencerunner` at one or more run dirs; it executes each script and produces an NDJSON stream where every line is a boundary record describing what a script tried to do and how it went.
 
-## The contract in one sentence
+Most of the guide is about making that stream pleasant to consume and easy to evolve: keep stdout clean, emit records with `emit-record`, and shape `boundaries.json` so wildly different scripts still read cleanly as they stream. Later sections show how to add lightweight instrumentation with commitments and how to keep contracts consistent across many run dirs.
 
-`fencerunner` runs every executable `*.sh` script in one or more **run directories**, and each script is expected to emit **exactly one JSON object on stdout**; `fencerunner` then streams those objects as **NDJSON** (one JSON object per line).
-- **Stdout is the record.** Don’t print anything else to stdout.
-- **One script → one record.** Exactly one boundary record per script.
-- **Use `emit-record`.** It’s the easiest way to stay schema-valid.
+## Contents
+
+- [The contract](#the-contract)
+- [Runtime](#runtime)
+- [Quickstart](#quickstart)
+- [Boundary records](#boundary-records)
+- [Run modes](#run-modes)
+- [Commitments](#commitments)
+- [Run directories](#run-directories)
+- [Unified streams](#unified-streams)
+- [Evolving boundaries](#evolving-boundaries)
+- [Generating boundaries](#generating-boundaries)
+- [Troubleshooting](#troubleshooting)
+- [Advanced](#advanced)
+- [Signal audit grab bag](#signal-audit-grab-bag)
+
+## The contract
+
+>stdout is reserved.
+
+`fencerunner` treats a script’s stdout as its interface: the boundary record. Anything else on stdout (logs, progress, stray `echo`) is a contract break. Send diagnostics to stderr, capture any command output you care about, and emit exactly one boundary record when the script is done.
+
+Each top-level `*.sh` is one script, and each script emits one record. The record must declare `script.id`, and that id must match the filename stem (`my_probe.sh` → `my_probe`), so identity is stable and deterministic. In a single run, script ids must be unique so the stream can be consumed without ambiguity. `fencerunner` also enforces a fixed result.outcome vocabulary (success|denied|partial|error) for all scripts so downstream tools can treat `result.outcome` as a stable enum.
+
+That’s most of what `fencerunner` insists on. Everything else—what you encode in the record, how strict the schema is, which operation kinds exist—is defined by the contracts you choose to write in the run dir.
 
 ---
 
-## Install (v1.0.0)
+## Runtime
 
-1. Open the release page: `https://github.com/Protonk/fencerunner/releases/tag/v1.0.0`
+When `fencerunner` executes a script it sets `CWD` to the run dir, exports `FENCERUNNER_RUN_DIR`, and provides a temporary `FENCERUNNER_ROOT` containing:
+
+- `lib/library.sh`: Runner-owned Bash library you `source` to get stable helpers (including `commit_help_me`). Mandated so scripts have one shared interface for runner integration instead of re-implementing it ad hoc.
+- `bin/emit-record`: Runner-provided record emitter you invoke as `emit-record`; it builds a boundary record and prints it as one NDJSON line. Mandated because it keeps stdout clean and records schema-valid.
+- `bin/commit-help-me`: Runner-provided enrollment recorder used by `commit_help_me <verb> <commitment.id>`. Mandated so commitment enrollments are captured consistently and serialized into `context.commitments`.
+
+These are runner-provided helpers. In practice, you source the library, enroll any commitments you care about, and emit the one boundary record with `emit-record`.
+
+---
+
+## Quickstart
+
+Follow this once to get a runnable run dir and see a boundary record stream on stdout.
+
+### Install
+
+Install from a prebuilt release on macOS by placing a downloaded binary on your `PATH`. Releases are currently tested on Apple Silicon (`arm64`), so the steps below use the `aarch64-apple-darwin` artifact.
+
+1. Open the v1.0.0 release page: `https://github.com/Protonk/fencerunner/releases/tag/v1.0.0`
 2. Download the `aarch64-apple-darwin` artifact (`.tar.gz`) and its `.sha256` file.
 3. Verify the SHA256 (from the directory you downloaded into):
 
@@ -51,57 +88,22 @@ This guide assumes:
    fencerunner --help
    ```
 
-Notes:
+`fencerunner` is tested on Apple Silicon. If you’re on Intel macOS, build from source or use a matching release artifact if one exists.
 
-- `fencerunner` is tested on Apple Silicon. If you’re on Intel macOS, build from source or use a matching release artifact if one exists.
-
----
-
-## What is a run directory?
-
-A **run directory** (“run dir”) is a *flat* directory containing:
-
-- `gates.json` — optional extra checks enforced by the runner.
-- `commitments.json` — a dir-local dependency registry (metadata + a place to be explicit).
-- `boundaries.json` — the output contract for boundary records.
-- One or more executable `*.sh` scripts (top-level only; subdirectories are ignored).
-
-Key rules:
-
-- **Flat means flat:** only `*.sh` files directly under the run dir are treated as scripts.
-- **Scripts must be executable:** `chmod +x your_script.sh`.
-- **Script id is filename-based:** `my_probe.sh` has id `my_probe`, and the emitted record must report `script.id == "my_probe"`.
-- **Script ids must be unique across all run dirs in one run.** If you run `fencerunner dirA dirB`, and both have `probe.sh`, that’s a hard error.
-
-### What `fencerunner` provides to scripts at runtime
-
-When `fencerunner` runs a script, it sets:
-
-- The script’s **current working directory** (`CWD`) to the run dir.
-- `FENCERUNNER_RUN_DIR` to the run dir’s absolute path.
-- `FENCERUNNER_ROOT` to a runner-owned ephemeral directory that contains:
-  - `lib/library.sh` (the script library)
-  - `bin/emit-record` (a shim that emits schema-valid boundary records)
-  - `bin/commit-help-me` (a shim used by `commit_help_me` for enrollment tracking)
-- `PATH` so the runner shims (`emit-record`, `commit-help-me`) are found first.
-- `TMPDIR` to a scratch directory for the run (use it for temp files).
-
-One important implication: **run scripts via `fencerunner`**. If you execute scripts directly, the helper shims and environment won’t exist.
-
----
-
-## Quickstart: create a run dir from scratch
-
-This is the smallest “real” run dir: it has the triad and one script.
+### Create a run dir
 
 ```bash
 mkdir -p ./example-run-dir
 cd ./example-run-dir
 ```
 
-### 1) `gates.json`
+### Add the contracts
 
-Minimal gates contract (no extra checks):
+A run dir becomes runnable once it has the triad (`gates.json`, `commitments.json`, `boundaries.json`) plus at least one executable `*.sh` script file (not a symlink). `fencerunner` validates the contracts before it runs any scripts, then validates each script’s record against `boundaries.json` at runtime.
+
+The examples below are a minimal, schema-valid baseline. `gates.json` stays empty unless you opt into extra checks, `commitments.json` declares a vocabulary for lightweight instrumentation, and `boundaries.json` defines the shape of the boundary records you’ll stream on stdout.
+
+#### `gates.json`
 
 ```json
 {
@@ -109,14 +111,7 @@ Minimal gates contract (no extra checks):
 }
 ```
 
-### 2) `commitments.json`
-
-Minimal commitments registry. This file is required even if you don’t use it yet.
-
-This example declares:
-
-- `emit.record` (the runner-provided boundary emitter)
-- `python3` (a system dependency you *might* rely on)
+#### `commitments.json`
 
 ```json
 {
@@ -142,14 +137,11 @@ This example declares:
 }
 ```
 
-### 3) `boundaries.json` (recommended baseline)
+#### `boundaries.json`
 
-This contract is the “shape” each script must emit.
+This is a stable envelope with a flexible interior: downstream tools can trust the top-level shape, while you can standardize `operation.args` and `payload.raw` over time.
 
-It’s intentionally:
-
-- **Stable at the top level** (`additionalProperties: false`), so downstream tools can trust the envelope.
-- **Flexible inside** `operation.args`, `context`, and `payload.raw`.
+You don’t need to understand every field yet. For now, treat this as a copy-paste baseline; the sections below explain what the record means and how to evolve it deliberately.
 
 ```json
 {
@@ -243,7 +235,7 @@ It’s intentionally:
 }
 ```
 
-### 4) Add a script (`probe_bash_exists.sh`)
+### Add a script
 
 Create `probe_bash_exists.sh`:
 
@@ -262,7 +254,6 @@ else
   outcome="error"
 fi
 
-# Record that this script relies on the runner's emitter.
 commit_help_me emit emit.record
 
 emit-record \
@@ -283,7 +274,7 @@ Make it executable:
 chmod +x ./probe_bash_exists.sh
 ```
 
-### 5) Run it
+### Run it
 
 From the directory *above* the run dir:
 
@@ -292,49 +283,39 @@ cd ..
 fencerunner ./example-run-dir
 ```
 
-You’ll get **one JSON object per line** on stdout. It will be one long line (NDJSON).
+You’ll get one JSON object per line on stdout (NDJSON).
+
+If you’re feeding the stream into a pipeline, try `--supervised` to keep stdout well-formed even when scripts break (see Run modes).
+
+Next, the guide explains what that boundary record means and how to evolve the schema without losing stream determinism.
 
 ---
 
-## The boundary record contract (deep)
+## Boundary records
 
-### The rule: stdout is reserved
+>Your boundary record is your interface.
+
+### Stdout is reserved
 
 In strict mode (the default), `fencerunner` treats script stdout as **the boundary record**. If your script prints anything else (a log line, a progress bar, a stray `echo`), the record parse/validation will fail.
 
-Practical pattern:
+The practical pattern is simple: send diagnostics to stderr (`... >&2`), capture command stdout/stderr into files or variables, place whatever evidence you care about into `payload.stdout_snippet`, `payload.stderr_snippet`, and/or `payload.raw`, then emit exactly one record via `emit-record`.
 
-- Send *diagnostics* to stderr (`echo "...msg..." >&2`).
-- Capture the outputs of commands you run into files/variables.
-- Put the evidence you care about into `payload.stdout_snippet`, `payload.stderr_snippet`, and/or `payload.raw`.
-- Emit one record via `emit-record`.
+### Core shape
 
-### The core fields you always get (and should treat as “API”)
+The recommended baseline treats every boundary record as the same five-part envelope: `script` (identity), `operation` (what you attempted), `result` (how it went), `context` (instrumentation), and `payload` (evidence).
 
-The baseline contract requires:
+In that envelope, downstream tools almost always care about the same few fields: `script.id` (filename stem), `operation.kind` and `operation.target` (what this record *is about*), `result.outcome` (fixed enum: `success|denied|partial|error`), and whatever you choose to put in `payload.raw` as your suite-specific structured payload.
 
-- `script.id` — filename stem (`my_probe.sh` → `my_probe`).
-- `operation.kind` — a stable *category* for what you attempted (ex: `proc.exec`, `fs.read`, `net.dns.lookup`).
-- `operation.target` — the primary target (path/host/command/etc).
-- `result.outcome` — recommended baseline enum: `success|denied|partial|error`.
-- `context.commitments` — what the script enrolled into via `commit_help_me` (empty allowed).
-- `payload.stdout_snippet`, `payload.stderr_snippet` — evidence channels (strings; empty allowed).
-- `payload.raw` — your extension point for structured data (object; optional).
+`context.commitments` is where scripts record lightweight “I relied on / observed / emitted X” signals via `commit_help_me` (empty allowed). `payload.stdout_snippet` and `payload.stderr_snippet` are string evidence channels (empty allowed). If you want multiple run dirs to produce a unified stream, make `operation.kind` and `operation.target` mean the same thing everywhere.
 
-If you want two different run dirs to produce a unified stream, make `operation.kind` and `operation.target` mean the same thing everywhere.
+### Using `emit-record`
 
-### How to use `emit-record` (recommended)
-
-`emit-record` is a runner-provided helper that:
-
-- builds the JSON object,
-- merges any enrolled commitments from `commit_help_me`,
-- validates the record against the run dir’s `boundaries.json`,
-- prints the record as a single line.
+`emit-record` is a runner-provided helper that builds the JSON object, merges any enrolled commitments from `commit_help_me`, validates the record against the run dir’s `boundaries.json`, and prints the record as a single NDJSON line.
 
 `emit-record` is available to scripts because `fencerunner` puts a shim on `PATH` when it runs your scripts. You do not install it separately.
 
-### Capturing real command output without breaking stdout
+### Capturing output
 
 If your script needs to run commands that write to stdout/stderr, capture them and pass them to `emit-record`:
 
@@ -345,8 +326,8 @@ set -euo pipefail
 source "${FENCERUNNER_ROOT}/lib/library.sh"
 script_id="$(basename "${BASH_SOURCE[0]}" .sh)"
 
-stdout_file="$(mktemp "${TMPDIR}/probe.stdout.XXXXXX")"
-stderr_file="$(mktemp "${TMPDIR}/probe.stderr.XXXXXX")"
+stdout_file="$(mktemp -t probe.stdout)"
+stderr_file="$(mktemp -t probe.stderr)"
 
 operation_kind="proc.exec"
 target="uname -a"
@@ -371,8 +352,8 @@ emit-record \
   --target "${target}" \
   --outcome "${outcome}" \
   --exit-code "${exit_code}" \
-  --payload-stdout-file "${stdout_file}" \
-  --payload-stderr-file "${stderr_file}"
+  --payload-stdout-file "${stdout_file}.trimmed" \
+  --payload-stderr-file "${stderr_file}.trimmed"
 ```
 
 If you want to keep snippets small, trim them before emitting:
@@ -382,43 +363,204 @@ head -c 2000 "${stdout_file}" > "${stdout_file}.trimmed"
 head -c 2000 "${stderr_file}" > "${stderr_file}.trimmed"
 ```
 
----
-
-## Strict vs supervised
-
-### Strict mode (default)
-
-Strict mode is for “contract enforcement”:
-
-- If a script emits invalid JSON, violates `boundaries.json`, has `script.id` mismatch, exits non-zero, or violates an enforced gate, the run fails.
-- Strict mode returns a **non-zero exit code** if any script fails.
-- In strict mode, a failing script does **not** produce a boundary record (the run aborts at the runner level for that script).
-
-Use strict mode when you want a hard failure signal and you’re okay with missing records for failing scripts.
-
-### Supervised mode (`--supervised`)
-
-Supervised mode is for “always keep the NDJSON stream well-formed”:
-
-- For each script, `fencerunner` will output **one NDJSON record**, even if the script misbehaves.
-- When a script breaks the contract, `fencerunner` emits a **synthetic error record** that captures stdout/stderr snippets and explains the failure.
-- Supervised mode exits `0` unless **preflight** or the **runner itself** fails (examples: missing contract files, invalid JSON contracts, script not executable, duplicate script ids across run dirs).
-
-Use supervised mode when downstream tooling expects one record per script no matter what, and you want failures encoded in the stream instead of in exit codes.
+Then pass the trimmed files to `emit-record` so stdout stays clean and payloads stay bounded.
 
 ---
 
-## Making two different run dirs produce one clean stream
+## Run modes
 
-The easiest way to make output “undifferentiated as it streams” is:
+>Strict fails fast. Supervised keeps the stream intact.
 
-1. Pick a **single shared `boundaries.json`** shape (like the baseline above).
-2. Copy (or generate) that same `boundaries.json` into every run dir you plan to run together.
-3. Make sure every script uses:
-   - the same `result.outcome` vocabulary, and
-   - stable `operation.kind` naming.
+Most users end up using both modes: strict when authoring and evolving a suite, supervised when consuming the stream in a pipeline where “always one record per script” matters.
 
-### Example: two different run dirs, one report
+### Strict mode
+
+Strict mode is the default. Use it when you want contract breaks to fail the run with a non-zero exit code. In strict mode a script must emit exactly one schema-valid boundary record on stdout; if it emits invalid JSON, violates `boundaries.json`, mismatches `script.id`, exits non-zero, or violates an enforced gate, the run fails and no record is emitted for that script.
+
+Strict mode fails fast: the runner stops at the first script-level contract break, and any remaining scripts are not executed.
+
+### Supervised mode
+
+Supervised mode (`--supervised`) is for pipelines where a well-formed NDJSON stream matters more than perfect script behavior. `fencerunner` will output one record per script; when a script breaks the contract it emits a synthetic error record that captures stdout/stderr snippets and explains what happened. Supervised exits `0` unless preflight or the runner itself fails (missing contracts, invalid contracts, script not executable, duplicate script ids, and similar harness-level failures).
+
+---
+
+## Commitments
+
+>Lightweight instrumentation that travels with the stream.
+
+Commitments are a **deliberate, lightweight instrumentation channel**: scripts enroll in named commitments as they run, and those enrollments are recorded under `/context/commitments` in the boundary record stream.
+
+They are not a security boundary. They’re a way for cooperating authors (human or agentic) to leave behind structured “I meant to do X” signals that downstream tooling can query.
+
+Some examples below use `jq` for reporting; `fencerunner` does not ship it.
+
+Commitment ids are **simple tokens**: `^[A-Za-z0-9_.-]+$` (letters/digits plus `_`, `.`, `-`). If you need spaces, slashes, or other punctuation, put that detail into `payload.raw` or `operation.args` and keep the commitment id as the stable label. If you call `commit_help_me` with an invalid id, it fails and your script should treat that as a hard error.
+
+### Branching canaries
+
+Sometimes you want the thinnest possible instrumentation: “did this code path run?”
+
+In `<RUN_DIR>/commitments.json`, declare three commitments: `main.canary` and `branch.canary` (both `emit`) and `policy.read_only` (`ensure`).
+
+Then in your script, enroll `main.canary`, take a trivial branch, and enroll `branch.canary` inside it:
+
+```bash
+commit_help_me emit main.canary
+commit_help_me ensure policy.read_only
+
+if true; then
+  commit_help_me emit branch.canary
+fi
+```
+
+Here, `emit` is used as a paper-thin “record that we hit this marker” verb, and `ensure` is used as a paper-thin “this script claims a policy/assumption” verb. Both are still valuable: they’re queryable and they travel with the record stream.
+
+Two constraints matter. First, commitments can be bespoke and paper-thin: a canary id is still useful because it’s queryable. Second, enrollment order is **not preserved**. Downstream should treat `/context/commitments` as a set: presence/absence is meaningful; ordering is not.
+
+To check whether the branch marker is present:
+
+```bash
+fencerunner --supervised ./your-run-dir | jq -e '.context.commitments | any(.id=="branch.canary")'
+```
+
+### Two patterns
+
+The canaries above are intentionally trivial: they work because commitment ids are durable labels you can query for, not because they carry rich data. Once you start using commitments across a suite, they become a small vocabulary that keeps your NDJSON stream interpretable even when scripts differ. Keep ids high-level and stable; put per-run specifics (paths, ticket ids, hashes, counts) into `payload.raw` or `operation.args`.
+
+There are two common ways to spend this budget. One treats commitments as a lightweight map of *dependencies and capabilities* (“what did this script rely on or exercise?”). The other treats commitments as lightweight *context tags* (“under what policies/assumptions should a consumer interpret this record?”). Both are instrumentation, not enforcement, and you can mix them freely.
+
+#### Dependencies and capabilities
+
+Use commitments to say what your scripts relied on or exercised: tools, runtimes, privileges, or environmental capabilities. This is closest to “dependency declaration”, but still used as instrumentation (not enforcement).
+
+`commitments.json` (excerpt):
+
+```json
+{
+  "schema_version": "commitments_v1",
+  "commitments": [
+    {
+      "id": "emit.record",
+      "provider": "runner",
+      "helps": ["emit"],
+      "is": "Boundary record emitter",
+      "at": "emit-record",
+      "version": "v1"
+    },
+    {
+      "id": "python3",
+      "provider": "system",
+      "helps": ["ensure", "detect"],
+      "is": "Python 3 interpreter",
+      "at": "python3",
+      "version": "v1"
+    },
+    {
+      "id": "net.dns",
+      "provider": "system",
+      "helps": ["detect"],
+      "is": "DNS resolver available",
+      "at": "scutil --dns",
+      "version": "v1"
+    }
+  ]
+}
+```
+
+Enroll close to the point of use: call `commit_help_me ensure python3` before invoking `python3`, call `commit_help_me detect net.dns` when your probe actually inspects resolver state, and call `commit_help_me emit emit.record` before emitting the record.
+
+Why this is useful: you can build reports like “show me all records that depended on python3” or “which probes performed DNS detection”.
+
+#### Policies and provenance
+
+Use commitments to tag records with the *interpretive context* your downstream tooling needs: “read-only run”, “operator-authorized”, “inventory source”, “baseline version”.
+
+These are not “software dependencies”; they’re promises and provenance statements. The detailed per-run value (ticket id, inventory file path, baseline hash) belongs in `payload.raw` or `operation.args`. The commitment id is the stable category.
+
+`commitments.json` (excerpt):
+
+```json
+{
+  "schema_version": "commitments_v1",
+  "commitments": [
+    {
+      "id": "policy.read_only",
+      "provider": "user",
+      "helps": ["ensure"],
+      "is": "Run is intended to be non-destructive",
+      "at": "runbook:read-only-probes",
+      "version": "v1"
+    },
+    {
+      "id": "provenance.asset_inventory",
+      "provider": "user",
+      "helps": ["ensure"],
+      "is": "Asset inventory is supplied out-of-band",
+      "at": "docs:inventory-format",
+      "version": "v1"
+    },
+    {
+      "id": "baseline.outcomes_v1",
+      "provider": "user",
+      "helps": ["ensure"],
+      "is": "Outcome vocabulary is success|denied|partial|error",
+      "at": "docs:boundaries",
+      "version": "v1"
+    }
+  ]
+}
+```
+
+Treat these as suite-wide context tags: call `commit_help_me ensure policy.read_only` at the top of every script, and when you read an inventory file (or similar out-of-band input), enroll `commit_help_me ensure provenance.asset_inventory` while putting the concrete detail into `payload.raw.inventory_path` (not into the commitment id).
+
+Why this is useful: you can run wildly different run dirs (different probes, different domains) and still produce a single stream that downstream tooling interprets consistently because the records carry the same “context tags”.
+
+### Practical workflow
+
+Start by deciding what you want to instrument: dependencies, capabilities, policies, assumptions, provenance. Encode those as stable commitment ids (think “tags with meaning”) such as `python3`, `net.dns`, `policy.read_only`, or `provenance.asset_inventory`.
+
+Declare them in `<RUN_DIR>/commitments.json` using short, human-auditable metadata. `provider` answers “where does this come from?” (`runner|system|user`), `is` answers “what is it?”, `at` answers “where do I look for instructions?”, and `version` answers “which flavor of this promise do you mean?”.
+
+In scripts, call `commit_help_me <ensure|detect|emit> <id>` at meaningful points. Downstream, treat `/context/commitments` as a queryable channel for reports and coverage checks.
+
+Recommended semantics for the verbs (you can change these, but pick one meaning and stick to it): `ensure` is “this run assumes/depends on X”, `detect` is “this script measured/confirmed X”, and `emit` is “this script used X as part of its emission/instrumentation”.
+
+Important: `commitments.json` is validated at preflight, but enrollment is intentionally **record-only** at runtime. A script can enroll in ids that are not declared; prefer declaring them anyway so your ids stay reviewable and consistent across run dirs.
+
+### Querying commitments
+
+Print the commitment ids each script enrolled into:
+
+```bash
+fencerunner --supervised ./your-run-dir \
+  | jq -r '.script.id as $s | .context.commitments[]? | "\($s)\t\(.id)\t\(.helps|join(","))"'
+```
+
+Compute the set of all commitment ids seen in a run:
+
+```bash
+fencerunner --supervised ./dirA ./dirB \
+  | jq -r -s 'map(.context.commitments[].id) | unique | .[]'
+```
+
+---
+
+## Run directories
+
+A **run directory** (“run dir”) is the unit you point `fencerunner` at: a flat folder of executable `*.sh` files plus the three JSON contracts (`gates.json`, `commitments.json`, `boundaries.json`). Quickstart built one; in practice you’ll end up with a small collection. Treat each run dir as a portable suite: something you can copy, review, and run in isolation.
+
+The runner only looks at the top level: every executable `*.sh` regular file is treated as one script and subdirectories are ignored. Symlinked scripts are rejected. Script ids come from filenames, and they must be unique across all run dirs in a single run. Within a run dir, scripts execute in lexicographic `script.id` order; across run dirs, run dirs execute in CLI argument order. Scripts must be executable (`chmod +x your_script.sh`). On macOS, target `/bin/bash` (Bash 3.2) for consistent behavior across machines.
+
+The triad is where you decide how strict or flexible the suite should be. Start with the recommended baseline from Quickstart, then evolve `boundaries.json` and your commitments vocabulary as your consumers become more demanding.
+
+---
+
+## Unified streams
+
+To make output “undifferentiated as it streams”, keep your run dirs aligned on the same `boundaries.json` shape (often literally the same file), and treat `operation.kind` and `operation.target` as suite-wide identifiers rather than one-off script details. If every record speaks the same top-level language, downstream tooling can summarize the stream without knowing which run dir a record came from.
+
+### Two run dirs
 
 Create a suite folder:
 
@@ -427,11 +569,7 @@ mkdir -p ./suite/run_dirs/env_probes
 mkdir -p ./suite/run_dirs/fs_probes
 ```
 
-In both run dirs, create the triad:
-
-- Copy the same `gates.json`, `commitments.json`, and `boundaries.json` (from the Quickstart) into:
-  - `./suite/run_dirs/env_probes/`
-  - `./suite/run_dirs/fs_probes/`
+In both run dirs, create the triad by copying the same `gates.json`, `commitments.json`, and `boundaries.json` (from the Quickstart) into `./suite/run_dirs/env_probes/` and `./suite/run_dirs/fs_probes/`.
 
 Now add one script per run dir (note: ids must be globally unique across the whole run):
 
@@ -444,8 +582,8 @@ source "${FENCERUNNER_ROOT}/lib/library.sh"
 
 script_id="$(basename "${BASH_SOURCE[0]}" .sh)"
 
-stdout_file="$(mktemp "${TMPDIR}/python3.stdout.XXXXXX")"
-stderr_file="$(mktemp "${TMPDIR}/python3.stderr.XXXXXX")"
+stdout_file="$(mktemp -t python3.stdout)"
+stderr_file="$(mktemp -t python3.stderr)"
 
 set +e
 python3 --version >"${stdout_file}" 2>"${stderr_file}"
@@ -522,18 +660,15 @@ That report doesn’t need to know which run dir a record came from; it treats e
 
 ---
 
-## Expanding `boundaries.json` in a non-trivial way
+## Evolving boundaries
+
+>Tighten the schema without losing flexibility.
 
 The baseline `boundaries.json` is flexible: it gives you a stable envelope (`script/operation/result/context/payload`) and leaves room for you to standardize on top.
 
-Common evolution steps:
+In practice, “evolving the contract” usually means tightening it in stages: start permissive, then constrain `operation.kind` so typos become contract breaks, standardize `operation.args` so consumers can rely on keys, require specific `payload.raw` fields for specific operation kinds, and finally tighten `additionalProperties` once you trust the shape.
 
-1. **Constrain `operation.kind`** to a known set (so typos become contract breaks).
-2. **Standardize `operation.args`** keys (so consumers can rely on them).
-3. **Require specific `payload.raw` fields** for specific operation kinds.
-4. **Tighten `additionalProperties`** once your record shape is stable.
-
-### Example: constrain `operation.kind`
+### Constrain `operation.kind`
 
 In `boundaries.json`, change:
 
@@ -554,7 +689,7 @@ to:
 
 Now “`proc.exe`” becomes a schema failure instead of a silent stream divergence.
 
-### Example: require different fields for different operation kinds (advanced)
+### Per-operation schema
 
 If you want a truly enforceable “mini DSL” inside the schema, you can use `oneOf` to express per-operation requirements.
 
@@ -629,12 +764,9 @@ This is the “enforceable flexibility” sweet spot: your output is still domai
 
 ---
 
-## Mini DSL tutorial: generate `boundaries.json` across many run dirs
+## Generating boundaries
 
-If you maintain multiple run dirs, hand-editing JSON Schema in each one is error-prone. A practical pattern is:
-
-1. Maintain a tiny DSL that lists your operation kinds and required fields.
-2. Generate a `boundaries.json` into each run dir from that DSL.
+If you maintain multiple run dirs, hand-editing JSON Schema in each one is error-prone. A practical pattern is to keep a tiny DSL that lists your operation kinds and required fields, then generate `boundaries.json` into each run dir from that DSL.
 
 Here’s a minimal line-based DSL (`operations.dsl`):
 
@@ -646,16 +778,11 @@ fs.stat|path|expected_kind
 
 Constraints for this toy DSL (so the generator stays simple):
 
-- `kind`, arg keys, and raw keys must match `^[A-Za-z0-9_.-]+$`.
-- Lists are comma-separated (no spaces).
-- Empty lists are allowed (`proc.exec||tool`).
+`kind`, arg keys, and raw keys must match `^[A-Za-z0-9_.-]+$`. Lists are comma-separated (no spaces). Empty lists are allowed (`proc.exec||tool`).
 
-### `generate-boundaries.sh` (Bash 3.2, no dependencies)
+### `generate-boundaries.sh`
 
-This script reads `operations.dsl` and writes a `boundaries.json` whose `record_schema` includes:
-
-- the baseline envelope, plus
-- a `oneOf` clause per operation kind that requires the listed fields.
+This script (plain Bash 3.2; no dependencies) reads `operations.dsl` and writes a `boundaries.json` whose `record_schema` includes the baseline envelope plus a `oneOf` clause per operation kind that requires the listed fields.
 
 Save as `generate-boundaries.sh`:
 
@@ -894,7 +1021,9 @@ Now you can evolve your suite-wide contract by editing `operations.dsl` and re-r
 
 ---
 
-## Troubleshooting (common failures)
+## Troubleshooting
+
+>Most failures are contract mismatches.
 
 ### “missing/invalid contract” errors
 
@@ -915,6 +1044,11 @@ Fixes:
 
 - Run `chmod +x your_script.sh`.
 - Ensure your filesystem didn’t strip executable bits when copying files.
+
+### “Symlinked scripts are not allowed”
+
+- The runner rejects symlinked `*.sh` files (even if the symlink points back into the run dir).
+- Fix: copy the script into the run dir as a real file, or generate a real `*.sh` in place (don’t symlink).
 
 ### “failed to parse boundary object from script stdout”
 
@@ -940,7 +1074,9 @@ Tip: run the same invocation with `--supervised` to get a synthetic record that 
 
 ---
 
-## Advanced footnote: supervised synthetic records vs strict schemas
+## Advanced
+
+>Synthetic records and strict schemas.
 
 In `--supervised` mode, `fencerunner` emits synthetic error records when a script breaks the contract. Those synthetic records include additional metadata (like `extensions.synthetic` and a `payload.raw.supervised` block).
 
@@ -958,3 +1094,29 @@ If you want supervised mode *and* strict schema validation of synthetic records,
 - `operation.kind = "harness.supervised"`
 
 Keep this in the “advanced” bucket unless you have consumers that require “every line validates against `boundaries.json` even for synthetic errors”.
+
+---
+
+## Signal audit grab bag
+
+>Loose ends worth validating.
+
+### Payload size limits (emit-record)
+
+`emit-record` keeps records compact and predictable by enforcing a size limit and truncating snippets:
+
+ - `payload` (as serialized JSON) is capped at 16 KiB (16384 bytes).
+- `payload.stdout_snippet` and `payload.stderr_snippet` are NUL-stripped and truncated to 2000 characters (with an ellipsis).
+- Common failure: `Payload exceeds 16384 bytes (got N)`; keep `payload.raw` summary-sized and write large artifacts to files (then reference paths/hashes in `payload.raw`).
+
+### Duplicate commitment enrollments
+
+`commit_help_me` treats duplicates as a contract break. If a script calls the same `<verb> <commitment.id>` pair twice, `commit-help-me` exits non-zero and the script should fail fast.
+
+### Duplicate script ids across run dirs
+
+Script ids must be globally unique in a single run. If you run `fencerunner ./dirA ./dirB` and both contain `probe.sh` (id `probe`), preflight fails with a “Duplicate script id …” error. Fix: rename one of the scripts (or split runs).
+
+### Outcome vocabulary
+
+`fencerunner` enforces a fixed outcome vocabulary: `success|denied|partial|error` (and `emit-record` enforces it too). If a script emits any other `result.outcome`, strict mode fails and supervised mode emits a synthetic error record. If you need richer result semantics, keep `result.outcome` in this vocabulary and encode your extra meaning under `operation.*` or `payload.raw`.

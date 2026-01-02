@@ -60,8 +60,8 @@ pub fn preflight_run_dirs(raw: &[PathBuf]) -> Result<Vec<RunDirPlan>> {
 
 /// List every script across all run dirs and reject id collisions.
 ///
-/// The returned plan is stable: within each run dir scripts are sorted by id,
-/// and run dirs preserve the caller-provided ordering.
+/// The returned plan is stable: within each run dir scripts are sorted by id
+/// (lexicographic), and run dirs preserve the caller-provided ordering.
 pub fn plan_scripts(run_dirs: &[RunDirPlan]) -> Result<Vec<(usize, Script)>> {
     let mut seen_script_ids: BTreeMap<String, PathBuf> = BTreeMap::new();
     let mut execution_plan: Vec<(usize, Script)> = Vec::new();

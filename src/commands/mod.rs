@@ -5,4 +5,3 @@
 
 pub mod commit_help_me;
 pub mod emit_record;
-pub mod schema_validate;

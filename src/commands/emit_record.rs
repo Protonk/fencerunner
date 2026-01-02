@@ -486,6 +486,7 @@ fn build_commitment_enrollments(
 }
 
 fn validate_commitment_id(value: &str) -> Result<()> {
+    // Keep in sync with `commit-help-me` and the JSON schemas.
     let trimmed = value.trim();
     if trimmed.is_empty() {
         bail!("Commitment id must not be empty");

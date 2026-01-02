@@ -37,6 +37,7 @@ This repo vendors its Rust dependencies under `vendor/` and forces offline build
 - Run dirs are **flat**: every top-level `*.sh` is a script; subdirectories are ignored.
 - Script ids come from filenames (`<script_id>.sh`) and must be **globally unique across all run dirs** in one run.
 - Scripts must be **executable**; otherwise the run is a preflight/runner failure (even in `--supervised`).
+- Scripts must be **real files** (no symlinks); symlinked scripts are rejected at discovery.
 - Scripts execute with **CWD set to the run dir**; relative paths resolve there.
 
 ## How the pieces fit

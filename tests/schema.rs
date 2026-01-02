@@ -10,7 +10,6 @@ use fencerunner::boundary::{BoundaryContractIndex, BoundaryObject, CommitmentEnr
 use fencerunner::commitments::model::CommitmentHelp;
 use serde_json::{Value, json};
 use std::fs;
-use std::io::Write;
 use std::sync::OnceLock;
 use support::{fencerunner_binary, repo_root, run_command};
 use tempfile::NamedTempFile;
@@ -131,66 +130,6 @@ fn run_info_omits_workspace_root_when_none() -> Result<()> {
     };
     let value = serde_json::to_value(&run)?;
     assert!(value.get("workspace_root").is_none());
-    Ok(())
-}
-
-// schema-validate is a user-facing helper; smoke-test that it can validate
-// boundaries.json and boundary records using the manual arg parser.
-#[test]
-fn schema_validate_boundary_contract_smoke() -> Result<()> {
-    let repo_root = repo_root();
-    let fencerunner = fencerunner_binary(&repo_root);
-    let output = std::process::Command::new(&fencerunner)
-        .arg("__schema-validate")
-        .arg("--mode")
-        .arg("boundaries-contract")
-        .arg("--file")
-        .arg("scripts/boundaries.json")
-        .current_dir(&repo_root)
-        .output()
-        .context("failed to execute schema_validate boundaries-contract")?;
-    assert!(
-        output.status.success(),
-        "schema_validate boundaries-contract should succeed (stderr: {})",
-        String::from_utf8_lossy(&output.stderr)
-    );
-    Ok(())
-}
-
-#[test]
-fn schema_validate_boundary_accepts_stdin() -> Result<()> {
-    let repo_root = repo_root();
-    let fencerunner = fencerunner_binary(&repo_root);
-
-    let record = sample_boundary_object();
-    let input = serde_json::to_string(&record)?;
-
-    let mut child = std::process::Command::new(&fencerunner)
-        .arg("__schema-validate")
-        .arg("--mode")
-        .arg("boundary")
-        .arg("--contract")
-        .arg("scripts/boundaries.json")
-        .current_dir(&repo_root)
-        .stdin(std::process::Stdio::piped())
-        .stdout(std::process::Stdio::piped())
-        .stderr(std::process::Stdio::piped())
-        .spawn()
-        .context("failed to spawn schema_validate boundary")?;
-
-    let mut stdin = child.stdin.take().expect("stdin piped");
-    stdin.write_all(input.as_bytes())?;
-    drop(stdin);
-
-    let output = child
-        .wait_with_output()
-        .context("failed to wait for schema_validate boundary")?;
-    assert!(
-        output.status.success(),
-        "schema_validate boundary should succeed (stderr: {})",
-        String::from_utf8_lossy(&output.stderr)
-    );
-
     Ok(())
 }
 

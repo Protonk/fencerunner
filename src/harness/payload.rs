@@ -10,7 +10,12 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 // Keep payloads small and predictable; scripts should emit summaries, not logs.
-const PAYLOAD_MAX_BYTES: usize = 4096;
+//
+// Documented limits (user-facing): see `docs/boundaries.md` and
+// `docs/fencerunner-user.md` ("Signal audit grab bag").
+//
+// The limit applies to the final serialized JSON so it matches what is emitted on stdout.
+const PAYLOAD_MAX_BYTES: usize = 16 * 1024;
 
 #[derive(Default, Clone)]
 /// Builder for script payloads that enforces “single source of truth” rules.
@@ -242,7 +247,12 @@ fn clean_text(raw: &str) -> String {
     raw.replace('\0', "")
 }
 
-const SNIPPET_MAX_CHARS: usize = 400;
+// Snippets are for compact summaries (not full logs). Truncation is measured in
+// Unicode scalar values (chars), not bytes, and appends an ellipsis.
+//
+// Keep this aligned with the user guide examples (which trim snippets before
+// calling `emit-record`).
+const SNIPPET_MAX_CHARS: usize = 2000;
 const SNIPPET_ELLIPSIS: &str = "\u{2026}";
 
 fn truncate_snippet(text: &str) -> String {
@@ -276,6 +286,11 @@ fn enforce_payload_size(payload: &Value) -> Result<()> {
 
 pub fn validate_outcome(outcome: &str) -> Result<()> {
     // Outcomes are a fixed vocabulary to keep downstream analytics stable.
+    //
+    // This is enforced in two places:
+    // - `emit-record` validates the `--outcome` flag.
+    // - `fencerunner` validates `result.outcome` on every emitted boundary record,
+    //   even if the run dir's boundaries.json is permissive.
     match outcome {
         "success" | "denied" | "partial" | "error" => Ok(()),
         other => bail!("Unknown outcome: {other} (expected success|denied|partial|error)"),

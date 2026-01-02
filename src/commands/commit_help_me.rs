@@ -119,6 +119,14 @@ fn help_label(help: CommitmentHelp) -> &'static str {
 }
 
 fn validate_commitment_id(value: &str) -> Result<()> {
+    // Contract: commitment ids are simple tokens (no whitespace, no slashes).
+    //
+    // Keep this in sync with:
+    // - `schema/commitments.json` (registry ids)
+    // - `schema/boundaries.json` (enrollment ids required by record_schema)
+    //
+    // The tight alphabet keeps Bash usage, JSON output, and downstream tooling
+    // predictable, and matches how enrollments are recorded (`id|help` lines).
     let trimmed = value.trim();
     if trimmed.is_empty() {
         bail!("commitment id must not be empty");

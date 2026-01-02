@@ -1,8 +1,8 @@
 //! Resolve and enumerate scripts under a run directory.
 //!
-//! Script resolution is intentionally strict: anything outside the run dir is
-//! rejected to keep the harness contract enforceable and to avoid symlink
-//! escapes.
+//! Script resolution is intentionally strict: scripts must be real files under
+//! the run dir (no symlinks), and anything outside the run dir is rejected to
+//! keep the harness contract enforceable.
 
 use anyhow::{Context, Result, bail};
 use std::collections::BTreeMap;
@@ -53,16 +53,27 @@ pub fn resolve_script(run_dir: &Path, identifier: &str) -> Result<Script> {
     }
 
     for candidate in attempts {
-        if candidate.is_file() {
-            if let Ok(canonical) = fs::canonicalize(&candidate) {
-                if canonical.starts_with(&run_root) {
-                    ensure_script_executable(&canonical)?;
-                    if let Some(stem) = canonical.file_stem().and_then(|s| s.to_str()) {
-                        return Ok(Script {
-                            id: stem.to_string(),
-                            path: canonical,
-                        });
-                    }
+        let Ok(metadata) = fs::symlink_metadata(&candidate) else {
+            continue;
+        };
+        if metadata.file_type().is_symlink() {
+            bail!("Symlinked scripts are not allowed: {}", candidate.display());
+        }
+        if !metadata.is_file() {
+            continue;
+        }
+        if candidate.extension().and_then(|ext| ext.to_str()) != Some("sh") {
+            continue;
+        }
+
+        if let Ok(canonical) = fs::canonicalize(&candidate) {
+            if canonical.starts_with(&run_root) {
+                ensure_script_executable(&canonical)?;
+                if let Some(stem) = canonical.file_stem().and_then(|s| s.to_str()) {
+                    return Ok(Script {
+                        id: stem.to_string(),
+                        path: canonical,
+                    });
                 }
             }
         }
@@ -78,15 +89,20 @@ pub fn resolve_script(run_dir: &Path, identifier: &str) -> Result<Script> {
 /// least the fixtures to exist.
 pub fn list_scripts(run_dir: &Path) -> Result<Vec<Script>> {
     let run_root = canonical_run_dir(run_dir)?;
-    // BTreeMap keeps ordering stable across platforms and filesystems.
+    // BTreeMap keeps ordering stable across platforms and filesystems: scripts
+    // are returned in lexicographic id order (by filename stem).
     let mut results: BTreeMap<String, Script> = BTreeMap::new();
     for entry in fs::read_dir(&run_root)? {
         let entry = entry?;
         let path = entry.path();
-        if !path.is_file() {
+        if path.extension().and_then(|ext| ext.to_str()) != Some("sh") {
             continue;
         }
-        if path.extension().and_then(|ext| ext.to_str()) != Some("sh") {
+        let file_type = entry.file_type()?;
+        if file_type.is_symlink() {
+            bail!("Symlinked scripts are not allowed: {}", path.display());
+        }
+        if !file_type.is_file() {
             continue;
         }
         let canonical = fs::canonicalize(&path)?;

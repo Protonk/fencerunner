@@ -24,9 +24,9 @@ single command executes the entire suite.
 | --- | --- | --- |
 | `tests/schema.rs` | Boundaries contract guards. | Boundary contract validation (via `scripts/boundaries.json`) and serde round-trips for boundary/commitment enrollment types; also enforces the README `<sup>**</sup>` year-footnote contract. |
 | `tests/commitments.rs` | Commitments registry guards. | Registry schema validation, schema_version enforcement, and duplicate id rejection for `commitments.json`. |
-| `tests/script_execution.rs` | Run-dir execution guard rails. | Symlink escape checks during script discovery. |
+| `tests/script_execution.rs` | Run-dir execution guard rails. | Symlinked scripts are rejected during discovery. |
 | `tests/contracts.rs` | emit-record rules. | emit-record flag enforcement (including required payload snippets), outcome normalization, commitment enrollment helpers. |
-| `tests/cli.rs` | CLI and harness behavior. | `fencerunner` strict/supervised ergonomics, exit codes, NDJSON stream behavior. |
+| `tests/cli.rs` | CLI and harness behavior. | `fencerunner` strict/supervised ergonomics, exit codes, outcome vocabulary enforcement, NDJSON stream behavior. |
 | `tests/helpers.rs` | Script + payload helper guards. | Script discovery semantics (`list_scripts`/`resolve_script`) and payload builder invariants. |
 | `tests/support/common.rs` | Cross-test fixtures. | Shared script fixtures (`FixtureScript`), repo/workspace guards, and sample boundary/commitment builders used by multiple targets. |
 | `tests/support/` | Shared helpers. | Builds helper binaries once per run, provides temp repositories, mutex guards, path utilities. Always prefer these over ad-hoc fixtures. |
@@ -68,9 +68,9 @@ single command executes the entire suite.
 
 | Contract surface | Representative tests |
 | --- | --- |
-| Boundaries contract + payload semantics (schema.rs) | `boundary_object_schema`, `boundary_object_round_trips_structs`, `schema_validate_*`, `commitment_enrollment_serializes_to_expected_shape` |
+| Boundaries contract + payload semantics (schema.rs) | `boundary_object_schema`, `boundary_object_round_trips_structs`, `commitment_enrollment_serializes_to_expected_shape` |
 | Commitments registry schema + preflight (commitments.rs) | `load_default_commitments_registry_smoke`, `commitments_registry_rejects_duplicate_id`, `commitments_registry_rejects_unknown_schema_version` |
-| CLI ergonomics & exit codes (cli.rs) | `fencerunner_*` |
+| CLI ergonomics & exit codes (cli.rs) | `fencerunner_*` (including strict/supervised outcome vocabulary enforcement) |
 | Script execution environment (cli.rs) | `fencerunner_runs_script_with_run_dir_cwd` |
 | Workspace + sandbox guarantees (script_execution.rs) | `script_resolution_guards` |
 | Script contracts & fixtures (contracts.rs) | `emit_record_*`, `commit_help_me_*`, `validate_outcome_*` |
