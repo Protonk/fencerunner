@@ -15,7 +15,7 @@ fencerunner scripts
 fencerunner ./scripts /tmp/other-run-dir
 ```
 
-## What makes a RUN_DIR
+### What makes a RUN_DIR
 
 A run dir is a flat (subdirectories are ignored) directory you pass to `fencerunner`. It bundles shell scripts with three run-dir-local contracts: **commitments**, **gates**, and **boundaries**. Fencerunner accepts mulitple run dirs, but script ids are derived from filenames and must be unique across all run dirs in a single run. A minimal run dir contains:
 
@@ -26,9 +26,7 @@ A run dir is a flat (subdirectories are ignored) directory you pass to `fencerun
 
 ## Tests
 
-Tests here act more like a contract gate than a coverage exercise: they assert on the externally observable surfaces (schemas, helper CLI behavior, exit codes, and the NDJSON boundary stream) and fail hard when those surfaces drift or when a promised contract can no longer be validated.
-
-The posture is integration-forward and deterministic. Tests build and run the real binaries, execute fixture scripts (including the repo’s minimal example script) inside temporary run dirs/workspaces, and validate that stdout stays a well-formed boundary-record stream while stderr remains a diagnostic channel.
+Tests here assert on the externally observable surfaces (schemas, helper CLI behavior, exit codes, and the NDJSON boundary stream) and fail hard when those surfaces drift or when a promised contract can no longer be validated. The posture is integration-forward and deterministic. Tests build and run the real binaries, execute fixture scripts (including the repo’s minimal example script) inside temporary run dirs/workspaces, and validate that stdout stays a well-formed boundary-record stream while stderr remains a diagnostic channel.
 
 ---
 
