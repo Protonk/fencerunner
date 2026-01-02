@@ -3,7 +3,7 @@
 #
 # Keep this file explicit and local to how this repo is worked on:
 # - ignore build outputs and scratch dirs
-# - do *not* ignore tracked contracts, docs, vendored deps, or Cargo.lock
+# - do *not* ignore Cargo.lock
 #
 
 # --- Cargo / Rust build artifacts ---
