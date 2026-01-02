@@ -30,5 +30,8 @@ Tests here act more like a contract gate than a coverage exercise: they assert o
 
 The posture is integration-forward and deterministic. Tests build and run the real binaries, execute fixture scripts (including the repo’s minimal example script) inside temporary run dirs/workspaces, and validate that stdout stays a well-formed boundary-record stream while stderr remains a diagnostic channel.
 
+---
+
 <sup>*</sup>: No.
+
 <sup>**</sup>: Yes.
