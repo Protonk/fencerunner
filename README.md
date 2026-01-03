@@ -35,10 +35,6 @@ This is enforced in two layers. First, `boundaries.json` itself is validated aga
 - Schema: `schema/boundaries.json`
 - Narrative guide: [docs/boundaries.md](docs/boundaries.md)
 
-## Tests
-
-Tests here assert on externally observable surfaces (schemas, helper CLI behavior, exit codes, and the NDJSON boundary stream) and promised contracts, failing hard when those drift or can no longer be validated. The posture is integration-forward and deterministic. Tests build and run the real binaries, execute fixture scripts (including the repo’s minimal example script) inside temporary run dirs/workspaces, and validate that stdout stays a well-formed boundary-record stream while stderr remains a diagnostic channel.
-
 ---
 
 <sup>*</sup>: No.
