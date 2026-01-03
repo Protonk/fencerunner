@@ -20,7 +20,6 @@ Most of the guide is about making that stream pleasant to consume and easy to ev
 - [Generating boundaries](#generating-boundaries)
 - [Troubleshooting](#troubleshooting)
 - [Advanced](#advanced)
-- [Signal audit grab bag](#signal-audit-grab-bag)
 
 ## The contract
 
@@ -28,7 +27,7 @@ Most of the guide is about making that stream pleasant to consume and easy to ev
 
 `fencerunner` treats a script’s stdout as its interface: the boundary record. Anything else on stdout (logs, progress, stray `echo`) is a contract break. Send diagnostics to stderr, capture any command output you care about, and emit exactly one boundary record when the script is done.
 
-Each top-level `*.sh` is one script, and each script emits one record. The record must declare `script.id`, and that id must match the filename stem (`my_probe.sh` → `my_probe`), so identity is stable and deterministic. In a single run, script ids must be unique so the stream can be consumed without ambiguity. `fencerunner` also enforces a fixed result.outcome vocabulary (success|denied|partial|error) for all scripts so downstream tools can treat `result.outcome` as a stable enum.
+Each top-level `*.sh` is one script, and each script emits one record. The record must declare `script.id`, and that id must match the filename stem (`my_probe.sh` → `my_probe`), so identity is stable and deterministic. In a single run, script ids must be unique so the stream can be consumed without ambiguity. `fencerunner` (and `emit-record`) enforce a fixed `result.outcome` vocabulary (`success|denied|partial|error`) for all scripts so downstream tools can treat it as a stable enum. Unknown outcomes are a contract break: strict mode fails and supervised mode emits a synthetic error record.
 
 That’s most of what `fencerunner` insists on. Everything else—what you encode in the record, how strict the schema is, which operation kinds exist—is defined by the contracts you choose to write in the run dir.
 
@@ -307,6 +306,8 @@ The recommended baseline treats every boundary record as the same five-part enve
 
 In that envelope, downstream tools almost always care about the same few fields: `script.id` (filename stem), `operation.kind` and `operation.target` (what this record *is about*), `result.outcome` (fixed enum: `success|denied|partial|error`), and whatever you choose to put in `payload.raw` as your suite-specific structured payload.
 
+If you need richer result semantics, keep `result.outcome` in this vocabulary and encode your extra meaning under `operation.*` or `payload.raw`.
+
 `context.commitments` is where scripts record lightweight “I relied on / observed / emitted X” signals via `commit_help_me` (empty allowed). `payload.stdout_snippet` and `payload.stderr_snippet` are string evidence channels (empty allowed). If you want multiple run dirs to produce a unified stream, make `operation.kind` and `operation.target` mean the same thing everywhere.
 
 ### Using `emit-record`
@@ -365,6 +366,12 @@ head -c 2000 "${stderr_file}" > "${stderr_file}.trimmed"
 
 Then pass the trimmed files to `emit-record` so stdout stays clean and payloads stay bounded.
 
+`emit-record` (and supervised synthetic records) keep records compact and predictable by enforcing payload bounds:
+
+- `payload` (as serialized JSON) is capped at 16 KiB (16384 bytes).
+- `payload.stdout_snippet` and `payload.stderr_snippet` are NUL-stripped and truncated to 2000 characters (with an ellipsis).
+- Common failure: `Payload exceeds 16384 bytes (got N)`; keep `payload.raw` summary-sized and write large artifacts to files (then reference paths/hashes in `payload.raw`).
+
 ---
 
 ## Run modes
@@ -375,13 +382,13 @@ Most users end up using both modes: strict when authoring and evolving a suite, 
 
 ### Strict mode
 
-Strict mode is the default. Use it when you want contract breaks to fail the run with a non-zero exit code. In strict mode a script must emit exactly one schema-valid boundary record on stdout; if it emits invalid JSON, violates `boundaries.json`, mismatches `script.id`, exits non-zero, or violates an enforced gate, the run fails and no record is emitted for that script.
+Strict mode is the default. Use it when you want contract breaks to fail the run with a non-zero exit code. In strict mode a script must emit exactly one schema-valid boundary record on stdout; if it emits invalid JSON, violates `boundaries.json`, mismatches `script.id`, emits an unknown `result.outcome`, exits non-zero, or violates an enforced gate, the run fails and no record is emitted for that script.
 
 Strict mode fails fast: the runner stops at the first script-level contract break, and any remaining scripts are not executed.
 
 ### Supervised mode
 
-Supervised mode (`--supervised`) is for pipelines where a well-formed NDJSON stream matters more than perfect script behavior. `fencerunner` will output one record per script; when a script breaks the contract it emits a synthetic error record that captures stdout/stderr snippets and explains what happened. Supervised exits `0` unless preflight or the runner itself fails (missing contracts, invalid contracts, script not executable, duplicate script ids, and similar harness-level failures).
+Supervised mode (`--supervised`) is for pipelines where a well-formed NDJSON stream matters more than perfect script behavior. `fencerunner` will output one record per script; when a script breaks the contract (including unknown outcomes) it emits a synthetic error record that captures stdout/stderr snippets and explains what happened. Supervised exits `0` unless preflight or the runner itself fails (missing contracts, invalid contracts, script not executable, duplicate script ids, and similar harness-level failures).
 
 ---
 
@@ -396,6 +403,8 @@ They are not a security boundary. They’re a way for cooperating authors (human
 Some examples below use `jq` for reporting; `fencerunner` does not ship it.
 
 Commitment ids are **simple tokens**: `^[A-Za-z0-9_.-]+$` (letters/digits plus `_`, `.`, `-`). If you need spaces, slashes, or other punctuation, put that detail into `payload.raw` or `operation.args` and keep the commitment id as the stable label. If you call `commit_help_me` with an invalid id, it fails and your script should treat that as a hard error.
+
+`commit_help_me` treats duplicate enrollments as a contract break. If a script calls the same `<verb> <commitment.id>` pair twice, `commit-help-me` exits non-zero and the script should fail fast.
 
 ### Branching canaries
 
@@ -572,6 +581,8 @@ mkdir -p ./suite/run_dirs/fs_probes
 In both run dirs, create the triad by copying the same `gates.json`, `commitments.json`, and `boundaries.json` (from the Quickstart) into `./suite/run_dirs/env_probes/` and `./suite/run_dirs/fs_probes/`.
 
 Now add one script per run dir (note: ids must be globally unique across the whole run):
+
+Script ids must be globally unique in a single run. If you run `fencerunner ./dirA ./dirB` and both contain `probe.sh` (id `probe`), preflight fails with a “Duplicate script id …” error. Fix: rename one of the scripts (or split runs).
 
 `./suite/run_dirs/env_probes/env_python3_version.sh`
 
@@ -1058,6 +1069,12 @@ Fixes:
 
 Tip: run the same invocation with `--supervised` to get a synthetic record that captures stdout/stderr snippets.
 
+### “Payload exceeds 16384 bytes …”
+
+- `emit-record` caps `payload` (as serialized JSON) at 16 KiB (16384 bytes) to keep streams compact and predictable.
+- Keep `payload.raw` summary-sized and write large artifacts to files (then reference paths/hashes in `payload.raw`).
+- Keep `payload.stdout_snippet` / `payload.stderr_snippet` small by trimming captured output before passing it to `emit-record`.
+
 ### “record violates boundaries.json”
 
 - Your script emitted JSON, but it didn’t satisfy the schema in `boundaries.json`.
@@ -1094,29 +1111,3 @@ If you want supervised mode *and* strict schema validation of synthetic records,
 - `operation.kind = "harness.supervised"`
 
 Keep this in the “advanced” bucket unless you have consumers that require “every line validates against `boundaries.json` even for synthetic errors”.
-
----
-
-## Signal audit grab bag
-
->Loose ends worth validating.
-
-### Payload size limits
-
-`emit-record` (and supervised synthetic records) keep records compact and predictable by enforcing a size limit and truncating snippets:
-
- - `payload` (as serialized JSON) is capped at 16 KiB (16384 bytes).
-- `payload.stdout_snippet` and `payload.stderr_snippet` are NUL-stripped and truncated to 2000 characters (with an ellipsis).
-- Common failure: `Payload exceeds 16384 bytes (got N)`; keep `payload.raw` summary-sized and write large artifacts to files (then reference paths/hashes in `payload.raw`).
-
-### Duplicate commitment enrollments
-
-`commit_help_me` treats duplicates as a contract break. If a script calls the same `<verb> <commitment.id>` pair twice, `commit-help-me` exits non-zero and the script should fail fast.
-
-### Duplicate script ids across run dirs
-
-Script ids must be globally unique in a single run. If you run `fencerunner ./dirA ./dirB` and both contain `probe.sh` (id `probe`), preflight fails with a “Duplicate script id …” error. Fix: rename one of the scripts (or split runs).
-
-### Outcome vocabulary
-
-`fencerunner` enforces a fixed outcome vocabulary: `success|denied|partial|error` (and `emit-record` enforces it too). If a script emits any other `result.outcome`, strict mode fails and supervised mode emits a synthetic error record. If you need richer result semantics, keep `result.outcome` in this vocabulary and encode your extra meaning under `operation.*` or `payload.raw`.

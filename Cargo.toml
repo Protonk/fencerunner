@@ -1,6 +1,6 @@
 [package]
 name = "fencerunner"
-version = "1.0.1"
+version = "1.0.2"
 edition = "2024"
 rust-version = "1.85"
 description = "Portable script harness to determine ambient permissions by testing them directly."
@@ -10,6 +10,10 @@ repository = "https://github.com/Protonk/fencerunner"
 default-run = "fencerunner"
 autobins = false
 # No build script; runner-owned assets are embedded and materialized at runtime.
+
+[workspace]
+members = ["xtask"]
+default-members = ["."]
 
 [lib]
 name = "fencerunner"

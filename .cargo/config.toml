@@ -1,6 +1,9 @@
 [net]
 offline = true
 
+[alias]
+dist = "run -q -p xtask --frozen -- dist"
+
 [source.crates-io]
 replace-with = "vendored-sources"
 

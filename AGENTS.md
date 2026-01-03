@@ -33,6 +33,13 @@ The system’s posture assumes **authors are cooperating** (instrumentation, not
 
 This repo vendors its Rust dependencies under `vendor/` and forces offline builds via `.cargo/config.toml`. If you update dependencies, keep `Cargo.lock` and `vendor/` in sync by running `cargo vendor vendor --locked`.
 
+## Build + release artifacts
+
+- **Local build:** `cargo build --bin fencerunner` (debug) or `cargo build --release --bin fencerunner`.
+- **Release artifacts:** `cargo dist` builds `--release` and writes `dist/fencerunner-v<VERSION>-<TARGET>` plus `.tar.gz` + `.sha256` files.
+  - `<VERSION>` comes from `[package].version` in `Cargo.toml`.
+  - `<TARGET>` is the host triple by default (`rustc -vV`), or `cargo dist --target <triple>`.
+
 ### Run-dir shape
 - Run dirs are **flat**: every top-level `*.sh` is a script; subdirectories are ignored.
 - Script ids come from filenames (`<script_id>.sh`) and must be **globally unique across all run dirs** in one run.
