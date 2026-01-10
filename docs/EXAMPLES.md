@@ -1408,6 +1408,173 @@ header names intent; the report names outcomes.
 
 ### Step 15
 
+>one turn, one delta
+
+You now have enough tooling to make the *process* contract-like, not just the
+records.
+
+Treat each turn as a small experiment with an observable outcome. The experiment
+is the work; the outcome is the delta.
+
+#### 1) Start each turn by picking ids from the triage view (not from memory)
+
+Look at the highest-priority lines (uncertain first, then risk if present, then
+the route queue):
+
+```bash
+sort -t $'\t' -k1,1nr -k2,2nr -k3,3 -k4,4 triage.tsv | head -n 20
+```
+
+Pick a small set of script ids for this turn (1–3 is plenty at first):
+
+```bash
+sort -t $'\t' -k1,1nr -k2,2nr -k3,3 -k4,4 triage.tsv | head -n 3 | cut -f4
+```
+
+Post your Step 10 header with those ids before you touch anything. This keeps
+the dyad from duplicating work and makes intent falsifiable.
+
+#### 2) Choose one work type per turn
+
+Keep the work atomic. Pick one move and apply it to the ids you chose:
+
+- **wrap** (`synthetic` / `no_record` / `stdout_garbage`): do Step 5 (wrapper) so the script becomes `emitted`.
+- **route** (`emitted` but no `recommend.*`): emit `recommend.needs_human_read` as the honest default, or add one flare that justifies a better route.
+- **raise signal** (`recommend.needs_human_read` dominates): do Step 6 (signal flares) so uncertainty shrinks without pretending to fully understand.
+- **ratchet baseline** (only when the dyad agrees): enforce the minimal wrapper baseline in `boundaries.json` (Step 10), but keep risk/confidence advisory.
+
+The key is that you are not “improving the system”. You are making one specific
+change whose effect you can see in the next snapshot.
+
+#### 3) End the turn with an inventory + report, and paste it
+
+Run the inventory tool and paste the report output into the channel:
+
+```bash
+inv="$(tools/inventory ./your-run-dir)"
+tools/report "${inv}"
+```
+
+Do not summarize it. Paste it.
+
+#### 4) Interpret progress only through deltas
+
+A turn is “good” if it produces one of these deltas:
+
+- at least one id moves `synthetic -> emitted`
+- uncertainty decreases for an id you touched (`uncertain=1 -> 0`)
+- a vague route becomes a concrete one (`recommend.needs_human_read -> recommend.*`)
+
+A turn is “not done” if it produces a regression you caused (`emitted ->
+synthetic`, route flips you didn’t intend, outcomes that flip unexpectedly).
+Fix or revert before handing off, then regenerate the inventory and paste the
+new report.
+
+This is the whole move: the queue stays simple, the triad stays decoupled, and
+the dyad coordinates through observable deltas rather than taste.
+
+### Step 16
+
+>strict islands
+
+Supervised mode is for *inventory*: keep the NDJSON stream intact even when
+scripts are messy. Strict mode is for *non-negotiables*: if the contract is
+broken, stop.
+
+You do not have to choose one posture for the whole bag. If you split the bag
+into multiple run dirs and run `fencerunner` separately per subset, you can
+apply strict where it helps and supervised where it’s still needed.
+
+This is a practical way to create “islands of certainty” inside a chaotic bag.
+
+#### 1) Split by maturity, not by meaning
+
+Make two run dirs:
+
+- `frontier/` (supervised): the messy majority; the goal is visibility.
+- `trusted/` (strict): scripts you have already wrapped into cooperating emitters;
+  the goal is stability.
+
+Promotion is simple and mechanical: when a script is wrapped such that it always
+emits exactly one schema-valid record and exits `0`, it becomes eligible for
+`trusted/`.
+
+This does *not* mean you understand what the script does. It means you can rely
+on its behavior as a producer of data.
+
+#### 2) Strict reduces blast radius (by failing fast)
+
+In strict mode, the runner stops at the first script-level contract break. That
+changes the posture: “something surprising happened” becomes “halt further
+execution”.
+
+This is not a security boundary, but it is still useful when hazard means “cost
+of evaluation uncertainty”: strict makes it easy to stop running deeper into an
+unknown bag when the first few scripts already show you that your assumptions
+don’t hold.
+
+#### 3) Strict forces the interface to be NDJSON, not process exit codes
+
+In this runner, strict treats non-zero process exits as failures. The intended
+pattern for cooperating scripts is:
+
+- script process exits `0`
+- script reports success/denied/partial/error in `result.outcome`
+- evidence lives in payload snippets and `result.details.exit_code` / messages
+
+That is a big triage lever: once a subset stays green under strict, downstream
+tools can treat the NDJSON as the only interface and stop smuggling semantics
+through shell control-flow.
+
+Wrappers are the easiest way to make this true: capture the legacy exit code
+and report it in the record, but keep the wrapper’s own exit code `0` unless
+`emit-record` fails.
+
+#### 4) Strict makes “policy as schema” bite (when you’re ready)
+
+Supervised will happily emit synthetic records when your boundaries contract
+tightens and wrappers drift. That is good for visibility, but it can also hide
+the moment when your “cooperating baseline” stopped being true.
+
+When you promote a subset into `trusted/` and run it under strict, tightening
+`boundaries.json` becomes a real gate: drift is an immediate, undeniable
+failure, not just another synthetic line among many.
+
+This is the moment where a baseline like:
+
+- “wrapper-emitted records must include `emit.record` and `policy.read_only`”
+- “must emit exactly one `recommend.*` (or `recommend.needs_human_read`)”
+
+stops being aspirational and becomes enforced.
+
+#### 5) Two-pass pattern: strict guard rail + supervised frontier
+
+A practical cadence that keeps artifacts honest:
+
+1. Run strict on `trusted/`. If it fails, fix or revert before you accept any
+   new inventory.
+2. Run supervised on `frontier/` to keep the queue moving.
+
+One caveat: strict can emit some records before failing fast. If you don’t want
+automation to accidentally consume a partial strict stream, capture atomically:
+
+```bash
+tmp="$(mktemp)"
+if fencerunner --strict ./trusted > "${tmp}" 2> strict.stderr; then
+  mv "${tmp}" inventories/0002/trusted.ndjson
+else
+  rm -f "${tmp}"
+  echo "strict failed; not publishing partial output" >&2
+fi
+```
+
+The promotion path is now visible in your deltas: scripts move from “harness
+rescued” → “wrapper-emitted” → “strict-green in trusted”. Over time, more of the
+corpus lives behind strict, and supervised shrinks to the true frontier—exactly
+where triage belongs.
+
+### Step 17
+
 >TODO:PITH
 
 TODO: CONTENT
