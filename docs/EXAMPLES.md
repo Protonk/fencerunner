@@ -1215,6 +1215,199 @@ terms of abstract taxonomy debates.
 
 ### Step 13
 
+>make the lens a file
+
+Step 11 and Step 12 are intentionally tool-driven, but copy/paste is brittle.
+If the dyad’s “triage view” is not reproducible, you will end up debating
+results instead of sharing them.
+
+Make the view a first-class artifact.
+
+#### 1) Extract the `jq` program into a file (`tools/triage.jq`)
+
+Create a directory the runner will ignore (subdirectories are ignored; only
+top-level `*.sh` are run):
+
+```bash
+mkdir -p tools
+```
+
+Create `tools/triage.jq` with the exact logic from Step 11:
+
+```bash
+cat > tools/triage.jq <<'EOF'
+def has_id(id): ([.context.commitments[]? | select(.id == id)] | length) > 0;
+def ids(prefix): ([.context.commitments[]? | select(.id | startswith(prefix)) | .id] | join(","));
+
+def risk_score:
+  if has_id("finding.risk.high") then 2
+  elif has_id("finding.risk.medium") then 1
+  elif has_id("finding.risk.low") then 0
+  else 0 end;
+
+def uncertain:
+  (.operation.kind == "harness.supervised")
+  or has_id("recommend.needs_human_read")
+  or has_id("finding.low_confidence");
+
+[
+  (uncertain | if . then "1" else "0" end),
+  (risk_score | tostring),
+  ids("recommend."),
+  .script.id,
+  .result.outcome,
+  ((.operation.kind == "harness.supervised") | if . then "synthetic" else "emitted" end),
+  (.result.details.message // "")
+] | @tsv
+EOF
+```
+
+Now generating a triage view is always the same command:
+
+```bash
+jq -r -f tools/triage.jq < inventories/0002/stream.ndjson > inventories/0002/triage.tsv
+```
+
+This is the point: you don’t “follow Step 11” anymore — you *run the same lens*
+every turn.
+
+#### 2) Optional: make snapshot generation a one-liner (`tools/inventory`)
+
+If you notice humans skipping Step 12 because it feels fiddly, automate it.
+Keep it tiny and explicit: write the invariant files, and if there is a
+previous snapshot, write the join delta.
+
+Create `tools/inventory`:
+
+```bash
+cat > tools/inventory <<'EOF'
+#!/bin/bash
+set -euo pipefail
+
+run_dir="${1:?usage: tools/inventory <RUN_DIR>}"
+
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+root_dir="$(cd "${script_dir}/.." && pwd)"
+inventories_dir="${root_dir}/inventories"
+
+mkdir -p "${inventories_dir}"
+
+last="$(ls -1 "${inventories_dir}" 2>/dev/null | awk '/^[0-9]{4}$/{print}' | sort | tail -n1 || true)"
+if [[ -z "${last}" ]]; then
+  n=1
+else
+  n=$((10#${last} + 1))
+fi
+id="$(printf '%04d' "${n}")"
+dir="${inventories_dir}/${id}"
+mkdir -p "${dir}"
+
+fencerunner --supervised "${run_dir}" > "${dir}/stream.ndjson" 2> "${dir}/stream.stderr"
+jq -r -f "${script_dir}/triage.jq" < "${dir}/stream.ndjson" > "${dir}/triage.tsv"
+awk -F $'\t' 'BEGIN{OFS="\t"} {print $4,$1,$2,$3,$5,$6}' "${dir}/triage.tsv" \
+  | sort -t $'\t' -k1,1 \
+  > "${dir}/key.tsv"
+
+if [[ -n "${last}" ]]; then
+  prev="${inventories_dir}/${last}"
+  join -t $'\t' -1 1 -2 1 "${prev}/key.tsv" "${dir}/key.tsv" > "${dir}/delta.join.tsv"
+fi
+
+printf '%s\n' "${dir}"
+EOF
+chmod +x tools/inventory
+```
+
+Now “end every turn with an inventory” becomes:
+
+```bash
+tools/inventory ./your-run-dir
+```
+
+The only remaining human work is what you paste into the shared channel: the
+delta lists from Step 12.
+
+### Step 14
+
+>paste a report
+
+The dyad’s coordination problem is now simple: the tools can generate the same
+inventory artifacts every time, but humans still have to *talk* about what
+changed.
+
+Make that discussion concrete by standardizing what gets pasted into the shared
+channel. The goal is not prose; it is a compact, reproducible report that lets
+the other agent update their mental model without re-running your commands.
+
+#### 1) Add one more dumb tool: `tools/report`
+
+`tools/inventory` creates snapshots. `tools/report` turns a snapshot (and its
+delta, if present) into pasteable text.
+
+Create `tools/report`:
+
+```bash
+cat > tools/report <<'EOF'
+#!/bin/bash
+set -euo pipefail
+
+inv_dir="${1:?usage: tools/report <INVENTORY_DIR>}"
+
+key="${inv_dir}/key.tsv"
+triage="${inv_dir}/triage.tsv"
+delta="${inv_dir}/delta.join.tsv"
+
+if [[ ! -f "${key}" ]]; then
+  echo "missing ${key}" >&2
+  exit 1
+fi
+
+inv_id="$(basename "${inv_dir}")"
+
+total="$(wc -l < "${key}" | tr -d ' ')"
+emitted="$(awk -F $'\t' '$6=="emitted"{c++} END{print c+0}' "${key}")"
+synthetic="$(awk -F $'\t' '$6=="synthetic"{c++} END{print c+0}' "${key}")"
+uncertain="$(awk -F $'\t' '$2=="1"{c++} END{print c+0}' "${key}")"
+risk_high="$(awk -F $'\t' '$3=="2"{c++} END{print c+0}' "${key}")"
+
+echo "inventory: ${inv_id}"
+echo "scripts: ${total} (emitted=${emitted}, synthetic=${synthetic})"
+echo "uncertain: ${uncertain}  risk_high: ${risk_high}"
+
+if [[ -f "${triage}" ]]; then
+  echo
+  echo "top routes:"
+  cut -f4 "${key}" | tr ',' '\n' | grep -v '^$' | sort | uniq -c | sort -nr | head -n 10
+fi
+
+if [[ -f "${delta}" ]]; then
+  echo
+  echo "delta:"
+  echo "- synthetic -> emitted:"
+  awk -F $'\t' '$6=="synthetic" && $11=="emitted"{print "  - " $1}' "${delta}" || true
+  echo "- emitted -> synthetic:"
+  awk -F $'\t' '$6=="emitted" && $11=="synthetic"{print "  - " $1}' "${delta}" || true
+  echo "- route changes:"
+  awk -F $'\t' '$4!=$9{print "  - " $1 ": " $4 " -> " $9}' "${delta}" || true
+  echo "- outcome changes:"
+  awk -F $'\t' '$5!=$10{print "  - " $1 ": " $5 " -> " $10}' "${delta}" || true
+fi
+EOF
+chmod +x tools/report
+```
+
+Now the “end of turn” paste is always the same:
+
+```bash
+inv="$(tools/inventory ./your-run-dir)"
+tools/report "${inv}"
+```
+
+Paste the output into the shared channel *with* your turn header (Step 10). The
+header names intent; the report names outcomes.
+
+### Step 15
+
 >TODO:PITH
 
 TODO: CONTENT
