@@ -2220,6 +2220,104 @@ tools/demote --id foo
 
 ### Step 23
 
+>promote without meetings
+
+You now have the mechanics to *maintain* `trusted/` (strict publish gate) and to
+*move* scripts (`tools/promote` / `tools/demote`). What you still need is the
+default motion that grows the strict island without a committee meeting.
+
+The rule is: promote because the frontier inventory says the script is boring,
+not because you like it.
+
+#### 1) Define “boring enough to promote” as a filter over `key.tsv`
+
+Use the same criteria as Step 18 (frontier says it is already behaving like
+data, and it is operationally legible):
+
+- `emitted` (not synthetic)
+- `uncertain=0`
+- has a real route (non-empty, not only `recommend.needs_human_read`)
+
+That’s a single line in the frontier snapshot key:
+
+```bash
+awk -F $'\t' '
+  $2=="0" && $6=="emitted" && $4!="" && $4!="recommend.needs_human_read" {
+    print $1 "\t" $4 "\t" $5 "\t" "risk=" $3
+  }
+' inventories/frontier/0002/key.tsv
+```
+
+This is a promotion candidate list: `id`, `routes`, `outcome`, and `risk_score`
+(still advisory).
+
+#### 2) Make candidates show up in the frontier report (optional, but reduces friction)
+
+If promotions are “supposed to happen”, make them visible where you already
+look: the output of `tools/turn`.
+
+Update `tools/report` to print a small promotion candidate section when the
+inventory dir is under `inventories/frontier/`:
+
+```bash
+# At the end of tools/report (after the delta block), add:
+if [[ "${inv_dir}" == *"/inventories/frontier/"* ]]; then
+  echo
+  echo "promotion candidates (frontier -> trusted):"
+  awk -F $'\t' '$2=="0" && $6=="emitted" && $4!="" && $4!="recommend.needs_human_read"{print "  - " $1 "\t" $4 "\t" $5 "\t" "risk=" $3}' "${key}" \
+    | head -n 10 || true
+fi
+```
+
+Now every end-of-turn paste includes (a) what changed and (b) what is ready to
+be promoted next, without anyone remembering a separate command.
+
+#### 3) Promotion is a work type (and should show up in your intent header)
+
+When you promote, treat it as the turn’s work. Don’t sneak it in.
+
+Run:
+
+```bash
+tools/promote --id foo
+```
+
+Then run your normal end-of-turn command with intent that names the promotion:
+
+```bash
+tools/turn \
+  --route-focus "promote" \
+  --triage-focus "grow strict island" \
+  --script-ids "foo" \
+  --contract-changes "promoted foo (frontier -> trusted)"
+```
+
+Thanks to Step 19, the two reports will now show this mechanically:
+
+- trusted: `added ids: foo`
+- frontier: `removed ids: foo`
+
+That is “operational trusted”: growth is visible as deltas, not as vibes.
+
+#### 4) Demotion is an escape hatch, not a habit
+
+If trusted strict fails because a script can’t stay green under your minimal
+baseline, you have two honest options:
+
+- fix drift (preferred)
+- demote the script back to frontier so strict stays meaningful
+
+Use:
+
+```bash
+tools/demote --id foo
+```
+
+Then run `tools/turn` with a header that names the demotion. The island stays
+green; the frontier regains the uncertainty.
+
+### Step 24
+
 >TODO:PITH
 
 TODO: CONTENT
