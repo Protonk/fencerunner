@@ -2810,6 +2810,196 @@ That’s when triage becomes unnecessary: you’re no longer prioritizing chaos;
 
 ### Step 29
 
-> TODO:PITH
+>freeze the scaffolding
+
+If you are deep in the step numbers and still not touching scripts, the
+scaffolding has become the hazard. Freeze it.
+
+For the next two cycles: **no new steps**, **no new tooling**, **no schema
+ratchets**, **no promotion rituals**.
+
+Only two moves are allowed:
+
+- **quarantine** obviously dangerous scripts so they don’t execute by accident
+- **wrap** the worst offenders so every run yields usable signal
+
+This is not “understanding”. It is stopping self-harm and increasing the
+density of emitted records.
+
+## The ruthless loop
+
+#### 0) Quarantine the obvious bite-risk in one pass
+
+Do a fast static scan and move matches out of the runner’s discovery surface
+(subdirectories are ignored; you can always bring scripts back later).
+
+```bash
+mkdir -p quarantine
+
+rg -n --no-heading -S -l \
+  -e 'rm[[:space:]]+-rf' \
+  -e 'mkfs' \
+  -e 'dd[[:space:]]+if=' \
+  -e 'diskutil|fdisk|parted' \
+  -e 'iptables|pfctl|ufw' \
+  -e 'useradd|usermod|passwd' \
+  -e 'shutdown|reboot' \
+  -e 'launchctl[[:space:]]+(bootout|unload|disable)' \
+  -e 'systemctl[[:space:]]+(stop|disable)' \
+  ./*.sh \
+| xargs -I{} mv {} quarantine/
+```
+
+If you need quarantined scripts to *still* produce a record line, use Step 27’s
+quarantine wrapper pattern instead of moving them into a subdirectory.
+
+#### 1) Run once, capture the stream
+
+```bash
+fencerunner --supervised ./your-run-dir > inv.ndjson 2> inv.stderr
+```
+
+#### 2) Pick the next 6 unknowns (synthetic first)
+
+```bash
+jq -r 'select(.operation.kind=="harness.supervised") | .script.id' inv.ndjson | head -n 6
+```
+
+Split them 3/3 between two agents. That’s the only coordination needed.
+
+- Agent A: first 3 ids
+- Agent B: next 3 ids
+
+#### 3) Wrap those scripts (no debating; just wrap)
+
+For each `id` you claimed, do:
+
+```bash
+id="foo"  # replace
+mv "./${id}.sh" "./${id}.legacy"
+
+cat > "./${id}.sh" <<'EOF'
+#!/bin/bash
+set -euo pipefail
+
+source "${FENCERUNNER_ROOT}/lib/library.sh"
+script_id="$(basename "${BASH_SOURCE[0]}" .sh)"
+legacy="./${script_id}.legacy"
+
+stdout_file="$(mktemp -t "${script_id}.stdout")"
+stderr_file="$(mktemp -t "${script_id}.stderr")"
+
+# Default coarse signals (cheap, stable)
+risk="finding.risk.medium"
+recommend="recommend.needs_human_read"
+
+# Optional: bump risk if legacy text contains obvious blast-radius markers.
+if command -v rg >/dev/null 2>&1; then
+  if rg -n --no-heading -S \
+      -e '(^|[[:space:]])sudo([[:space:]]|$)' \
+      -e 'rm[[:space:]]+-rf' \
+      -e 'mkfs|dd[[:space:]]+if=' \
+      -e 'diskutil|fdisk|parted' \
+      -e 'iptables|pfctl|ufw' \
+      "${legacy}" >/dev/null 2>&1; then
+    risk="finding.risk.high"
+  fi
+fi
+
+# Timebox to prevent hangs (uses timeout if available).
+timeout_cmd=()
+if command -v timeout >/dev/null 2>&1; then
+  timeout_cmd=(timeout 30s)
+elif command -v gtimeout >/dev/null 2>&1; then
+  timeout_cmd=(gtimeout 30s)
+fi
+
+set +e
+if [[ ${#timeout_cmd[@]} -gt 0 ]]; then
+  "${timeout_cmd[@]}" bash "${legacy}" >"${stdout_file}" 2>"${stderr_file}" </dev/null
+  exit_code="$?"
+else
+  bash "${legacy}" >"${stdout_file}" 2>"${stderr_file}" </dev/null
+  exit_code="$?"
+fi
+set -e
+
+outcome="success"
+if [[ "${exit_code}" -ne 0 ]]; then
+  outcome="error"
+fi
+
+# Two flares max. Route, don’t interpret.
+if grep -qiE 'permission denied|operation not permitted' "${stderr_file}" 2>/dev/null; then
+  outcome="denied"
+  recommend="recommend.rerun_sudo"
+elif grep -qiE 'command not found|No such file or directory' "${stderr_file}" 2>/dev/null; then
+  recommend="recommend.install_dependency"
+elif grep -qiE 'password:|enter passphrase|are you sure|press any key' "${stdout_file}" 2>/dev/null \
+  || grep -qiE 'password:|enter passphrase|are you sure|press any key' "${stderr_file}" 2>/dev/null; then
+  recommend="recommend.run_interactively"
+fi
+
+commit_help_me ensure policy.read_only
+commit_help_me emit emit.record
+commit_help_me detect "${risk}"
+commit_help_me emit "${recommend}"
+
+emit-record \
+  --script-name "${script_id}" \
+  --command "bash ${legacy}" \
+  --operation-kind "legacy.exec" \
+  --target "${legacy}" \
+  --outcome "${outcome}" \
+  --exit-code "${exit_code}" \
+  --payload-stdout-file "${stdout_file}" \
+  --payload-stderr-file "${stderr_file}"
+EOF
+
+chmod +x "./${id}.sh"
+```
+
+No more changes. Don’t edit boundaries, gates, inventory tooling, or turn
+tooling. Just wrap.
+
+#### 4) Run again and verify those ids moved out of “synthetic”
+
+```bash
+fencerunner --supervised ./your-run-dir > inv2.ndjson 2> inv2.stderr
+
+ids='["foo","bar","baz"]'  # replace with your claimed ids
+jq -r --argjson ids "${ids}" '
+  select(.script.id as $id | ($ids | index($id)))
+  | [
+      .script.id,
+      (if .operation.kind=="harness.supervised" then "synthetic" else "emitted" end),
+      .result.outcome,
+      ([.context.commitments[]? | select(.id|startswith("recommend.")) | .id] | join(",")),
+      (.result.details.message // "")
+    ]
+  | @tsv
+' inv2.ndjson
+```
+
+If those ids are still synthetic: your wrapper is not meeting whatever contract
+you accidentally enforced. Fix the wrapper until it emits, then stop.
+
+#### 5) Repeat with the next 6 synthetic ids
+
+Same loop. Same two flares. No ceremony.
+
+## The only “progress” metric that matters right now
+
+Across runs, this number must go up:
+
+```bash
+jq -r 'select(.operation.kind!="harness.supervised") | .script.id' inv2.ndjson | wc -l
+```
+
+If it isn’t increasing, stop everything else and only wrap until it does.
+
+### Step 30
+
+>TODO:PITH
 
 TODO: CONTENT
