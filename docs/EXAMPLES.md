@@ -2393,6 +2393,363 @@ touch the next scripts anyway.
 
 ### Step 25
 
->TODO:PITH
+>name the wound
+
+If you notice the dyad “triaging the process”, it is usually because urgency is
+missing. Triage is not a vibe; it is a response to something that is bleeding.
+
+Use Step 21’s intent header to force that back onto the page.
+
+#### 1) Make `--triage-focus` describe the external wound
+
+`--triage-focus` should not be “improve tooling” or “tighten contracts”. It
+should be a short statement of what is urgent *in the world* (cost/risk/time),
+even if you can’t fully explain it yet.
+
+If you cannot write a plausible wound statement, you are not in triage mode.
+You are in maintenance mode — and maintenance can wait.
+
+#### 2) Use the inventory to find ids that touch the wound (don’t guess)
+
+Pick a small set of keywords that represent the wound (error strings, resource
+names, obvious markers) and search the latest frontier inventory stream:
+
+```bash
+frontier_inv="inventories/frontier/0007" # from tools/turn output
+rg -n "YOUR_KEYWORD_1|YOUR_KEYWORD_2" "${frontier_inv}/stream.ndjson" | head
+```
+
+Then extract the `script.id` values for the matching records (whatever is easy
+for you: eyeballing, `jq`, or a quick text filter). Those ids become the turn.
+
+If nothing matches, don’t invent routes. That is a signal problem: wrap more
+scripts so they capture evidence into payload, then search again.
+
+#### 3) Spend your turn on those ids (Step 24), not on the runbook
+
+Once you have wound-linked ids, do the Step 24 loop:
+
+- wrap if synthetic
+- add at most two evidence-driven flares
+- re-run `tools/turn` and let deltas decide what “progress” means
+
+This is how the process stays subordinate: the only reason to touch the
+runbook is when it blocks learning about the wound.
+
+### Step 26
+
+>red mode
+
+If this runbook is starting to feel like the work, drop the ceremony.
+
+Use the runner directly and do the shortest loop that creates new signal about
+the wound.
+
+Red mode rules:
+
+- one run dir (usually `./frontier`)
+- one stream file (`stream.ndjson`) and one stderr file (`stream.stderr`)
+- wrap/flare only the next 1–3 ids
+- re-run immediately
+
+#### 1) Run once and capture (no inventory ritual required)
+
+```bash
+run_dir=./frontier
+fencerunner --supervised "${run_dir}" > stream.ndjson 2> stream.stderr
+```
+
+If you need to share with another agent, share `stream.ndjson`. Nothing else is
+required.
+
+#### 2) Pull ids that touch the wound (Step 25), then touch them (Step 24)
+
+Search the stream for your wound keywords:
+
+```bash
+rg -n "YOUR_KEYWORD_1|YOUR_KEYWORD_2" stream.ndjson | head
+```
+
+Pick 1–3 `script.id` values from the matching records and do the Step 24 loop
+on those ids only:
+
+- wrap if synthetic
+- add at most two flares
+- re-run
+
+The point is to change what the stream can say about the wound in the next run.
+
+#### 3) Stop when you have an action, not when the bag is understood
+
+Triage ends when you can do something concrete with the new signal (install a
+missing dependency, rerun with different privileges, quarantine a dangerous
+script, escalate to a human read), not when the queue looks tidy.
+
+Once the wound is no longer bleeding, you can go back to the slower loop
+(`tools/turn`, promotion to trusted, strict publish gates) to keep the gains.
+
+### Step 27
+
+>quarantine without losing the line
+
+Sometimes the urgent move is to stop executing a legacy body. “Not running it”
+is still a result — but it should still be a well-formed record in the stream
+so the bag stays runnable and coordination stays grounded.
+
+This is meant to be a **fast triage action**: you can keep the stream runnable
+without pretending you have time (or safety) to evaluate every legacy script
+right now.
+
+Quarantine is a wrapper posture:
+
+- keep `<id>.sh` emitting exactly one boundary record
+- keep `<id>.legacy` adjacent (reviewable + reversible)
+- default to *not* executing the legacy body unless explicitly unquarantined
+
+#### 1) Add a quarantine route to `commitments.json`
+
+If you don’t already have it, add:
+
+- `recommend.quarantine` (`emit`) — do not run the legacy body until reviewed
+
+(Optional, but useful if you like making intent explicit in the record):
+
+- `policy.quarantine_default` (`ensure`) — wrappers may skip legacy by default
+
+#### 2) Quarantine wrapper pattern (per-script allow file)
+
+Gate execution on a per-script allow file (`./.<id>.allow_legacy`). This is the
+escape hatch: you can unquarantine exactly one script without accidentally
+enabling all quarantined wrappers at once.
+
+Start from the Step 5 wrapper, then add this guard right before the legacy run:
+
+```bash
+allow_file="./.${script_id}.allow_legacy"
+
+if [[ ! -f "${allow_file}" ]]; then
+  msg="quarantined: legacy not executed (create ${allow_file} to allow this one script)"
+  printf '%s\n' "${msg}" > "${stderr_file}"
+
+  commit_help_me ensure policy.read_only
+  commit_help_me emit emit.record
+
+  # Keep the triage lenses honest: this is a deliberate “we didn’t evaluate it”.
+  commit_help_me detect finding.low_confidence
+
+  # Optional: keep a coarse blast-radius label (Step 9).
+  # commit_help_me detect finding.risk.high
+
+  commit_help_me emit recommend.quarantine
+
+  emit-record \
+    --script-name "${script_id}" \
+    --command "bash ./${script_id}.legacy" \
+    --operation-kind "legacy.exec" \
+    --operation-arg-json "quarantined" "true" \
+    --operation-arg "allow_file" "${allow_file}" \
+    --target "./${script_id}.legacy" \
+    --outcome "partial" \
+    --exit-code "0" \
+    --message "${msg}" \
+    --payload-stdout-file "${stdout_file}" \
+    --payload-stderr-file "${stderr_file}"
+  exit 0
+fi
+```
+
+If the allow file exists, run the legacy body exactly like Step 5 and then use
+Step 6 flares to set *one* concrete `recommend.*` route (default to
+`recommend.needs_human_read` when you truly don’t know).
+
+#### 3) Use quarantine as an action, not a parking lot
+
+In Step 26 red mode, if a script looks like it can bite (risk high, secrets,
+network, interactive prompts), quarantine it and move on. The win is that the
+next run is safer *and* the stream now advertises the decision
+(`recommend.quarantine`).
+
+Later, when the wound demands it, unquarantine exactly one script by creating
+its allow file, run once, and decide again.
+
+#### 4) Where quarantine lives (frontier vs trusted)
+
+Quarantine wrappers can stay in `./frontier` (because they are still
+unevaluated), or be promoted into `./trusted` if the thing you want strict mode
+to protect is the quarantine itself (“this must keep emitting a stable record
+and must not start executing accidentally”). Strict as a publish gate makes
+that drift loud.
+
+### Step 28
+
+> make triage disappear
+
+At this point you have a working *interface* to the bag. The remaining work is to make that interface the default, so “triage” stops being a special activity and becomes ordinary, low-drama maintenance.
+
+#### 1) Define the end state as observable invariants (not sentiment)
+
+Treat these as “triage is unnecessary” conditions:
+
+* **Trusted is strictly green** on every turn:
+
+  * `tools/turn` succeeds because the strict publish gate for `./trusted` succeeds.
+* **Frontier is only intake**, not a second system:
+
+  * scripts enter `frontier/` only as candidates to be wrapped, flared, and promoted.
+  * the long-term trend is that `frontier/` shrinks or churns, while `trusted/` grows.
+* **Records are the interface**:
+
+  * scripts exit `0` as processes (wrappers own this), and report outcomes in records.
+  * stderr discipline is enforced (at least in `trusted/`) so evidence lives in payload, not noise.
+
+When these are true, you don’t “triage the scripts” anymore; you “operate the stream”.
+
+#### 2) Turn the workflow into a gate you can’t ignore (CI/local)
+
+Make one command the norm:
+
+* humans run `tools/turn …`
+* automation runs the same thing with boring intent fields
+
+A minimal `tools/ci` that fails if trusted is not publishable under strict:
+
+```bash
+cat > tools/ci <<'EOF'
+#!/bin/bash
+set -euo pipefail
+
+# CI intent is intentionally bland; the point is reproducibility.
+./tools/turn \
+  --route-focus "ci" \
+  --triage-focus "trusted strict must pass" \
+  --script-ids "n/a" \
+  --contract-changes "n/a"
+EOF
+chmod +x tools/ci
+```
+
+This makes “trusted strict green” the default posture. If it breaks, nothing else “counts” until it is fixed (or a script is demoted honestly).
+
+#### 3) Make intake mechanical: new scripts start life as cooperating emitters
+
+The fastest way to avoid re-introducing chaos is to stop accepting raw scripts as first-class citizens.
+
+Policy (operational, not philosophical):
+
+* new scripts land in `frontier/` as wrappers (or immediately wrapped)
+* legacy bodies (if any) live under `*.legacy` (or another ignored name)
+* the wrapper emits exactly one boundary record and captures stdout/stderr
+
+This is how you prevent the bag from regressing: you don’t rely on people to “remember the contract”; you make the contract the path of least resistance.
+
+If you want to reduce friction further, add a scaffold tool (optional):
+
+```bash
+cat > tools/new-wrapper <<'EOF'
+#!/bin/bash
+set -euo pipefail
+
+id="${1:?usage: tools/new-wrapper <SCRIPT_ID>}"
+
+dst="./frontier/${id}.sh"
+legacy="./frontier/${id}.legacy"
+
+if [[ -e "${dst}" || -e "${legacy}" ]]; then
+  echo "already exists: ${id}" >&2
+  exit 1
+fi
+
+cat > "${legacy}" <<'LEGACY'
+#!/bin/bash
+# legacy body goes here
+exit 0
+LEGACY
+chmod +x "${legacy}"
+
+cat > "${dst}" <<'WRAP'
+#!/bin/bash
+set -euo pipefail
+
+source "${FENCERUNNER_ROOT}/lib/library.sh"
+script_id="$(basename "${BASH_SOURCE[0]}" .sh)"
+
+stdout_file="$(mktemp -t "${script_id}.stdout")"
+stderr_file="$(mktemp -t "${script_id}.stderr")"
+
+set +e
+bash "./${script_id}.legacy" >"${stdout_file}" 2>"${stderr_file}"
+exit_code="$?"
+set -e
+
+outcome="success"
+if [[ "${exit_code}" -ne 0 ]]; then
+  outcome="error"
+fi
+
+commit_help_me ensure policy.read_only
+commit_help_me emit emit.record
+
+# default route until you add real flares:
+commit_help_me emit recommend.needs_human_read
+
+emit-record \
+  --script-name "${script_id}" \
+  --command "bash ./${script_id}.legacy" \
+  --operation-kind "legacy.exec" \
+  --target "./${script_id}.legacy" \
+  --outcome "${outcome}" \
+  --exit-code "${exit_code}" \
+  --payload-stdout-file "${stdout_file}" \
+  --payload-stderr-file "${stderr_file}"
+WRAP
+chmod +x "${dst}"
+
+echo "created:"
+echo "- ${dst}"
+echo "- ${legacy}"
+EOF
+chmod +x tools/new-wrapper
+```
+
+This doesn’t “solve semantics”; it ensures the first run yields a stable record.
+
+#### 4) Convert “understanding” into a separate backlog from “making runnable”
+
+Once wrappers exist and inventories are stable, semantic work stops being triage work.
+
+Maintain two queues:
+
+* **Interface queue (triage):** wrap → flare → promote → keep strict green.
+* **Semantic debt queue:** rewrite `.legacy` bodies, delete wrappers, or replace with real implementations.
+
+This keeps you from getting stuck: triage work always has a mechanical next move; semantic work is open-ended by nature.
+
+A practical default policy:
+
+* only do semantic rewrites for scripts already in `trusted/` (because strict keeps the interface stable while you change internals)
+* never block promotions on “full understanding” unless risk is actually high and evidence is weak
+
+#### 5) Ratchet the final dial: make supervised an intake-only tool
+
+When `trusted/` is meaningful, supervised mode becomes what you use only for:
+
+* brand-new scripts
+* newly discovered messy scripts
+* scripts you demoted on purpose
+
+Everything else should be behind strict.
+
+The “end” is not “no supervised runs ever”; it’s “supervised is not how you operate the mainline”.
+
+If you want one clean, measurable target:
+
+* **Trusted:** strict must publish.
+* **Frontier:** supervised may be messy, but should trend toward fewer `uncertain=1` and fewer synthetic lines as you wrap.
+
+That’s when triage becomes unnecessary: you’re no longer prioritizing chaos; you’re operating a pipeline.
+
+### Step 29
+
+> TODO:PITH
 
 TODO: CONTENT
