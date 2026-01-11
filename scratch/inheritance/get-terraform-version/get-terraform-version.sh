@@ -17,6 +17,13 @@ if [[ "${exit_code}" -ne 0 ]]; then
   outcome="error"
 fi
 
+message=""
+if grep -qiE 'Terraform is not installed|Could not determine terraform version' "${stdout_file}" 2>/dev/null \
+  || grep -qiE 'Terraform is not installed|Could not determine terraform version' "${stderr_file}" 2>/dev/null; then
+  outcome="error"
+  message="terraform unavailable (reported by legacy output)"
+fi
+
 commit_help_me ensure policy.read_only
 commit_help_me emit emit.record
 
@@ -27,5 +34,6 @@ emit-record \
   --target "./${script_id}.legacy" \
   --outcome "${outcome}" \
   --exit-code "${exit_code}" \
+  --message "${message}" \
   --payload-stdout-file "${stdout_file}" \
   --payload-stderr-file "${stderr_file}"
