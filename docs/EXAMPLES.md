@@ -1575,6 +1575,440 @@ where triage belongs.
 
 ### Step 17
 
+>strict in the workflow
+
+Strict becomes a phase change when it is not “something you sometimes run”, but
+a **publish gate** in the same inventory/report workflow you already use.
+
+The requirement is simple:
+
+- supervised inventories are always publishable (they are meant for visibility)
+- strict inventories are publishable **only when strict is green** (they are meant for integrity)
+
+#### 1) Upgrade `tools/inventory` with a strict mode and a root
+
+Replace `tools/inventory` with a version that supports:
+
+- `--supervised` (default)
+- `--strict` (publish only on success; no partial stream)
+- `--root <DIR>` (so trusted and frontier can have separate time-series)
+
+```bash
+cat > tools/inventory <<'EOF'
+#!/bin/bash
+set -euo pipefail
+
+usage() {
+  echo "usage: tools/inventory [--supervised|--strict] [--root DIR] <RUN_DIR>" >&2
+}
+
+mode="supervised"
+root_override=""
+
+while [[ $# -gt 0 ]]; do
+  case "${1}" in
+    --supervised) mode="supervised"; shift ;;
+    --strict) mode="strict"; shift ;;
+    --root) root_override="${2:?missing value for --root}"; shift 2 ;;
+    -h|--help) usage; exit 0 ;;
+    --) shift; break ;;
+    -*) echo "unknown flag: ${1}" >&2; usage; exit 1 ;;
+    *) break ;;
+  esac
+done
+
+run_dir="${1:?missing RUN_DIR}"
+
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+root_dir="$(cd "${script_dir}/.." && pwd)"
+inventories_dir="${root_override:-${root_dir}/inventories}"
+
+mkdir -p "${inventories_dir}"
+
+last="$(ls -1 "${inventories_dir}" 2>/dev/null | awk '/^[0-9]{4}$/{print}' | sort | tail -n1 || true)"
+if [[ -z "${last}" ]]; then
+  n=1
+else
+  n=$((10#${last} + 1))
+fi
+id="$(printf '%04d' "${n}")"
+dir="${inventories_dir}/${id}"
+mkdir -p "${dir}"
+
+if [[ "${mode}" == "supervised" ]]; then
+  fencerunner --supervised "${run_dir}" > "${dir}/stream.ndjson" 2> "${dir}/stream.stderr"
+else
+  tmp_stream="$(mktemp)"
+  tmp_stderr="$(mktemp)"
+  if fencerunner --strict "${run_dir}" > "${tmp_stream}" 2> "${tmp_stderr}"; then
+    mv "${tmp_stream}" "${dir}/stream.ndjson"
+    mv "${tmp_stderr}" "${dir}/stream.stderr"
+  else
+    echo "strict failed; not publishing partial output" >&2
+    cat "${tmp_stderr}" >&2 || true
+    rm -f "${tmp_stream}" "${tmp_stderr}"
+    rm -rf "${dir}"
+    exit 1
+  fi
+fi
+
+jq -r -f "${script_dir}/triage.jq" < "${dir}/stream.ndjson" > "${dir}/triage.tsv"
+awk -F $'\t' 'BEGIN{OFS="\t"} {print $4,$1,$2,$3,$5,$6}' "${dir}/triage.tsv" \
+  | sort -t $'\t' -k1,1 \
+  > "${dir}/key.tsv"
+
+if [[ -n "${last}" ]]; then
+  prev="${inventories_dir}/${last}"
+  join -t $'\t' -1 1 -2 1 "${prev}/key.tsv" "${dir}/key.tsv" > "${dir}/delta.join.tsv"
+fi
+
+printf '%s\n' "${dir}"
+EOF
+chmod +x tools/inventory
+```
+
+This is the strict “keep it honest” move:
+
+- if strict fails, you get an error and no snapshot is published
+- if strict succeeds, you get the same invariant files as supervised
+
+#### 2) Use two inventory roots: `trusted` and `frontier`
+
+Run strict inventories for your island of certainty:
+
+```bash
+trusted_inv="$(tools/inventory --root inventories/trusted --strict ./trusted)"
+tools/report "${trusted_inv}"
+```
+
+Run supervised inventories for the chaotic frontier:
+
+```bash
+frontier_inv="$(tools/inventory --root inventories/frontier --supervised ./frontier)"
+tools/report "${frontier_inv}"
+```
+
+Always run `trusted` first. If it fails, stop: your integrity gate is telling
+you “don’t publish a new turn; fix drift first”.
+
+#### 3) Paste two reports, not one story
+
+End-of-turn channel update (header from Step 10 + reports from Step 14):
+
+- `trusted` report: proves the island stayed green under strict
+- `frontier` report: shows the queue moved under supervised
+
+This is the phase change in practice: strict is no longer a flag. It is the
+thing that decides whether you are allowed to publish a new inventory.
+
+Schema note: keep enforcement minimal for now (`emit.record` + `policy.read_only`
++ some `recommend.*` / `recommend.needs_human_read` for wrapper records). Strict
+is what makes that baseline bite without dragging risk/confidence into “required”
+too early.
+
+### Step 18
+
+>promote to trusted
+
+Separating `frontier/` and `trusted/` is only useful if scripts can move between
+them without ceremony. Treat this as a mechanical promotion path, not an honor
+system.
+
+#### 1) Split on disk (once)
+
+If you have been working in a single run dir so far, make it your frontier and
+create an empty trusted run dir:
+
+```bash
+mv ./your-run-dir ./frontier
+mkdir -p ./trusted
+cp ./frontier/{gates.json,commitments.json,boundaries.json} ./trusted/
+```
+
+Start with `trusted/` empty (no `*.sh`), and treat promotion as the only way
+scripts enter it.
+
+#### 2) Promote only what you can keep green under strict
+
+Pick candidates from the *frontier* inventory, not by gut. A simple rule that
+usually works:
+
+- `emitted` (not synthetic)
+- `uncertain=0`
+- route is present and not just `recommend.needs_human_read`
+
+From the latest `inventories/frontier/NNNN/key.tsv`:
+
+```bash
+awk -F $'\t' '$2=="0" && $6=="emitted" && $4!="" && $4!="recommend.needs_human_read"{print $1}' \
+  inventories/frontier/0002/key.tsv
+```
+
+Promotion move (keep the wrapper and its legacy body together):
+
+```bash
+id="foo"
+mv "./frontier/${id}.sh" "./trusted/${id}.sh"
+mv "./frontier/${id}.legacy" "./trusted/${id}.legacy"
+```
+
+Then immediately run the strict publish gate:
+
+```bash
+trusted_inv="$(tools/inventory --root inventories/trusted --strict ./trusted)"
+tools/report "${trusted_inv}"
+```
+
+If strict fails, undo the move (or fix drift) before you continue. The whole
+point of trusted is “this subset stays green”.
+
+#### 3) Keep enforcement minimal (for now)
+
+In `trusted/`, strict makes a *minimal* wrapper baseline bite without forcing
+you to prematurely standardize everything:
+
+- require `emit.record` + `policy.read_only`
+- require *some* `recommend.*` (or `recommend.needs_human_read`)
+- keep risk/confidence signals optional until the dyad agrees otherwise
+
+The strict island is about integrity, not about completing the taxonomy.
+
+#### 4) Talk in promotions + deltas
+
+In the shared channel, record promotions explicitly:
+
+- ids promoted (frontier → trusted)
+- whether trusted strict stayed green
+- what changed in the frontier delta
+
+This keeps the dyad aligned: supervised inventories are where uncertainty lives;
+strict inventories are where drift is not allowed.
+
+### Step 19
+
+>make promotion show up
+
+Promotion is now a file move plus an immediate strict gate (Step 18). That makes
+`trusted/` operational.
+
+One problem remains: the delta join in Step 12 only compares ids that exist in
+both snapshots. Promotions and demotions are *adds/removes*, so they can vanish
+from `delta.join.tsv` unless you call them out manually.
+
+Fix that by making “added ids” and “removed ids” first-class delta artifacts.
+
+#### 1) Teach `tools/inventory` to write added/removed deltas
+
+Update the delta section of `tools/inventory` so that when a previous snapshot
+exists it writes three delta files:
+
+- `delta.join.tsv` (changed fields for ids present in both)
+- `delta.added.tsv` (ids present now, absent before)
+- `delta.removed.tsv` (ids absent now, present before)
+
+In the script, extend the existing `if [[ -n "${last}" ]]; then ... fi`:
+
+```bash
+if [[ -n "${last}" ]]; then
+  prev="${inventories_dir}/${last}"
+  join -t $'\t' -1 1 -2 1 "${prev}/key.tsv" "${dir}/key.tsv" > "${dir}/delta.join.tsv"
+
+  comm -13 <(cut -f1 "${prev}/key.tsv" | sort) <(cut -f1 "${dir}/key.tsv" | sort) \
+    > "${dir}/delta.added.tsv"
+
+  comm -23 <(cut -f1 "${prev}/key.tsv" | sort) <(cut -f1 "${dir}/key.tsv" | sort) \
+    > "${dir}/delta.removed.tsv"
+fi
+```
+
+Now promotions are visible as deltas:
+
+- **frontier:** promoted scripts show up in `delta.removed.tsv`
+- **trusted:** promoted scripts show up in `delta.added.tsv`
+
+That turns “promotion” from a narrative you remember to a file your tools can
+print.
+
+#### 2) Teach `tools/report` to print added/removed ids
+
+Update `tools/report` so that when `delta.added.tsv` or `delta.removed.tsv`
+exist it prints them.
+
+For example, after the existing “delta:” block header:
+
+```bash
+added="${inv_dir}/delta.added.tsv"
+removed="${inv_dir}/delta.removed.tsv"
+
+if [[ -f "${added}" ]]; then
+  echo "- added ids:"
+  awk '{print "  - " $1}' "${added}" || true
+fi
+
+if [[ -f "${removed}" ]]; then
+  echo "- removed ids:"
+  awk '{print "  - " $1}' "${removed}" || true
+fi
+```
+
+With that change, your end-of-turn paste can carry promotions/demotions without
+extra explanation.
+
+#### 3) Make “promotion” a delta rule, not a debate
+
+Once added/removed ids are printed by the reports, you can make a simple rule:
+
+- a promotion only “counts” if the *trusted strict* inventory exists (Step 17)
+- and the trusted report shows the id under “added ids”
+
+That keeps “trusted growth” measurable.
+
+### Step 20
+
+>one command, one paste
+
+At this point your process has two run dirs, two postures, two inventory roots,
+and (thanks to Step 19) promotions show up mechanically as added/removed ids.
+
+That’s great — but it is still easy for a dyad to “communicate” by accident:
+one agent pastes only frontier, or labels things inconsistently, or forgets to
+stop the line when trusted strict fails.
+
+Make the end-of-turn paste a single command.
+
+#### 1) Add a tiny orchestrator: `tools/turn`
+
+Create `tools/turn` that runs the strict publish gate first, then the frontier
+inventory, and prints both reports with explicit labels:
+
+```bash
+cat > tools/turn <<'EOF'
+#!/bin/bash
+set -euo pipefail
+
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+trusted_inv="$("${script_dir}/inventory" --root inventories/trusted --strict ./trusted)"
+echo "== trusted =="
+echo "inventory_dir: ${trusted_inv}"
+"${script_dir}/report" "${trusted_inv}"
+echo
+
+frontier_inv="$("${script_dir}/inventory" --root inventories/frontier --supervised ./frontier)"
+echo "== frontier =="
+echo "inventory_dir: ${frontier_inv}"
+"${script_dir}/report" "${frontier_inv}"
+EOF
+chmod +x tools/turn
+```
+
+Now your end-of-turn artifacts are generated the same way every time:
+
+```bash
+tools/turn
+```
+
+If trusted strict fails, `tools/turn` fails (and `tools/inventory` will refuse
+to publish a partial snapshot), so you cannot accidentally “keep going” into a
+new frontier inventory with a broken island.
+
+#### 2) Paste the whole output (don’t curate it)
+
+In the shared channel, paste your Step 10 header *and then paste the full
+output of `tools/turn`*. Let the tools tell the story; keep prose out of it.
+
+That is the operational definition of the compromise: tools-on-the-page for
+what happened, discussion-in-channel for what it means.
+
+### Step 21
+
+>intent is data
+
+Step 20 made the end-of-turn paste hard to forget, but your intent (Step 10
+header) is still soft: it lives only in chat.
+
+Make intent a file, and make `tools/turn` refuse to run without it.
+
+#### 1) Require the Step 10 header as environment variables
+
+Replace `tools/turn` with a version that requires four fields and prints them
+before it runs anything:
+
+- `ROUTE_FOCUS`
+- `TRIAGE_FOCUS`
+- `SCRIPT_IDS`
+- `CONTRACT_CHANGES`
+
+```bash
+cat > tools/turn <<'EOF'
+#!/bin/bash
+set -euo pipefail
+
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+route_focus="${ROUTE_FOCUS:-}"
+triage_focus="${TRIAGE_FOCUS:-}"
+script_ids="${SCRIPT_IDS:-}"
+contract_changes="${CONTRACT_CHANGES:-}"
+
+if [[ -z "${route_focus}" || -z "${triage_focus}" || -z "${script_ids}" || -z "${contract_changes}" ]]; then
+  echo "usage: ROUTE_FOCUS=... TRIAGE_FOCUS=... SCRIPT_IDS=... CONTRACT_CHANGES=... tools/turn" >&2
+  exit 1
+fi
+
+header="$(cat <<HDR
+route_focus: ${route_focus}
+triage_focus: ${triage_focus}
+script_ids: ${script_ids}
+contract_changes: ${contract_changes}
+HDR
+)"
+
+echo "== intent =="
+echo "${header}"
+echo
+
+trusted_inv="$("${script_dir}/inventory" --root inventories/trusted --strict ./trusted)"
+printf '%s\n' "${header}" > "${trusted_inv}/turn.header.txt"
+echo "== trusted =="
+echo "inventory_dir: ${trusted_inv}"
+"${script_dir}/report" "${trusted_inv}"
+echo
+
+frontier_inv="$("${script_dir}/inventory" --root inventories/frontier --supervised ./frontier)"
+printf '%s\n' "${header}" > "${frontier_inv}/turn.header.txt"
+echo "== frontier =="
+echo "inventory_dir: ${frontier_inv}"
+"${script_dir}/report" "${frontier_inv}"
+EOF
+chmod +x tools/turn
+```
+
+Now intent is coupled to outcomes:
+
+- it is printed in the same paste as the reports
+- it is written into both inventory dirs as `turn.header.txt`
+
+If someone later asks “what did you mean to do?”, the answer is not “scroll up
+in chat”. It is “open the inventory directory”.
+
+#### 2) Run one command, paste one thing
+
+Your end-of-turn command becomes:
+
+```bash
+ROUTE_FOCUS="recommend.install_dependency" \
+TRIAGE_FOCUS="uncertain first" \
+SCRIPT_IDS="foo bar baz" \
+CONTRACT_CHANGES="commitments.json (added finding.tool_missing)" \
+tools/turn
+```
+
+Paste the entire output. No separate Step 10 header is required anymore,
+because the tool refuses to run without it.
+
+### Step 22
+
 >TODO:PITH
 
 TODO: CONTENT
