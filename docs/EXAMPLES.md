@@ -1934,7 +1934,8 @@ Make intent a file, and make `tools/turn` refuse to run without it.
 #### 1) Require the Step 10 header as flags
 
 Replace `tools/turn` with a version that requires four fields and prints them
-before it runs anything:
+before it runs anything. Flags are canonical; env vars are accepted as a
+fallback, but the tool will warn when it uses them.
 
 - `--route-focus`
 - `--triage-focus`
@@ -1952,6 +1953,8 @@ usage() {
   echo "  --triage-focus <TEXT> \\" >&2
   echo "  --script-ids <TEXT> \\" >&2
   echo "  --contract-changes <TEXT>" >&2
+  echo "" >&2
+  echo "fallback (discouraged): set env vars ROUTE_FOCUS, TRIAGE_FOCUS, SCRIPT_IDS, CONTRACT_CHANGES" >&2
 }
 
 route_focus=""
@@ -1971,6 +1974,26 @@ while [[ $# -gt 0 ]]; do
     *) echo "unexpected arg: ${1}" >&2; usage; exit 1 ;;
   esac
 done
+
+if [[ -z "${route_focus}" && -n "${ROUTE_FOCUS:-}" ]]; then
+  route_focus="${ROUTE_FOCUS}"
+  echo "warning: using ROUTE_FOCUS env var; prefer --route-focus" >&2
+fi
+
+if [[ -z "${triage_focus}" && -n "${TRIAGE_FOCUS:-}" ]]; then
+  triage_focus="${TRIAGE_FOCUS}"
+  echo "warning: using TRIAGE_FOCUS env var; prefer --triage-focus" >&2
+fi
+
+if [[ -z "${script_ids}" && -n "${SCRIPT_IDS:-}" ]]; then
+  script_ids="${SCRIPT_IDS}"
+  echo "warning: using SCRIPT_IDS env var; prefer --script-ids" >&2
+fi
+
+if [[ -z "${contract_changes}" && -n "${CONTRACT_CHANGES:-}" ]]; then
+  contract_changes="${CONTRACT_CHANGES}"
+  echo "warning: using CONTRACT_CHANGES env var; prefer --contract-changes" >&2
+fi
 
 if [[ -z "${route_focus}" || -z "${triage_focus}" || -z "${script_ids}" || -z "${contract_changes}" ]]; then
   echo "missing required header fields" >&2
@@ -2032,6 +2055,170 @@ Paste the entire output. No separate Step 10 header is required anymore,
 because the tool refuses to run without it.
 
 ### Step 22
+
+>one command, one delta
+
+Promotion and demotion are now part of your *operational* contract: they change
+what is behind strict, and they change what “trusted” means.
+
+So treat them like the rest of this runbook: make them one-command moves that
+immediately run the trusted strict publish gate.
+
+#### 1) Add `tools/promote` (frontier → trusted + strict gate)
+
+Create `tools/promote`:
+
+```bash
+cat > tools/promote <<'EOF'
+#!/bin/bash
+set -euo pipefail
+
+usage() {
+  echo "usage: tools/promote --id <SCRIPT_ID>" >&2
+}
+
+id=""
+
+while [[ $# -gt 0 ]]; do
+  case "${1}" in
+    --id) id="${2:?missing value for --id}"; shift 2 ;;
+    -h|--help) usage; exit 0 ;;
+    --) shift; break ;;
+    -*) echo "unknown flag: ${1}" >&2; usage; exit 1 ;;
+    *) echo "unexpected arg: ${1}" >&2; usage; exit 1 ;;
+  esac
+done
+
+if [[ -z "${id}" ]]; then
+  usage
+  exit 1
+fi
+
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+root_dir="$(cd "${script_dir}/.." && pwd)"
+
+frontier_dir="${root_dir}/frontier"
+trusted_dir="${root_dir}/trusted"
+
+src_sh="${frontier_dir}/${id}.sh"
+src_legacy="${frontier_dir}/${id}.legacy"
+dst_sh="${trusted_dir}/${id}.sh"
+dst_legacy="${trusted_dir}/${id}.legacy"
+
+if [[ ! -f "${src_sh}" ]]; then
+  echo "missing ${src_sh}" >&2
+  exit 1
+fi
+
+if [[ ! -f "${src_legacy}" ]]; then
+  echo "missing ${src_legacy}" >&2
+  exit 1
+fi
+
+if [[ -e "${dst_sh}" || -e "${dst_legacy}" ]]; then
+  echo "destination already exists for id=${id}" >&2
+  exit 1
+fi
+
+mv "${src_sh}" "${dst_sh}"
+mv "${src_legacy}" "${dst_legacy}"
+
+if ! trusted_inv="$("${script_dir}/inventory" --root inventories/trusted --strict "${trusted_dir}")"; then
+  echo "strict failed after promotion; rolling back id=${id}" >&2
+  mv "${dst_sh}" "${src_sh}"
+  mv "${dst_legacy}" "${src_legacy}"
+  exit 1
+fi
+
+echo "== trusted (after promote id=${id}) =="
+echo "inventory_dir: ${trusted_inv}"
+"${script_dir}/report" "${trusted_inv}"
+EOF
+chmod +x tools/promote
+```
+
+Now a promotion is one command, and it either succeeds under strict or rolls
+back:
+
+```bash
+tools/promote --id foo
+```
+
+#### 2) Add `tools/demote` (trusted → frontier + strict gate)
+
+Create `tools/demote`:
+
+```bash
+cat > tools/demote <<'EOF'
+#!/bin/bash
+set -euo pipefail
+
+usage() {
+  echo "usage: tools/demote --id <SCRIPT_ID>" >&2
+}
+
+id=""
+
+while [[ $# -gt 0 ]]; do
+  case "${1}" in
+    --id) id="${2:?missing value for --id}"; shift 2 ;;
+    -h|--help) usage; exit 0 ;;
+    --) shift; break ;;
+    -*) echo "unknown flag: ${1}" >&2; usage; exit 1 ;;
+    *) echo "unexpected arg: ${1}" >&2; usage; exit 1 ;;
+  esac
+done
+
+if [[ -z "${id}" ]]; then
+  usage
+  exit 1
+fi
+
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+root_dir="$(cd "${script_dir}/.." && pwd)"
+
+frontier_dir="${root_dir}/frontier"
+trusted_dir="${root_dir}/trusted"
+
+src_sh="${trusted_dir}/${id}.sh"
+src_legacy="${trusted_dir}/${id}.legacy"
+dst_sh="${frontier_dir}/${id}.sh"
+dst_legacy="${frontier_dir}/${id}.legacy"
+
+if [[ ! -f "${src_sh}" ]]; then
+  echo "missing ${src_sh}" >&2
+  exit 1
+fi
+
+if [[ ! -f "${src_legacy}" ]]; then
+  echo "missing ${src_legacy}" >&2
+  exit 1
+fi
+
+if [[ -e "${dst_sh}" || -e "${dst_legacy}" ]]; then
+  echo "destination already exists for id=${id}" >&2
+  exit 1
+fi
+
+mv "${src_sh}" "${dst_sh}"
+mv "${src_legacy}" "${dst_legacy}"
+trusted_inv="$("${script_dir}/inventory" --root inventories/trusted --strict "${trusted_dir}")"
+
+echo "== trusted (after demote id=${id}) =="
+echo "inventory_dir: ${trusted_inv}"
+"${script_dir}/report" "${trusted_inv}"
+EOF
+chmod +x tools/demote
+```
+
+Now demotion is also one command (and it immediately publishes a strict snapshot
+if trusted is green):
+
+```bash
+tools/demote --id foo
+```
+
+### Step 23
 
 >TODO:PITH
 
