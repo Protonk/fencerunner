@@ -2,6 +2,66 @@
 
 >urgency is a gradient
 
+>There once was a dyad on call,
+>With scripts in a flat, messy sprawl.
+>They ran once for trace,
+>To find each one’s place,
+>And promised not to judge it all.
+>
+>A runner went sniffing the dir,
+>While stderr made everyone peer.
+>“Don’t panic,” they said,
+>“Just capture instead—
+>One record per script is the gear.”
+>
+>A boundary came strict as a gate,
+>But supervised softened its weight.
+>If JSON went wild,
+>The harness just smiled,
+>And stamped “synthetic” as fate.
+>
+>Two dials and a third in the mix
+>Made chaos feel oddly like tricks:
+>Commitments for speech,
+>Boundaries to teach,
+>And gates to stop noisy old ticks.
+>
+>They wrapped up a script named “foo,”
+>Whose stdout was nothing like true.
+>They moved it aside,
+>Let wrapper preside,
+>And gave it one record to do.
+>
+>A flare saw “permission denied,”
+>So outcome turned “denied” with pride.
+>“Try sudo,” it wrote,
+>In recommend note,
+>And routed the next step with guide.
+>
+>Another yelled “tool not found!”
+>So dependencies rose from the ground.
+>A commitment was made,
+>A small label laid,
+>And installs became work that was crowned.
+>
+>They measured by deltas, not vibe,
+>In inventories filed by tribe.
+>If synthetic fell,
+>They rang a small bell,
+>And kept every snapshot alive.
+>
+>Two islands emerged from the sea:
+>A trusted strict-green guarantee,
+>And frontier that’s loud,
+>Yet gives records unbowed,
+>So risk stayed where risk should be.
+>
+>At turn’s end intent was a file,
+>Not chat that you scroll for a while.
+>One command, one paste,
+>No partials to waste—
+>And triage grew bored with the style.
+
 Triage is the process of quickly prioritizing a set of problems by severity and urgency to decide what to handle first, what can wait, and what needs escalation or a different response. It is necessary when there are more issues than can be addressed immediately, issues differ in priority, and delaying the wrong ones carries outsized cost or risk. The above is only possible when problems can be prioritized along a shared axis with criteria stable enough to satisfice. Problems indexed by severity and urgency grow harder as they become more pressing. Triage is needed the most when it is almost impossible.
 
 This example demonstrates how to use `fencerunner` as a tool for continuous triage, starting from when it is most needed.
