@@ -2226,8 +2226,11 @@ You now have the mechanics to *maintain* `trusted/` (strict publish gate) and to
 *move* scripts (`tools/promote` / `tools/demote`). What you still need is the
 default motion that grows the strict island without a committee meeting.
 
-The rule is: promote because the frontier inventory says the script is boring,
-not because you like it.
+The posture is: **trusted growth is the default outcome of the process**, not a
+social decision.
+
+So: promote because the frontier inventory makes it obvious, not because you
+“feel done” with a script.
 
 #### 1) Define “boring enough to promote” as a filter over `key.tsv`
 
@@ -2250,6 +2253,10 @@ awk -F $'\t' '
 
 This is a promotion candidate list: `id`, `routes`, `outcome`, and `risk_score`
 (still advisory).
+
+Default rule: if the frontier snapshot yields candidates, promoting one is the
+next “boring” move. If you choose not to promote, make that choice explicit in
+your intent header (why the strict island shouldn’t grow this turn).
 
 #### 2) Make candidates show up in the frontier report (optional, but reduces friction)
 
@@ -2282,7 +2289,8 @@ Run:
 tools/promote --id foo
 ```
 
-Then run your normal end-of-turn command with intent that names the promotion:
+Then run your normal end-of-turn command with intent that names the promotion
+and publishes *both* inventories:
 
 ```bash
 tools/turn \
@@ -2292,7 +2300,10 @@ tools/turn \
   --contract-changes "promoted foo (frontier -> trusted)"
 ```
 
-Thanks to Step 19, the two reports will now show this mechanically:
+The counting rule is simple: **if the promotion doesn’t show up as deltas in the
+two reports, it doesn’t count**.
+
+Thanks to Step 19, the two reports will show this mechanically:
 
 - trusted: `added ids: foo`
 - frontier: `removed ids: foo`
@@ -2317,6 +2328,70 @@ Then run `tools/turn` with a header that names the demotion. The island stays
 green; the frontier regains the uncertainty.
 
 ### Step 24
+
+>touch more scripts
+
+If this is starting to feel like ceremony, treat the *process* as the thing
+that needs triage.
+
+The scaffolding above exists for one reason: to let you touch more unknown
+scripts safely **today**, not to produce prettier receipts tomorrow.
+
+So do the ruthless loop.
+
+#### 1) Pick a small batch from the frontier triage view
+
+Run `tools/turn` (with whatever intent header is true) and copy the printed
+frontier `inventory_dir` into a variable:
+
+```bash
+frontier_inv="inventories/frontier/0007" # from tools/turn output
+```
+
+Now pick the next few unknowns from the top of the triage order:
+
+```bash
+sort -t $'\t' -k1,1nr -k2,2nr -k3,3 -k4,4 "${frontier_inv}/triage.tsv" \
+  | head -n 5 \
+  | column -t -s $'\t'
+```
+
+Choose 2–3 `script.id` values from that list (don’t overthink it). The goal is
+to move uncertainty, not to perfectly prioritize.
+
+#### 2) Wrap first, flare second (two flares max)
+
+For each chosen id:
+
+1. If it is still `synthetic`, wrap it (Step 5): make it emit exactly one
+   record with captured stdout/stderr.
+2. Add **at most two** flares (Step 6), only when evidence is strong. Keep the
+   first flares painfully boring:
+   - permission barrier → `outcome=denied`, `recommend.rerun_sudo`
+   - missing tool/runtime → `recommend.install_dependency`
+   - interactive prompt markers → `recommend.run_interactively`
+   - otherwise → `recommend.needs_human_read` (honest default)
+
+If you are tempted to add new commitment ids to explain nuance, don’t. Route it
+to `recommend.needs_human_read` and move on.
+
+#### 3) Re-run and move on (don’t polish)
+
+End the turn by running `tools/turn` again and pasting the full output. Your
+only question is: did any of the ids you touched show up as deltas (Step 12/19)
+in the two reports?
+
+A good turn is one where at least one of these becomes true:
+
+- `synthetic -> emitted`
+- `uncertain=1 -> 0`
+- `recommend.needs_human_read -> recommend.*`
+
+If none of those happen, triage the process: you are spending attention
+somewhere that is not reducing evaluation uncertainty. Cut the overhead and
+touch the next scripts anyway.
+
+### Step 25
 
 >TODO:PITH
 
