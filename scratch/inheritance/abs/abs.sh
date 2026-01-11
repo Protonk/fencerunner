@@ -1,13 +1,31 @@
-#!/usr/bin/env bash
+#!/bin/bash
+set -euo pipefail
 
-#
-# Calculate the absolute value of a given number
-#
-function abs()
-{
-    (( $1 < 0 )) && echo "$(( $1 * -1 ))" || echo "$1"
-}
+source "${FENCERUNNER_ROOT}/lib/library.sh"
+script_id="$(basename "${BASH_SOURCE[0]}" .sh)"
 
-abs 1
-abs 0
-abs -1
+stdout_file="$(mktemp -t "${script_id}.stdout")"
+stderr_file="$(mktemp -t "${script_id}.stderr")"
+
+set +e
+bash "./${script_id}.legacy" >"${stdout_file}" 2>"${stderr_file}"
+exit_code="$?"
+set -e
+
+outcome="success"
+if [[ "${exit_code}" -ne 0 ]]; then
+  outcome="error"
+fi
+
+commit_help_me ensure policy.read_only
+commit_help_me emit emit.record
+
+emit-record \
+  --script-name "${script_id}" \
+  --command "bash ./${script_id}.legacy" \
+  --operation-kind "legacy.exec" \
+  --target "./${script_id}.legacy" \
+  --outcome "${outcome}" \
+  --exit-code "${exit_code}" \
+  --payload-stdout-file "${stdout_file}" \
+  --payload-stderr-file "${stderr_file}"

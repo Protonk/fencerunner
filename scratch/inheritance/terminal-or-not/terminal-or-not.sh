@@ -1,69 +1,31 @@
-#!/usr/bin/env bash
+#!/bin/bash
+set -euo pipefail
 
-# -------------------------------------------------------------------------------- #
-# Description                                                                      #
-# -------------------------------------------------------------------------------- #
-# This is a script to check if your script attached to in a terminal or not.       #
-# -------------------------------------------------------------------------------- #
+source "${FENCERUNNER_ROOT}/lib/library.sh"
+script_id="$(basename "${BASH_SOURCE[0]}" .sh)"
 
-# -------------------------------------------------------------------------------- #
-# in_terminal                                                                      #
-# -------------------------------------------------------------------------------- #
-# Returns true if we are attached to a terminal or false if not.                   #
-# -------------------------------------------------------------------------------- #
+stdout_file="$(mktemp -t "${script_id}.stdout")"
+stderr_file="$(mktemp -t "${script_id}.stderr")"
 
-function in_terminal()
-{
-    [[ -t 1 ]] && return 0 || return 1;
-}
+set +e
+bash "./${script_id}.legacy" >"${stdout_file}" 2>"${stderr_file}"
+exit_code="$?"
+set -e
 
-# -------------------------------------------------------------------------------- #
-# in_pipe                                                                          #
-# -------------------------------------------------------------------------------- #
-# Returns true if we are attached to a pipe or false if not.                       #
-# -------------------------------------------------------------------------------- #
+outcome="success"
+if [[ "${exit_code}" -ne 0 ]]; then
+  outcome="error"
+fi
 
-function in_pipe()
-{
-    [[ -p /dev/stdout ]] && return 0 || return 1;
-}
+commit_help_me ensure policy.read_only
+commit_help_me emit emit.record
 
-# -------------------------------------------------------------------------------- #
-# in_redirection                                                                   #
-# -------------------------------------------------------------------------------- #
-# Returns true if we are attached to a redirection or false if not.                #
-# -------------------------------------------------------------------------------- #
-
-function in_redirection()
-{
-    [[ ! -t 1 && ! -p /dev/stdout ]] && return 0 || return 1;
-}
-
-# -------------------------------------------------------------------------------- #
-# Run Tests                                                                        #
-# -------------------------------------------------------------------------------- #
-# A VERY simple test function to ensure that it all works                          #
-# -------------------------------------------------------------------------------- #
-
-function run_test()
-{
-    in_terminal && echo 'STDOUT is attached to TTY'
-
-    in_pipe && echo 'STDOUT is attached to a pipe'
-
-    in_redirection && echo 'STDOUT is attached to a redirection'
-}
-
-# -------------------------------------------------------------------------------- #
-# Main()                                                                           #
-# -------------------------------------------------------------------------------- #
-# This is the actual 'script' and the functions/sub routines are called in order.  #
-# -------------------------------------------------------------------------------- #
-
-run_test
-
-# -------------------------------------------------------------------------------- #
-# End of Script                                                                    #
-# -------------------------------------------------------------------------------- #
-# This is the end - nothing more to see here.                                      #
-# -------------------------------------------------------------------------------- #
+emit-record \
+  --script-name "${script_id}" \
+  --command "bash ./${script_id}.legacy" \
+  --operation-kind "legacy.exec" \
+  --target "./${script_id}.legacy" \
+  --outcome "${outcome}" \
+  --exit-code "${exit_code}" \
+  --payload-stdout-file "${stdout_file}" \
+  --payload-stderr-file "${stderr_file}"

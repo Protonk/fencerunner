@@ -1,0 +1,3 @@
+fencerunner: supervised: running 1 script(s) across 1 run dir(s)
+fencerunner: [1/1] rollingback
+fencerunner: script rollingback -> success

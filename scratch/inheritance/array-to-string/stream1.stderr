@@ -1,0 +1,10 @@
+fencerunner: supervised: running 1 script(s) across 1 run dir(s)
+fencerunner: [1/1] array-to-string
+fencerunner: script array-to-string stderr:
+/Users/achyland/Desktop/fencerunner/scratch/inheritance/array-to-string/array-to-string.sh: line 19: local: -n: invalid option
+local: usage: local name[=value] ...
+/Users/achyland/Desktop/fencerunner/scratch/inheritance/array-to-string/array-to-string.sh: line 19: local: -n: invalid option
+local: usage: local name[=value] ...
+/Users/achyland/Desktop/fencerunner/scratch/inheritance/array-to-string/array-to-string.sh: line 19: local: -n: invalid option
+local: usage: local name[=value] ...
+fencerunner: script array-to-string -> synthetic(error)

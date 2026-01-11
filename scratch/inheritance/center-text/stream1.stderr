@@ -1,0 +1,6 @@
+fencerunner: supervised: running 1 script(s) across 1 run dir(s)
+fencerunner: [1/1] center-text
+fencerunner: script center-text stderr:
+/Users/achyland/Desktop/fencerunner/scratch/inheritance/center-text/center-text.sh: line 34: declare: -g: invalid option
+declare: usage: declare [-afFirtx] [-p] [name[=value] ...]
+fencerunner: script center-text -> synthetic(error)

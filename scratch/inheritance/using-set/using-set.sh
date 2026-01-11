@@ -1,48 +1,31 @@
-#!/usr/bin/env bash
+#!/bin/bash
+set -euo pipefail
 
-# -------------------------------------------------------------------------------- #
-# Description                                                                      #
-# -------------------------------------------------------------------------------- #
-# This is a list of 'set' options and details of their specific usage.             #
-# -------------------------------------------------------------------------------- #
+source "${FENCERUNNER_ROOT}/lib/library.sh"
+script_id="$(basename "${BASH_SOURCE[0]}" .sh)"
 
-# -------------------------------------------------------------------------------- #
-# Errexit                                                                          #
-# -------------------------------------------------------------------------------- #
-# Exit on error. Append "|| true" if you expect an error                           #
-# -------------------------------------------------------------------------------- #
-set -o errexit
+stdout_file="$(mktemp -t "${script_id}.stdout")"
+stderr_file="$(mktemp -t "${script_id}.stderr")"
 
-# -------------------------------------------------------------------------------- #
-# Errtrace                                                                         #
-# -------------------------------------------------------------------------------- #
-# Exit on error inside any functions or subshells                                  #
-# -------------------------------------------------------------------------------- #
-set -o errtrace
+set +e
+bash "./${script_id}.legacy" >"${stdout_file}" 2>"${stderr_file}"
+exit_code="$?"
+set -e
 
-# -------------------------------------------------------------------------------- #
-# Nounset                                                                          #
-# -------------------------------------------------------------------------------- #
-# Do not allow use of undefined vars. Use ${VAR:-} to use an undefined VAR         #
-# -------------------------------------------------------------------------------- #
-set -o nounset
+outcome="success"
+if [[ "${exit_code}" -ne 0 ]]; then
+  outcome="error"
+fi
 
-# -------------------------------------------------------------------------------- #
-# Pipefail                                                                         #
-# -------------------------------------------------------------------------------- #
-# Catch the error in case mysqldump fails (but gzip succeeds) in `mysqldump |gzip` #
-# -------------------------------------------------------------------------------- #
-set -o pipefail
+commit_help_me ensure policy.read_only
+commit_help_me emit emit.record
 
-# -------------------------------------------------------------------------------- #
-# Xtrace                                                                           #
-# -------------------------------------------------------------------------------- #
-# Turn on traces, useful while debugging but commented out by default              #
-# -------------------------------------------------------------------------------- #
-set -o xtrace
-
-# -------------------------------------------------------------------------------- #
-# End of Script                                                                    #
-# -------------------------------------------------------------------------------- #
-# This is the end - nothing more to see here.                                      #
-# -------------------------------------------------------------------------------- #
+emit-record \
+  --script-name "${script_id}" \
+  --command "bash ./${script_id}.legacy" \
+  --operation-kind "legacy.exec" \
+  --target "./${script_id}.legacy" \
+  --outcome "${outcome}" \
+  --exit-code "${exit_code}" \
+  --payload-stdout-file "${stdout_file}" \
+  --payload-stderr-file "${stderr_file}"

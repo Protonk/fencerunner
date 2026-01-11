@@ -1,0 +1,1 @@
+{"context":{"commitments":[{"helps":["emit"],"id":"emit.record"},{"helps":["ensure"],"id":"policy.read_only"}],"run":{"command":"bash ./abs.legacy"}},"operation":{"kind":"legacy.exec","target":"./abs.legacy"},"payload":{"raw":{},"stderr_snippet":"","stdout_snippet":"1\n0\n1\n"},"result":{"details":{"exit_code":0},"outcome":"success"},"script":{"id":"abs"}}

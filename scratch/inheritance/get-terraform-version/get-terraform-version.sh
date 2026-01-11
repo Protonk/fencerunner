@@ -1,62 +1,31 @@
-#!/usr/bin/env bash
+#!/bin/bash
+set -euo pipefail
 
-# -------------------------------------------------------------------------------- #
-# Description                                                                      #
-# -------------------------------------------------------------------------------- #
-# A simple script to show how to programatically get the terraform version.        #
-# -------------------------------------------------------------------------------- #
+source "${FENCERUNNER_ROOT}/lib/library.sh"
+script_id="$(basename "${BASH_SOURCE[0]}" .sh)"
 
-# -------------------------------------------------------------------------------- #
-# Get Terraform Version                                                            #
-# -------------------------------------------------------------------------------- #
-# Programatically get the terraform version.                                       #
-# -------------------------------------------------------------------------------- #
+stdout_file="$(mktemp -t "${script_id}.stdout")"
+stderr_file="$(mktemp -t "${script_id}.stderr")"
 
-function get_terraform_version()
-{
-    local terraform_version
+set +e
+bash "./${script_id}.legacy" >"${stdout_file}" 2>"${stderr_file}"
+exit_code="$?"
+set -e
 
-    command=$(command -v "terraform")
-    if [[ -z $command ]]; then
-        echo "Terraform is not installed - Aborting"
-        exit
-    fi
+outcome="success"
+if [[ "${exit_code}" -ne 0 ]]; then
+  outcome="error"
+fi
 
-    terraform_version=$(terraform --version | head -n 1)
-    terraform_version=${terraform_version##* }                  # retain the part after the last space
-    terraform_version=${terraform_version#?}                    # strip the first letter
+commit_help_me ensure policy.read_only
+commit_help_me emit emit.record
 
-    if [[ -z ${terraform_version} ]]; then
-        echo "Could not determine terraform version - Aborting"
-        exit
-    fi
-
-    echo "${terraform_version}"
-}
-
-# -------------------------------------------------------------------------------- #
-# Run Tests                                                                        #
-# -------------------------------------------------------------------------------- #
-# A VERY simple test function to ensure that it all works                          #
-# -------------------------------------------------------------------------------- #
-
-function run_tests()
-{
-    tf_version=$(get_terraform_version)
-    echo "${tf_version}"
-}
-
-# -------------------------------------------------------------------------------- #
-# Main()                                                                           #
-# -------------------------------------------------------------------------------- #
-# This is the actual 'script' and the functions/sub routines are called in order.  #
-# -------------------------------------------------------------------------------- #
-
-run_tests
-
-# -------------------------------------------------------------------------------- #
-# End of Script                                                                    #
-# -------------------------------------------------------------------------------- #
-# This is the end - nothing more to see here.                                      #
-# -------------------------------------------------------------------------------- #
-
+emit-record \
+  --script-name "${script_id}" \
+  --command "bash ./${script_id}.legacy" \
+  --operation-kind "legacy.exec" \
+  --target "./${script_id}.legacy" \
+  --outcome "${outcome}" \
+  --exit-code "${exit_code}" \
+  --payload-stdout-file "${stdout_file}" \
+  --payload-stderr-file "${stderr_file}"

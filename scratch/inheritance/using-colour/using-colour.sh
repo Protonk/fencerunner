@@ -1,72 +1,31 @@
-#!/usr/bin/env bash
+#!/bin/bash
+set -euo pipefail
 
-# -------------------------------------------------------------------------------- #
-# Description                                                                      #
-# -------------------------------------------------------------------------------- #
-# This is a demonstration on how to use colours.                                   #
-#                                                                                  #
-# NOTE: This is a truncated example and a full working solution is avaiable at     #
-# https://github.com/WolfSoftware/bash-colour-include.                             #
-# -------------------------------------------------------------------------------- #
+source "${FENCERUNNER_ROOT}/lib/library.sh"
+script_id="$(basename "${BASH_SOURCE[0]}" .sh)"
 
-function set_colours()
-{
-    # Foreground Colours
-    fgRed=''
-    fgYellow=''
+stdout_file="$(mktemp -t "${script_id}.stdout")"
+stderr_file="$(mktemp -t "${script_id}.stderr")"
 
-    # Background Colours
-    bgBlack=''
-    bgWhite=''
+set +e
+bash "./${script_id}.legacy" >"${stdout_file}" 2>"${stderr_file}"
+exit_code="$?"
+set -e
 
-    # Misc Features
-    reset=''
+outcome="success"
+if [[ "${exit_code}" -ne 0 ]]; then
+  outcome="error"
+fi
 
-    # Test to see if the terminal has colour support and if so set the variables to
-    # the corresponding control codes.
-    if test -t 1; then
+commit_help_me ensure policy.read_only
+commit_help_me emit emit.record
 
-        # see if it supports colors...
-       ncolors=$(tput colors)
-
-        if test -n "${ncolors}" && test "${ncolors}" -ge 8; then
-            fgRed=$(tput setaf 1)
-            fgYellow=$(tput setaf 3)
-
-            bgBlack=$(tput setab 0)
-            bgWhite=$(tput setab 7)
-
-            reset=$(tput sgr0)
-        fi
-    fi
-
-}
-
-# -------------------------------------------------------------------------------- #
-# Run Tests                                                                        #
-# -------------------------------------------------------------------------------- #
-# A VERY simple test function to ensure that it all works                          #
-# -------------------------------------------------------------------------------- #
-
-function run_tests()
-{
-    set_colours
-
-    echo "${bgBlack}${fgRed}This should be red text${reset}"
-    echo "${bgBlack}${fgYellow}This should be yellow text${reset}"
-    echo "${bgWhite}${fgRed}This should be red on a white background${reset}"
-}
-
-# -------------------------------------------------------------------------------- #
-# Main()                                                                           #
-# -------------------------------------------------------------------------------- #
-# This is the actual 'script' and the functions/sub routines are called in order.  #
-# -------------------------------------------------------------------------------- #
-
-run_tests
-
-# -------------------------------------------------------------------------------- #
-# End of Script                                                                    #
-# -------------------------------------------------------------------------------- #
-# This is the end - nothing more to see here.                                      #
-# -------------------------------------------------------------------------------- #
+emit-record \
+  --script-name "${script_id}" \
+  --command "bash ./${script_id}.legacy" \
+  --operation-kind "legacy.exec" \
+  --target "./${script_id}.legacy" \
+  --outcome "${outcome}" \
+  --exit-code "${exit_code}" \
+  --payload-stdout-file "${stdout_file}" \
+  --payload-stderr-file "${stderr_file}"

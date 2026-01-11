@@ -1,72 +1,30 @@
-#!/usr/bin/env bash
+#!/bin/bash
+set -euo pipefail
 
-# -------------------------------------------------------------------------------- #
-# Description                                                                      #
-# -------------------------------------------------------------------------------- #
-# This is a simple script to request confirmation from a user.                     #
-# -------------------------------------------------------------------------------- #
+source "${FENCERUNNER_ROOT}/lib/library.sh"
+script_id="$(basename "${BASH_SOURCE[0]}" .sh)"
+legacy="./${script_id}.legacy"
 
-# -------------------------------------------------------------------------------- #
-# Get Confirmation                                                                 #
-# -------------------------------------------------------------------------------- #
-# A simple function which prompts the user for a yes/no response.                  #
-#                                                                                  #
-# A default prompt is used if one is not supplied, and the function will loop      #
-# until a valid response is given.                                                 #
-# -------------------------------------------------------------------------------- #
+stdout_file="$(mktemp -t "${script_id}.stdout")"
+stderr_file="$(mktemp -t "${script_id}.stderr")"
 
-function get_confirmation()
-{
-    local valid_response=false
-    local return_value=0
+# fencerunner runs scripts with stdin=/dev/null, which makes legacy interactive
+# loops hang forever. Treat this script as quarantined unless explicitly handled
+# outside fencerunner.
+msg="quarantined: legacy not executed (interactive; fencerunner stdin is /dev/null)"
+printf '%s\n' "${msg}" >"${stderr_file}"
 
-    while [[ "$valid_response" = false ]]
-    do
-        read -r -p "${1:-Are you sure? [y/N]} " response
-        case $response in
-            [yY][eE][sS]|[yY])
-                valid_response=true
-                return_value=1
-                ;;
-            [nN][oO]|[nN])
-                valid_response=true
-                return_value=0
-                ;;
-            *)
-                ;;
-        esac
-    done
-    echo $return_value
-}
+commit_help_me ensure policy.read_only
+commit_help_me emit emit.record
 
-# -------------------------------------------------------------------------------- #
-# Test                                                                             #
-# -------------------------------------------------------------------------------- #
-# A VERY simple test function to ensure that it all works                          #
-# -------------------------------------------------------------------------------- #
-
-function run_tests()
-{
-    response=0
-
-    while [[ $response == 0 ]]
-    do
-        response=$(get_confirmation "Do you want to exit? [y/N]")
-    done
-}
-
-# -------------------------------------------------------------------------------- #
-# Main()                                                                           #
-# -------------------------------------------------------------------------------- #
-# This is the actual 'script' and the functions/sub routines are called in order.  #
-# -------------------------------------------------------------------------------- #
-
-run_tests
-
-
-# -------------------------------------------------------------------------------- #
-# End of Script                                                                    #
-# -------------------------------------------------------------------------------- #
-# This is the end - nothing more to see here.                                      #
-# -------------------------------------------------------------------------------- #
-
+emit-record \
+  --script-name "${script_id}" \
+  --command "bash ${legacy}" \
+  --operation-kind "legacy.quarantined" \
+  --operation-arg-json "quarantined" "true" \
+  --target "${legacy}" \
+  --outcome partial \
+  --exit-code 0 \
+  --message "${msg}" \
+  --payload-stdout-file "${stdout_file}" \
+  --payload-stderr-file "${stderr_file}"

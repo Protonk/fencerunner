@@ -1,0 +1,8 @@
+fencerunner: supervised: running 1 script(s) across 1 run dir(s)
+fencerunner: [1/1] array-contains
+fencerunner: script array-contains stderr:
+/Users/achyland/Desktop/fencerunner/scratch/inheritance/array-contains/array-contains.sh: line 19: local: -n: invalid option
+local: usage: local name[=value] ...
+/Users/achyland/Desktop/fencerunner/scratch/inheritance/array-contains/array-contains.sh: line 19: local: -n: invalid option
+local: usage: local name[=value] ...
+fencerunner: script array-contains -> synthetic(error)

@@ -1,76 +1,31 @@
-#!/usr/bin/env bash
+#!/bin/bash
+set -euo pipefail
 
-# -------------------------------------------------------------------------------- #
-# Description                                                                      #
-# -------------------------------------------------------------------------------- #
-# This is a simple script to display some text in the center of the screen.        #
-# -------------------------------------------------------------------------------- #
+source "${FENCERUNNER_ROOT}/lib/library.sh"
+script_id="$(basename "${BASH_SOURCE[0]}" .sh)"
 
-VERBOSE=false
+stdout_file="$(mktemp -t "${script_id}.stdout")"
+stderr_file="$(mktemp -t "${script_id}.stderr")"
 
-# -------------------------------------------------------------------------------- #
-# Set Verbose Mode                                                                 #
-# -------------------------------------------------------------------------------- #
-# This is a simple function that will enable verbose mode based on a global        #
-# variable. It does this by cloning stdout and stderr and then redirecting the     #
-# original file descriptors to /dev/null.                                          #
-# -------------------------------------------------------------------------------- #
+set +e
+bash "./${script_id}.legacy" >"${stdout_file}" 2>"${stderr_file}"
+exit_code="$?"
+set -e
 
-function set_verbose_mode()
-{
-    exec 3>&1
-    exec 4>&2
+outcome="success"
+if [[ "${exit_code}" -ne 0 ]]; then
+  outcome="error"
+fi
 
-    if [[ "${VERBOSE}" = true ]]; then
-        echo "Verbose output enabled"
-    else
-        exec 1>/dev/null
-        exec 2>/dev/null
-    fi
-}
+commit_help_me ensure policy.read_only
+commit_help_me emit emit.record
 
-# -------------------------------------------------------------------------------- #
-# Output Wrapper                                                                   #
-# -------------------------------------------------------------------------------- #
-# A wrapper to use instead of echo which will handle the forcing of messages to be #
-# displayed even when verbose mode is off.                                         #
-# -------------------------------------------------------------------------------- #
-
-function output()
-{
-    if [[ -n $1 ]]; then
-        if [[ -n $2 ]] && [[ "${2}" = forced ]]; then
-            echo "$1" 1>&3 2>&4
-        else
-            echo "$1"
-        fi
-    fi
-}
-
-# -------------------------------------------------------------------------------- #
-# Run the Tests                                                                    #
-# -------------------------------------------------------------------------------- #
-# -------------------------------------------------------------------------------- #
-
-function run_tests()
-{
-    set_verbose_mode
-
-    output "I won't be visible when verbose=false"
-    output "I will be visible no matter what" forced
-}
-
-# -------------------------------------------------------------------------------- #
-# Main()                                                                           #
-# -------------------------------------------------------------------------------- #
-# This is the actual 'script' and the functions/sub routines are called in order.  #
-# -------------------------------------------------------------------------------- #
-
-run_tests
-
-# -------------------------------------------------------------------------------- #
-# End of Script                                                                    #
-# -------------------------------------------------------------------------------- #
-# This is the end - nothing more to see here.                                      #
-# -------------------------------------------------------------------------------- #
-
+emit-record \
+  --script-name "${script_id}" \
+  --command "bash ./${script_id}.legacy" \
+  --operation-kind "legacy.exec" \
+  --target "./${script_id}.legacy" \
+  --outcome "${outcome}" \
+  --exit-code "${exit_code}" \
+  --payload-stdout-file "${stdout_file}" \
+  --payload-stderr-file "${stderr_file}"

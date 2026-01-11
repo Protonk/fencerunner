@@ -1,0 +1,5 @@
+fencerunner: supervised: running 2 script(s) across 1 run dir(s)
+fencerunner: [1/2] test
+fencerunner: script test -> synthetic(error)
+fencerunner: [2/2] variable-replace
+fencerunner: script variable-replace -> error

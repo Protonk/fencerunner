@@ -1,53 +1,31 @@
-#!/usr/bin/env bash
+#!/bin/bash
+set -euo pipefail
 
-# -------------------------------------------------------------------------------- #
-# Description                                                                      #
-# -------------------------------------------------------------------------------- #
-# This is a simple script to generate a stack trace.                               #
-# -------------------------------------------------------------------------------- #
-# shellcheck disable=2120
+source "${FENCERUNNER_ROOT}/lib/library.sh"
+script_id="$(basename "${BASH_SOURCE[0]}" .sh)"
 
-function stacktrace
-{
-    local start_from=${1:-0}
-    local i=0
+stdout_file="$(mktemp -t "${script_id}.stdout")"
+stderr_file="$(mktemp -t "${script_id}.stderr")"
 
-    while caller $i > /dev/null
-    do
-        if (( "$i" + 1 >= "${start_from}" )); then
-            caller $i
-        fi
-        ((i=i+1))
-    done
-}
+set +e
+bash "./${script_id}.legacy" >"${stdout_file}" 2>"${stderr_file}"
+exit_code="$?"
+set -e
 
-function test_wrapper()
-{
-    stacktrace
-}
+outcome="success"
+if [[ "${exit_code}" -ne 0 ]]; then
+  outcome="error"
+fi
 
-# -------------------------------------------------------------------------------- #
-# Run Tests                                                                        #
-# -------------------------------------------------------------------------------- #
-# A VERY simple test function to ensure that it all works                          #
-# -------------------------------------------------------------------------------- #
+commit_help_me ensure policy.read_only
+commit_help_me emit emit.record
 
-function run_test()
-{
-    test_wrapper
-}
-
-# -------------------------------------------------------------------------------- #
-# Main()                                                                           #
-# -------------------------------------------------------------------------------- #
-# This is the actual 'script' and the functions/sub routines are called in order.  #
-# -------------------------------------------------------------------------------- #
-
-run_test "$@"
-
-# -------------------------------------------------------------------------------- #
-# End of Script                                                                    #
-# -------------------------------------------------------------------------------- #
-# This is the end - nothing more to see here.                                      #
-# -------------------------------------------------------------------------------- #
-
+emit-record \
+  --script-name "${script_id}" \
+  --command "bash ./${script_id}.legacy" \
+  --operation-kind "legacy.exec" \
+  --target "./${script_id}.legacy" \
+  --outcome "${outcome}" \
+  --exit-code "${exit_code}" \
+  --payload-stdout-file "${stdout_file}" \
+  --payload-stderr-file "${stderr_file}"

@@ -1,132 +1,31 @@
-#!/usr/bin/env bash
+#!/bin/bash
+set -euo pipefail
 
-# -------------------------------------------------------------------------------- #
-# Description                                                                      #
-# -------------------------------------------------------------------------------- #
-# This is a simple script to demonstrate how rollbacks can be used.                #
-# -------------------------------------------------------------------------------- #
+source "${FENCERUNNER_ROOT}/lib/library.sh"
+script_id="$(basename "${BASH_SOURCE[0]}" .sh)"
 
-# -------------------------------------------------------------------------------- #
-# Global Variables                                                                 #
-# -------------------------------------------------------------------------------- #
-# This is an array that is used to store the rollback functions that need to run.  #
-# -------------------------------------------------------------------------------- #
+stdout_file="$(mktemp -t "${script_id}.stdout")"
+stderr_file="$(mktemp -t "${script_id}.stderr")"
 
-rollback_stack=( )
+set +e
+bash "./${script_id}.legacy" >"${stdout_file}" 2>"${stderr_file}"
+exit_code="$?"
+set -e
 
-# -------------------------------------------------------------------------------- #
-# ABC                                                                              #
-# -------------------------------------------------------------------------------- #
-# A dummy demo rollback function.                                                  #
-# -------------------------------------------------------------------------------- #
+outcome="success"
+if [[ "${exit_code}" -ne 0 ]]; then
+  outcome="error"
+fi
 
-function abc()
-{
-    echo "abc----$1";
-}
+commit_help_me ensure policy.read_only
+commit_help_me emit emit.record
 
-# -------------------------------------------------------------------------------- #
-# DEF                                                                              #
-# -------------------------------------------------------------------------------- #
-# A dummy demo rollback function.                                                  #
-# -------------------------------------------------------------------------------- #
-
-function def()
-{
-    echo "def----$1";
-}
-
-# -------------------------------------------------------------------------------- #
-# Add Rollback                                                                     #
-# -------------------------------------------------------------------------------- #
-# Add a rollback function to the stack.                                            #
-# -------------------------------------------------------------------------------- #
-
-function add_rollback()
-{
-    rollback_stack[${#rollback_stack[*]}]=$1;
-}
-
-# -------------------------------------------------------------------------------- #
-# Run Rollback                                                                     #
-# -------------------------------------------------------------------------------- #
-# Run all of the rollback function.                                                #
-#                                                                                  #
-# It is important to understand that rollbacks are run in the opposite order to    #
-# which they are added as the rollback is a 'stack' [aka a LIFO].                  #
-#                                                                                  #
-# It is 'important' to unset the traps before running the rollback otherwise       #
-# errors in the rollback code could trigger another rollback and a possible loop.  #
-# -------------------------------------------------------------------------------- #
-
-function run_rollbacks()
-{
-    unset_traps
-
-    printf '\nTrap Triggers - Running Rollbacks\n\n'
-
-    while [ ${#rollback_stack[@]} -ge 1 ]; do
-        ${rollback_stack[${#rollback_stack[@]}-1]} rollback
-        unset "rollback_stack[${#rollback_stack[@]}-1]"
-    done
-
-    exit
-}
-
-# -------------------------------------------------------------------------------- #
-# Set Traps                                                                        #
-# -------------------------------------------------------------------------------- #
-# We only want the rollbacks to run on error - so we set up traps to catch the     #
-# errors and handle the rollbacks.                                                 #
-# -------------------------------------------------------------------------------- #
-
-function set_traps()
-{
-    trap run_rollbacks INT TERM EXIT
-}
-
-# -------------------------------------------------------------------------------- #
-# Unset Traps                                                                      #
-# -------------------------------------------------------------------------------- #
-# Once everything has run cleanly we want to reset the traps, otherwise exiting    #
-# the script will cause the rollbacks to run undoing all the scripts good work.    #
-# -------------------------------------------------------------------------------- #
-
-function unset_traps()
-{
-    trap - INT TERM EXIT
-}
-
-# -------------------------------------------------------------------------------- #
-# Run Tests                                                                        #
-# -------------------------------------------------------------------------------- #
-# A VERY simple test function to ensure that it all works.                         #
-# -------------------------------------------------------------------------------- #
-
-function run_tests()
-{
-    set_traps
-
-    add_rollback abc
-    add_rollback def
-
-    printf '\nSleeping for the next 10 seconds - try hitting '\''control C'\'' to see the rollbacks in action\n\n'
-    sleep 10
-    printf '\nSleeping Over - Exiting cleanly\n\n'
-
-    unset_traps
-}
-
-# -------------------------------------------------------------------------------- #
-# Main()                                                                           #
-# -------------------------------------------------------------------------------- #
-# This is the actual 'script' and the functions/sub routines are called in order.  #
-# -------------------------------------------------------------------------------- #
-
-run_tests
-
-# -------------------------------------------------------------------------------- #
-# End of Script                                                                    #
-# -------------------------------------------------------------------------------- #
-# This is the end - nothing more to see here.                                      #
-# -------------------------------------------------------------------------------- #
+emit-record \
+  --script-name "${script_id}" \
+  --command "bash ./${script_id}.legacy" \
+  --operation-kind "legacy.exec" \
+  --target "./${script_id}.legacy" \
+  --outcome "${outcome}" \
+  --exit-code "${exit_code}" \
+  --payload-stdout-file "${stdout_file}" \
+  --payload-stderr-file "${stderr_file}"

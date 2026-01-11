@@ -1,70 +1,31 @@
-#!/usr/bin/env bash
+#!/bin/bash
+set -euo pipefail
 
-# -------------------------------------------------------------------------------- #
-# Description                                                                      #
-# -------------------------------------------------------------------------------- #
-# This is a simple script to check to see if an array contains a value.            #
-# -------------------------------------------------------------------------------- #
+source "${FENCERUNNER_ROOT}/lib/library.sh"
+script_id="$(basename "${BASH_SOURCE[0]}" .sh)"
 
-# -------------------------------------------------------------------------------- #
-# Contains (string, substring)                                                     #
-# -------------------------------------------------------------------------------- #
-# This is a simple function that will check if and array contains a value.         #
-#                                                                                  #
-# Returns 0 if the specified string contains the specified substring, otherwise 1. #
-# -------------------------------------------------------------------------------- #
+stdout_file="$(mktemp -t "${script_id}.stdout")"
+stderr_file="$(mktemp -t "${script_id}.stderr")"
 
-function array_contains()
-{
-    local -n haystack=$1
-    local needle=$2
+set +e
+bash "./${script_id}.legacy" >"${stdout_file}" 2>"${stderr_file}"
+exit_code="$?"
+set -e
 
-    for i in "${haystack[@]}"; do
-        if [[ $i == "${needle}" ]]; then
-            return 0
-        fi
-    done
+outcome="success"
+if [[ "${exit_code}" -ne 0 ]]; then
+  outcome="error"
+fi
 
-    return 1
-}
+commit_help_me ensure policy.read_only
+commit_help_me emit emit.record
 
-# -------------------------------------------------------------------------------- #
-# Test                                                                             #
-# -------------------------------------------------------------------------------- #
-# A VERY simple test function to ensure that it all works                          #
-# -------------------------------------------------------------------------------- #
-
-function run_tests()
-{
-# shellcheck disable=SC2034
-    array_of_numbers=( "1" "2" "3" )
-    local needle1="3"
-    local needle2="4"
-
-    if ! array_contains array_of_numbers "${needle1}"; then
-        echo "$needle1 not found"
-    else
-        echo "$needle1 found"
-    fi
-
-    if ! array_contains array_of_numbers "${needle2}"; then
-        echo "$needle1 not found"
-    else
-        echo "$needle1 found"
-    fi
-}
-
-# -------------------------------------------------------------------------------- #
-# Main()                                                                           #
-# -------------------------------------------------------------------------------- #
-# This is the actual 'script' and the functions/sub routines are called in order.  #
-# -------------------------------------------------------------------------------- #
-
-run_tests
-
-# -------------------------------------------------------------------------------- #
-# End of Script                                                                    #
-# -------------------------------------------------------------------------------- #
-# This is the end - nothing more to see here.                                      #
-# -------------------------------------------------------------------------------- #
-
+emit-record \
+  --script-name "${script_id}" \
+  --command "bash ./${script_id}.legacy" \
+  --operation-kind "legacy.exec" \
+  --target "./${script_id}.legacy" \
+  --outcome "${outcome}" \
+  --exit-code "${exit_code}" \
+  --payload-stdout-file "${stdout_file}" \
+  --payload-stderr-file "${stderr_file}"

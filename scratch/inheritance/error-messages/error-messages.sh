@@ -1,123 +1,31 @@
-#!/usr/bin/env bash
+#!/bin/bash
+set -euo pipefail
 
-# -------------------------------------------------------------------------------- #
-# Description                                                                      #
-# -------------------------------------------------------------------------------- #
-# This is a simple script to display errors, warning and success messages.         #
-# -------------------------------------------------------------------------------- #
+source "${FENCERUNNER_ROOT}/lib/library.sh"
+script_id="$(basename "${BASH_SOURCE[0]}" .sh)"
 
+stdout_file="$(mktemp -t "${script_id}.stdout")"
+stderr_file="$(mktemp -t "${script_id}.stderr")"
 
-# -------------------------------------------------------------------------------- #
-# Show Error                                                                       #
-# -------------------------------------------------------------------------------- #
-# A simple wrapper function to show something was an error.                        #
-# -------------------------------------------------------------------------------- #
+set +e
+bash "./${script_id}.legacy" >"${stdout_file}" 2>"${stderr_file}"
+exit_code="$?"
+set -e
 
-function show_error()
-{
-    if [[ -n $1 ]]; then
-        printf '%s%s%s\n' "${red}" "${*}" "${reset}" 1>&2
-    fi
-}
+outcome="success"
+if [[ "${exit_code}" -ne 0 ]]; then
+  outcome="error"
+fi
 
-# -------------------------------------------------------------------------------- #
-# Show Warning                                                                     #
-# -------------------------------------------------------------------------------- #
-# A simple wrapper function to show something was a warning.                       #
-# -------------------------------------------------------------------------------- #
+commit_help_me ensure policy.read_only
+commit_help_me emit emit.record
 
-function show_warning()
-{
-    if [[ -n $1 ]]; then
-        printf '%s%s%s\n' "${yellow}" "${*}" "${reset}" 1>&2
-    fi
-}
-
-# -------------------------------------------------------------------------------- #
-# Show Success                                                                     #
-# -------------------------------------------------------------------------------- #
-# A simple wrapper function to show something was a success.                       #
-# -------------------------------------------------------------------------------- #
-
-function show_success()
-{
-    if [[ -n $1 ]]; then
-        printf '%s%s%s\n' "${green}" "${*}" "${reset}" 1>&2
-    fi
-}
-
-# -------------------------------------------------------------------------------- #
-# Get Colours                                                                      #
-# -------------------------------------------------------------------------------- #
-# A very simple wrapper which can dynamically get the required colours.            #
-# -------------------------------------------------------------------------------- #
-
-function get_colours()
-{
-    local ncolors
-
-    red=''
-    yellow=''
-    green=''
-    reset=''
-
-    if ! test -t 1; then
-        return
-    fi
-
-    if ! tput longname > /dev/null 2>&1; then
-        return
-    fi
-
-    ncolors=$(tput colors)
-
-    if ! test -n "${ncolors}" || test "${ncolors}" -le 7; then
-        return
-    fi
-
-    red=$(tput setaf 1)
-    yellow=$(tput setaf 3)
-    green=$(tput setaf 2)
-    reset=$(tput sgr0)
-
-    readonly red
-    readonly yellow
-    readonly green
-    readonly reset
-
-    declare -g red
-    declare -g yellow
-    declare -g green
-    declare -g reset
-
-}
-
-# -------------------------------------------------------------------------------- #
-# Run Tests                                                                        #
-# -------------------------------------------------------------------------------- #
-# A VERY simple test function to ensure that it all works                          #
-# -------------------------------------------------------------------------------- #
-
-function run_test()
-{
-    get_colours
-
-    show_error "This is an error"
-    show_warning "This is a warning"
-    show_success "This is a success"
-}
-
-# -------------------------------------------------------------------------------- #
-# Main()                                                                           #
-# -------------------------------------------------------------------------------- #
-# This is the actual 'script' and the functions/sub routines are called in order.  #
-# -------------------------------------------------------------------------------- #
-
-run_test
-
-# -------------------------------------------------------------------------------- #
-# End of Script                                                                    #
-# -------------------------------------------------------------------------------- #
-# This is the end - nothing more to see here.                                      #
-# -------------------------------------------------------------------------------- #
-
+emit-record \
+  --script-name "${script_id}" \
+  --command "bash ./${script_id}.legacy" \
+  --operation-kind "legacy.exec" \
+  --target "./${script_id}.legacy" \
+  --outcome "${outcome}" \
+  --exit-code "${exit_code}" \
+  --payload-stdout-file "${stdout_file}" \
+  --payload-stderr-file "${stderr_file}"

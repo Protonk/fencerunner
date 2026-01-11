@@ -1,0 +1,9 @@
+fencerunner: supervised: running 2 script(s) across 1 run dir(s)
+fencerunner: [1/2] test
+fencerunner: script test -> synthetic(error)
+fencerunner: [2/2] variable-replace
+fencerunner: script variable-replace stderr:
+/Users/achyland/Desktop/fencerunner/scratch/inheritance/variable-replace/variable-replace.sh: line 61: declare: -A: invalid option
+declare: usage: declare [-afFirtx] [-p] [name[=value] ...]
+/Users/achyland/Desktop/fencerunner/scratch/inheritance/variable-replace/variable-replace.sh: line 67: {{ USERNAME_PLACE_HOLDER }}: syntax error: operand expected (error token is "{{ USERNAME_PLACE_HOLDER }}")
+fencerunner: script variable-replace -> synthetic(error)

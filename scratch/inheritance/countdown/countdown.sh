@@ -1,54 +1,31 @@
-#!/usr/bin/env bash
+#!/bin/bash
+set -euo pipefail
 
-# -------------------------------------------------------------------------------- #
-# Description                                                                      #
-# -------------------------------------------------------------------------------- #
-# This is a simple script to display a countdown timeer with optional message.     #
-# -------------------------------------------------------------------------------- #
+source "${FENCERUNNER_ROOT}/lib/library.sh"
+script_id="$(basename "${BASH_SOURCE[0]}" .sh)"
 
-# -------------------------------------------------------------------------------- #
-# Countdown                                                                        #
-# -------------------------------------------------------------------------------- #
-# Loop for the required numbers of seconds and display the message. We have to     #
-# re-eval each time to ensure that the string is updated correctly.                #
-# -------------------------------------------------------------------------------- #
+stdout_file="$(mktemp -t "${script_id}.stdout")"
+stderr_file="$(mktemp -t "${script_id}.stderr")"
 
-function countdown()
-{
-    local seconds=${1:-0}
-    local message=${2:-''}
+set +e
+bash "./${script_id}.legacy" >"${stdout_file}" 2>"${stderr_file}"
+exit_code="$?"
+set -e
 
-    while [ "${seconds}" -gt 0 ]; do
-        eval_message=$(eval "echo ${message}")
-        echo -ne "${eval_message}\033[0K\r"
-        sleep 1
-        : $((seconds--))
-    done
-    echo
-}
+outcome="success"
+if [[ "${exit_code}" -ne 0 ]]; then
+  outcome="error"
+fi
 
-# -------------------------------------------------------------------------------- #
-# Test                                                                             #
-# -------------------------------------------------------------------------------- #
-# A VERY simple test function to ensure that it all works                          #
-# -------------------------------------------------------------------------------- #
+commit_help_me ensure policy.read_only
+commit_help_me emit emit.record
 
-function run_tests()
-{
-    # shellcheck disable=SC2016
-    countdown 3 'Processing will start in $seconds seconds. Press Ctrl+C to abort'
-}
-
-# -------------------------------------------------------------------------------- #
-# Main()                                                                           #
-# -------------------------------------------------------------------------------- #
-# This is the actual 'script' and the functions/sub routines are called in order.  #
-# -------------------------------------------------------------------------------- #
-
-run_tests
-
-# -------------------------------------------------------------------------------- #
-# End of Script                                                                    #
-# -------------------------------------------------------------------------------- #
-# This is the end - nothing more to see here.                                      #
-# -------------------------------------------------------------------------------- #
+emit-record \
+  --script-name "${script_id}" \
+  --command "bash ./${script_id}.legacy" \
+  --operation-kind "legacy.exec" \
+  --target "./${script_id}.legacy" \
+  --outcome "${outcome}" \
+  --exit-code "${exit_code}" \
+  --payload-stdout-file "${stdout_file}" \
+  --payload-stderr-file "${stderr_file}"

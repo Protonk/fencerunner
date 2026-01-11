@@ -1,63 +1,31 @@
-#!/usr/bin/env bash
+#!/bin/bash
+set -euo pipefail
 
-# -------------------------------------------------------------------------------- #
-# Description                                                                      #
-# -------------------------------------------------------------------------------- #
-# This is a simple script to display some text in the center of the screen.        #
-# -------------------------------------------------------------------------------- #
+source "${FENCERUNNER_ROOT}/lib/library.sh"
+script_id="$(basename "${BASH_SOURCE[0]}" .sh)"
 
-# -------------------------------------------------------------------------------- #
-# Center text                                                                      #
-# -------------------------------------------------------------------------------- #
-# This is a simple function that will center text on a screen, be calculating the  #
-# correct amount of padding based on the 'screen_width' and the length of the      #
-# text supplied to the function.                                                   #
-# -------------------------------------------------------------------------------- #
+stdout_file="$(mktemp -t "${script_id}.stdout")"
+stderr_file="$(mktemp -t "${script_id}.stderr")"
 
-function center_text()
-{
-    textsize=${#1}
-    span=$(((screen_width + textsize) / 2))
+set +e
+bash "./${script_id}.legacy" >"${stdout_file}" 2>"${stderr_file}"
+exit_code="$?"
+set -e
 
-    printf '%*s\n' "${span}" "$1"
-}
+outcome="success"
+if [[ "${exit_code}" -ne 0 ]]; then
+  outcome="error"
+fi
 
-# -------------------------------------------------------------------------------- #
-# Get Screen Width                                                                 #
-# -------------------------------------------------------------------------------- #
-# A very simple wrapper which can dynamically get the screen width using tput.     #
-# -------------------------------------------------------------------------------- #
+commit_help_me ensure policy.read_only
+commit_help_me emit emit.record
 
-function get_screen_width()
-{
-    screen_width=$(tput cols)
-    declare -g screen_width
-}
-
-# -------------------------------------------------------------------------------- #
-# Test                                                                             #
-# -------------------------------------------------------------------------------- #
-# A VERY simple test function to ensure that it all works                          #
-# -------------------------------------------------------------------------------- #
-
-function run_tests()
-{
-    get_screen_width
-
-    center_text "This is an example"
-}
-
-# -------------------------------------------------------------------------------- #
-# Main()                                                                           #
-# -------------------------------------------------------------------------------- #
-# This is the actual 'script' and the functions/sub routines are called in order.  #
-# -------------------------------------------------------------------------------- #
-
-run_tests
-
-# -------------------------------------------------------------------------------- #
-# End of Script                                                                    #
-# -------------------------------------------------------------------------------- #
-# This is the end - nothing more to see here.                                      #
-# -------------------------------------------------------------------------------- #
-
+emit-record \
+  --script-name "${script_id}" \
+  --command "bash ./${script_id}.legacy" \
+  --operation-kind "legacy.exec" \
+  --target "./${script_id}.legacy" \
+  --outcome "${outcome}" \
+  --exit-code "${exit_code}" \
+  --payload-stdout-file "${stdout_file}" \
+  --payload-stderr-file "${stderr_file}"

@@ -1,66 +1,31 @@
-#!/usr/bin/env bash
+#!/bin/bash
+set -euo pipefail
 
-# -------------------------------------------------------------------------------- #
-# Description                                                                      #
-# -------------------------------------------------------------------------------- #
-# This is a simple script to check prerequisite commands exist.                    #
-# -------------------------------------------------------------------------------- #
+source "${FENCERUNNER_ROOT}/lib/library.sh"
+script_id="$(basename "${BASH_SOURCE[0]}" .sh)"
 
-# -------------------------------------------------------------------------------- #
-# Required commands                                                                #
-# -------------------------------------------------------------------------------- #
-# These commands MUST exist in order for the script to correctly run.              #
-# -------------------------------------------------------------------------------- #
+stdout_file="$(mktemp -t "${script_id}.stdout")"
+stderr_file="$(mktemp -t "${script_id}.stderr")"
 
-COMMANDS=( "curl" "top" "IwillFail" )
+set +e
+bash "./${script_id}.legacy" >"${stdout_file}" 2>"${stderr_file}"
+exit_code="$?"
+set -e
 
-# -------------------------------------------------------------------------------- #
-# Check Prerequisites                                                              #
-# -------------------------------------------------------------------------------- #
-# Check to ensure that the prerequisite commmands exist.                           #
-# -------------------------------------------------------------------------------- #
+outcome="success"
+if [[ "${exit_code}" -ne 0 ]]; then
+  outcome="error"
+fi
 
-function check_prereqs()
-{
-    local error_count=0
+commit_help_me ensure policy.read_only
+commit_help_me emit emit.record
 
-    for i in "${COMMANDS[@]}"
-    do
-        command=$(command -v "${i}")
-        if [[ -z $command ]]; then
-            printf '%s is not in your command path\n' "${i}"
-            error_count=$((error_count+1))
-        fi
-    done
-
-    if [[ $error_count -gt 0 ]]; then
-        printf '%d errors located - fix before re-running\n' ${error_count};
-        exit 1;
-    fi
-}
-
-# -------------------------------------------------------------------------------- #
-# Run Tests                                                                        #
-# -------------------------------------------------------------------------------- #
-# A VERY simple test function to ensure that it all works                          #
-# -------------------------------------------------------------------------------- #
-
-function run_tests()
-{
-    check_prereqs
-}
-
-# -------------------------------------------------------------------------------- #
-# Main()                                                                           #
-# -------------------------------------------------------------------------------- #
-# This is the actual 'script' and the functions/sub routines are called in order.  #
-# -------------------------------------------------------------------------------- #
-
-run_tests
-
-# -------------------------------------------------------------------------------- #
-# End of Script                                                                    #
-# -------------------------------------------------------------------------------- #
-# This is the end - nothing more to see here.                                      #
-# -------------------------------------------------------------------------------- #
-
+emit-record \
+  --script-name "${script_id}" \
+  --command "bash ./${script_id}.legacy" \
+  --operation-kind "legacy.exec" \
+  --target "./${script_id}.legacy" \
+  --outcome "${outcome}" \
+  --exit-code "${exit_code}" \
+  --payload-stdout-file "${stdout_file}" \
+  --payload-stderr-file "${stderr_file}"

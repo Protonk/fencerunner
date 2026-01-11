@@ -1,0 +1,12 @@
+fencerunner: supervised: running 1 script(s) across 1 run dir(s)
+fencerunner: [1/1] untag
+fencerunner: script untag stderr:
+error: could not delete references: Unable to create '/Users/achyland/Desktop/fencerunner/.git/packed-refs.lock': Operation not permitted
+error: cannot open '.git/FETCH_HEAD': Operation not permitted
+ssh: Could not resolve hostname github.com: -65563
+fatal: Could not read from remote repository.
+
+Please make sure you have the correct access rights
+and the repository exists.
+error: could not delete references: Unable to create '/Users/achyland/Desktop/fencerunner/.git/packed-refs.lock': Operation not permitted
+fencerunner: script untag -> synthetic(error)

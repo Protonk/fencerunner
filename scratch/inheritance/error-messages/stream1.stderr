@@ -1,0 +1,7 @@
+fencerunner: supervised: running 1 script(s) across 1 run dir(s)
+fencerunner: [1/1] error-messages
+fencerunner: script error-messages stderr:
+This is an error
+This is a warning
+This is a success
+fencerunner: script error-messages -> synthetic(error)

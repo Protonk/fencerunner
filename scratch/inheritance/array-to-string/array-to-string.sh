@@ -1,64 +1,31 @@
-#!/usr/bin/env bash
+#!/bin/bash
+set -euo pipefail
 
-# -------------------------------------------------------------------------------- #
-# Description                                                                      #
-# -------------------------------------------------------------------------------- #
-# This is a simple script to check to see if an array contains a value.            #
-# -------------------------------------------------------------------------------- #
+source "${FENCERUNNER_ROOT}/lib/library.sh"
+script_id="$(basename "${BASH_SOURCE[0]}" .sh)"
 
-# -------------------------------------------------------------------------------- #
-# Array to string (string, substring)                                              #
-# -------------------------------------------------------------------------------- #
-# This is a simple function that will take an array and a seperator and create a   #
-# string of values.                                                                #
-# -------------------------------------------------------------------------------- #
+stdout_file="$(mktemp -t "${script_id}.stdout")"
+stderr_file="$(mktemp -t "${script_id}.stderr")"
 
-function array_to_string()
-{
-    separator="$1"
-    local -n arr=$2
+set +e
+bash "./${script_id}.legacy" >"${stdout_file}" 2>"${stderr_file}"
+exit_code="$?"
+set -e
 
-    regex="$( printf "${separator}%s" "${arr[@]}" )"
-    regex="${regex:${#separator}}" # remove leading separator
+outcome="success"
+if [[ "${exit_code}" -ne 0 ]]; then
+  outcome="error"
+fi
 
-    if [[ -n $3 ]]; then
-        if [[ $regex = *"$separator"* ]]; then
-            prefix=${regex%"$separator"*}               # Extract content before the last instance
-            suffix=${regex#"$prefix"}                   # Extract content *after* our prefix
-            regex=${prefix}${suffix/"$separator"/"$3"}  # Append unmodified prefix w/ suffix w/ replacement
-        fi
-    fi
+commit_help_me ensure policy.read_only
+commit_help_me emit emit.record
 
-    echo "${regex}"
-}
-
-# -------------------------------------------------------------------------------- #
-# Test                                                                             #
-# -------------------------------------------------------------------------------- #
-# A VERY simple test function to ensure that it all works                          #
-# -------------------------------------------------------------------------------- #
-
-function run_tests()
-{
-# shellcheck disable=SC2034
-    array_of_numbers=( "1" "2" "3" )
-
-    array_to_string ', ' array_of_numbers
-    array_to_string ', ' array_of_numbers ' and '
-    array_to_string ', ' array_of_numbers ' or '
-}
-
-# -------------------------------------------------------------------------------- #
-# Main()                                                                           #
-# -------------------------------------------------------------------------------- #
-# This is the actual 'script' and the functions/sub routines are called in order.  #
-# -------------------------------------------------------------------------------- #
-
-run_tests
-
-# -------------------------------------------------------------------------------- #
-# End of Script                                                                    #
-# -------------------------------------------------------------------------------- #
-# This is the end - nothing more to see here.                                      #
-# -------------------------------------------------------------------------------- #
-
+emit-record \
+  --script-name "${script_id}" \
+  --command "bash ./${script_id}.legacy" \
+  --operation-kind "legacy.exec" \
+  --target "./${script_id}.legacy" \
+  --outcome "${outcome}" \
+  --exit-code "${exit_code}" \
+  --payload-stdout-file "${stdout_file}" \
+  --payload-stderr-file "${stderr_file}"

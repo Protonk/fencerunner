@@ -1,18 +1,31 @@
-#!/usr/bin/env bash
+#!/bin/bash
+set -euo pipefail
 
-#
-# Extract a version from a string
-#
+source "${FENCERUNNER_ROOT}/lib/library.sh"
+script_id="$(basename "${BASH_SOURCE[0]}" .sh)"
 
-function get_version_string()
-{
-    raw_string="${1:-}"
+stdout_file="$(mktemp -t "${script_id}.stdout")"
+stderr_file="$(mktemp -t "${script_id}.stderr")"
 
-    # shellcheck disable=SC2001
-    version=$(echo "${raw_string}" | sed 's/[^0-9.]*\([0-9.]*\).*/\1/')
-    echo "${version}"
-}
+set +e
+bash "./${script_id}.legacy" >"${stdout_file}" 2>"${stderr_file}"
+exit_code="$?"
+set -e
 
-get_version_string "my version is 1.2.3"
-get_version_string "my version is-1.2.3"
-get_version_string "my version is (1.2.3)"
+outcome="success"
+if [[ "${exit_code}" -ne 0 ]]; then
+  outcome="error"
+fi
+
+commit_help_me ensure policy.read_only
+commit_help_me emit emit.record
+
+emit-record \
+  --script-name "${script_id}" \
+  --command "bash ./${script_id}.legacy" \
+  --operation-kind "legacy.exec" \
+  --target "./${script_id}.legacy" \
+  --outcome "${outcome}" \
+  --exit-code "${exit_code}" \
+  --payload-stdout-file "${stdout_file}" \
+  --payload-stderr-file "${stderr_file}"

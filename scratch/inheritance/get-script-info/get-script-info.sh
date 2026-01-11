@@ -1,88 +1,31 @@
-#!/usr/bin/env bash
+#!/bin/bash
+set -euo pipefail
 
-# -------------------------------------------------------------------------------- #
-# Description                                                                      #
-# -------------------------------------------------------------------------------- #
-# This is a simple script to show how to get get the script base path and name.    #
-# -------------------------------------------------------------------------------- #
+source "${FENCERUNNER_ROOT}/lib/library.sh"
+script_id="$(basename "${BASH_SOURCE[0]}" .sh)"
 
-READONLY_INFO=true               # Set the script info to READONLY
+stdout_file="$(mktemp -t "${script_id}.stdout")"
+stderr_file="$(mktemp -t "${script_id}.stderr")"
 
-# -------------------------------------------------------------------------------- #
-# Get Script Info                                                                  #
-# -------------------------------------------------------------------------------- #
-# Work out some basic facts about the script, how it was called, where it lives,   #
-# what it is called etc.                                                           #
-# -------------------------------------------------------------------------------- #
+set +e
+bash "./${script_id}.legacy" >"${stdout_file}" 2>"${stderr_file}"
+exit_code="$?"
+set -e
 
-function get_script_info()
-{
-    local ro=${READONLY_INFO:-false}
+outcome="success"
+if [[ "${exit_code}" -ne 0 ]]; then
+  outcome="error"
+fi
 
-    [[ $0 != "${BASH_SOURCE[0]}" ]] && IS_SOURCED=true || IS_SOURCED=false
+commit_help_me ensure policy.read_only
+commit_help_me emit emit.record
 
-    READONLY=false
-    INVOKED_FILE="${BASH_SOURCE[${#BASH_SOURCE[@]} - 1]}"
-    INVOKED_PATH="$(dirname "${BASH_SOURCE[${#BASH_SOURCE[@]} - 1]}")"
-    FULL_PATH="$( cd -P "$(dirname "${BASH_SOURCE[0]}")" && pwd )"
-    FILE_NAME=$(basename "${BASH_SOURCE[0]}")
-
-    if [[ $# -gt 0 ]]; then
-        SCRIPT_ARGS=$(printf "'%s', " "${@}")
-        SCRIPT_ARGS=${SCRIPT_ARGS::-2}                # Trim off the last comma and space
-    else
-        SCRIPT_ARGS="None"
-    fi
-
-    if [[ "${ro}" = true ]]
-    then
-        readonly IS_SOURCED
-        readonly INVOKED_FILE
-        readonly INVOKED_PATH
-        readonly FULL_PATH
-        readonly FILE_NAME
-        readonly SCRIPT_ARGS
-    fi
-
-    export READONLY
-    export IS_SOURCED
-    export INVOKED_FILE
-    export INVOKED_PATH
-    export FULL_PATH
-    export FILE_NAME
-    export SCRIPT_ARGS
-}
-
-# -------------------------------------------------------------------------------- #
-# Run Tests                                                                        #
-# -------------------------------------------------------------------------------- #
-# A VERY simple test function to ensure that it all works                          #
-# -------------------------------------------------------------------------------- #
-
-function run_tests()
-{
-    get_script_info "${@}"
-
-    echo "Read Only? : ${READONLY}"
-    echo "Sourced? : ${IS_SOURCED}"
-    echo "Invoked File: ${INVOKED_FILE}"
-    echo "Invoked Path: ${INVOKED_PATH}"
-    echo "Full Path: ${FULL_PATH}"
-    echo "Script Name: ${FILE_NAME}"
-    echo "Script Args: ${SCRIPT_ARGS}"
-}
-
-# -------------------------------------------------------------------------------- #
-# Main()                                                                           #
-# -------------------------------------------------------------------------------- #
-# This is the actual 'script' and the functions/sub routines are called in order.  #
-# -------------------------------------------------------------------------------- #
-
-run_tests "$@"
-
-# -------------------------------------------------------------------------------- #
-# End of Script                                                                    #
-# -------------------------------------------------------------------------------- #
-# This is the end - nothing more to see here.                                      #
-# -------------------------------------------------------------------------------- #
-
+emit-record \
+  --script-name "${script_id}" \
+  --command "bash ./${script_id}.legacy" \
+  --operation-kind "legacy.exec" \
+  --target "./${script_id}.legacy" \
+  --outcome "${outcome}" \
+  --exit-code "${exit_code}" \
+  --payload-stdout-file "${stdout_file}" \
+  --payload-stderr-file "${stderr_file}"

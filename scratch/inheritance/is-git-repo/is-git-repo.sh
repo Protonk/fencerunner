@@ -1,84 +1,31 @@
-#!/usr/bin/env bash
+#!/bin/bash
+set -euo pipefail
 
-# -------------------------------------------------------------------------------- #
-# Description                                                                      #
-# -------------------------------------------------------------------------------- #
-# A script to work out if a directory contains a git repo.                         #
-# -------------------------------------------------------------------------------- #
+source "${FENCERUNNER_ROOT}/lib/library.sh"
+script_id="$(basename "${BASH_SOURCE[0]}" .sh)"
 
-# -------------------------------------------------------------------------------- #
-# Is Git Repo                                                                      #
-# -------------------------------------------------------------------------------- #
-# Look at a supplied dir to see if it cointains a git repo.                        #
-# -------------------------------------------------------------------------------- #
+stdout_file="$(mktemp -t "${script_id}.stdout")"
+stderr_file="$(mktemp -t "${script_id}.stderr")"
 
-function is_git_repo()
-{
-    local retval
+set +e
+bash "./${script_id}.legacy" >"${stdout_file}" 2>"${stderr_file}"
+exit_code="$?"
+set -e
 
-    #
-    # Execute everything as a subshell to avoid messing up users current directory position
-    #
-    (
-        #
-        # If we are checking a directory which is not the current one then cd to the specificed directory
-        #
-        if [[ -n $1 ]]; then
-            if [[ ! -d $1 ]]; then
-                return 1
-            fi
-            cd "${1}" || return 1
-        fi
+outcome="success"
+if [[ "${exit_code}" -ne 0 ]]; then
+  outcome="error"
+fi
 
-        #
-        # Check to see if we are in a real git repo dir or not
-        #
-        # The return value is always true if you are in a git repo.
-        #
-        # The output can be true or false depending where in the repo you are so we ignore this
-        #
-        if git rev-parse --is-inside-work-tree > /dev/null 2>&1; then
-            retval=0
-        else
-            retval=1
-        fi
-        return $retval
-    )
-}
+commit_help_me ensure policy.read_only
+commit_help_me emit emit.record
 
-# -------------------------------------------------------------------------------- #
-# Run Tests                                                                        #
-# -------------------------------------------------------------------------------- #
-# A VERY simple test function to ensure that it all works                          #
-# -------------------------------------------------------------------------------- #
-
-function run_test()
-{
-    declare -a dirs=('./' '/home' '/thiswillerror')
-
-    ## now loop through the above array
-    for i in "${dirs[@]}"
-    do
-        echo -n "${i} is "
-        if is_git_repo "${i}"; then
-            echo "a git repo"
-        else
-            echo "not a git repo"
-        fi
-    done
-}
-
-# -------------------------------------------------------------------------------- #
-# Main()                                                                           #
-# -------------------------------------------------------------------------------- #
-# This is the actual 'script' and the functions/sub routines are called in order.  #
-# -------------------------------------------------------------------------------- #
-
-run_test "$@"
-
-# -------------------------------------------------------------------------------- #
-# End of Script                                                                    #
-# -------------------------------------------------------------------------------- #
-# This is the end - nothing more to see here.                                      #
-# -------------------------------------------------------------------------------- #
-
+emit-record \
+  --script-name "${script_id}" \
+  --command "bash ./${script_id}.legacy" \
+  --operation-kind "legacy.exec" \
+  --target "./${script_id}.legacy" \
+  --outcome "${outcome}" \
+  --exit-code "${exit_code}" \
+  --payload-stdout-file "${stdout_file}" \
+  --payload-stderr-file "${stderr_file}"

@@ -1,93 +1,31 @@
-#!/usr/bin/env bash
+#!/bin/bash
+set -euo pipefail
 
-# -------------------------------------------------------------------------------- #
-# Description                                                                      #
-# -------------------------------------------------------------------------------- #
-# This is an example of the header of a bash script running in 'strict' mode.      #
-# -------------------------------------------------------------------------------- #
+source "${FENCERUNNER_ROOT}/lib/library.sh"
+script_id="$(basename "${BASH_SOURCE[0]}" .sh)"
 
-# -------------------------------------------------------------------------------- #
-# Errexit                                                                          #
-# -------------------------------------------------------------------------------- #
-# Exit on error. Append "|| true" if you expect an error                           #
-#                                                                                  #
-# Shortcut: set -e                                                                 #
-# -------------------------------------------------------------------------------- #
-set -o errexit
+stdout_file="$(mktemp -t "${script_id}.stdout")"
+stderr_file="$(mktemp -t "${script_id}.stderr")"
 
-# -------------------------------------------------------------------------------- #
-# Nounset                                                                          #
-# -------------------------------------------------------------------------------- #
-# Do not allow use of undefined vars. Use ${VAR:-} to use an undefined VAR         #
-#                                                                                  #
-# Shortcut: set -u                                                                 #
-# -------------------------------------------------------------------------------- #
-set -o nounset
+set +e
+bash "./${script_id}.legacy" >"${stdout_file}" 2>"${stderr_file}"
+exit_code="$?"
+set -e
 
-# -------------------------------------------------------------------------------- #
-# Pipefail                                                                         #
-# -------------------------------------------------------------------------------- #
-# Catch the error in case mysqldump fails (but gzip succeeds) in `mysqldump |gzip` #
-#                                                                                  #
-# Shortcut: none                                                                   #
-# -------------------------------------------------------------------------------- #
-set -o pipefail
+outcome="success"
+if [[ "${exit_code}" -ne 0 ]]; then
+  outcome="error"
+fi
 
-# -------------------------------------------------------------------------------- #
-# Xtrace                                                                           #
-# -------------------------------------------------------------------------------- #
-# Turn on traces, useful while debugging but commented out by default              #
-#                                                                                  #
-# Shortcut: set -x                                                                 #
-# -------------------------------------------------------------------------------- #
-[[ -n ${DEBUG:-} ]] && set -o xtrace
+commit_help_me ensure policy.read_only
+commit_help_me emit emit.record
 
-# -------------------------------------------------------------------------------- #
-# IFS                                                                              #
-# -------------------------------------------------------------------------------- #
-# Defines newlines and tabs as delimiters for splitting words and iterating arrays #
-# -------------------------------------------------------------------------------- #
-IFS=$'\n\t'
-
-# -------------------------------------------------------------------------------- #
-# Run Tests                                                                        #
-# -------------------------------------------------------------------------------- #
-# A VERY simple test function to ensure that it all works                          #
-# -------------------------------------------------------------------------------- #
-
-function run_tests()
-{
-    local filename="strict-mode.sh"
-    local string="test"
-
-    # Gotcha Number 1:
-
-    # Under strict mode, the next line aborts with an error:
-    # count=$(grep -c "${string}" "${filename}")
-
-    # But this one behaves more nicely:
-    count=$(grep -c "${string}" "${filename}" || true)
-
-    echo "count: $count"
-
-    # Gotcha Number 2:
-
-    # Testing for non-existant variables cannot simply be done with a -z
-    # as this will error for an unbounded variable. Use ${name:-} instead
-
-    [[ -z "${UNDECLARED_VARIABLE:-}" ]] && echo "I am undeclared!"
-}
-
-# -------------------------------------------------------------------------------- #
-# Main()                                                                           #
-# -------------------------------------------------------------------------------- #
-# This is the actual 'script' and the functions/sub routines are called in order.  #
-# -------------------------------------------------------------------------------- #
-
-run_tests
-
-# -------------------------------------------------------------------------------- #
-# End of Script                                                                    #
-# -------------------------------------------------------------------------------- #
-# This is the end - nothing more to see here.                                      #
-# -------------------------------------------------------------------------------- #
+emit-record \
+  --script-name "${script_id}" \
+  --command "bash ./${script_id}.legacy" \
+  --operation-kind "legacy.exec" \
+  --target "./${script_id}.legacy" \
+  --outcome "${outcome}" \
+  --exit-code "${exit_code}" \
+  --payload-stdout-file "${stdout_file}" \
+  --payload-stderr-file "${stderr_file}"
