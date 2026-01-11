@@ -1922,39 +1922,63 @@ what happened, discussion-in-channel for what it means.
 
 ### Step 21
 
->intent is data
+>intent is an artifact
+
+If it matters, it becomes an artifact.
 
 Step 20 made the end-of-turn paste hard to forget, but your intent (Step 10
 header) is still soft: it lives only in chat.
 
 Make intent a file, and make `tools/turn` refuse to run without it.
 
-#### 1) Require the Step 10 header as environment variables
+#### 1) Require the Step 10 header as flags
 
 Replace `tools/turn` with a version that requires four fields and prints them
 before it runs anything:
 
-- `ROUTE_FOCUS`
-- `TRIAGE_FOCUS`
-- `SCRIPT_IDS`
-- `CONTRACT_CHANGES`
+- `--route-focus`
+- `--triage-focus`
+- `--script-ids`
+- `--contract-changes`
 
 ```bash
 cat > tools/turn <<'EOF'
 #!/bin/bash
 set -euo pipefail
 
-script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+usage() {
+  echo "usage: tools/turn \\" >&2
+  echo "  --route-focus <TEXT> \\" >&2
+  echo "  --triage-focus <TEXT> \\" >&2
+  echo "  --script-ids <TEXT> \\" >&2
+  echo "  --contract-changes <TEXT>" >&2
+}
 
-route_focus="${ROUTE_FOCUS:-}"
-triage_focus="${TRIAGE_FOCUS:-}"
-script_ids="${SCRIPT_IDS:-}"
-contract_changes="${CONTRACT_CHANGES:-}"
+route_focus=""
+triage_focus=""
+script_ids=""
+contract_changes=""
+
+while [[ $# -gt 0 ]]; do
+  case "${1}" in
+    --route-focus) route_focus="${2:?missing value for --route-focus}"; shift 2 ;;
+    --triage-focus) triage_focus="${2:?missing value for --triage-focus}"; shift 2 ;;
+    --script-ids) script_ids="${2:?missing value for --script-ids}"; shift 2 ;;
+    --contract-changes) contract_changes="${2:?missing value for --contract-changes}"; shift 2 ;;
+    -h|--help) usage; exit 0 ;;
+    --) shift; break ;;
+    -*) echo "unknown flag: ${1}" >&2; usage; exit 1 ;;
+    *) echo "unexpected arg: ${1}" >&2; usage; exit 1 ;;
+  esac
+done
 
 if [[ -z "${route_focus}" || -z "${triage_focus}" || -z "${script_ids}" || -z "${contract_changes}" ]]; then
-  echo "usage: ROUTE_FOCUS=... TRIAGE_FOCUS=... SCRIPT_IDS=... CONTRACT_CHANGES=... tools/turn" >&2
+  echo "missing required header fields" >&2
+  usage
   exit 1
 fi
+
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 header="$(cat <<HDR
 route_focus: ${route_focus}
@@ -1997,11 +2021,11 @@ in chat”. It is “open the inventory directory”.
 Your end-of-turn command becomes:
 
 ```bash
-ROUTE_FOCUS="recommend.install_dependency" \
-TRIAGE_FOCUS="uncertain first" \
-SCRIPT_IDS="foo bar baz" \
-CONTRACT_CHANGES="commitments.json (added finding.tool_missing)" \
-tools/turn
+tools/turn \
+  --route-focus "recommend.install_dependency" \
+  --triage-focus "uncertain first" \
+  --script-ids "foo bar baz" \
+  --contract-changes "commitments.json (added finding.tool_missing)"
 ```
 
 Paste the entire output. No separate Step 10 header is required anymore,
