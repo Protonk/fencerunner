@@ -1,0 +1,1 @@
+{"context":{"commitments":[{"helps":["emit"],"id":"emit.record"},{"helps":["ensure"],"id":"policy.read_only"}],"run":{"command":"bash ./bad.legacy"}},"operation":{"kind":"legacy.exec","target":"./bad.legacy"},"payload":{"raw":{},"stderr_snippet":"","stdout_snippet":"hello from bad.sh\n"},"result":{"details":{"exit_code":0},"outcome":"success"},"script":{"id":"bad"}}

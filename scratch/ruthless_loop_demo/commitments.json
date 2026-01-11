@@ -1,0 +1,21 @@
+{
+  "schema_version": "commitments_v1",
+  "commitments": [
+    {
+      "id": "emit.record",
+      "provider": "runner",
+      "helps": ["emit"],
+      "is": "Boundary record emitter",
+      "at": "emit-record",
+      "version": "v1"
+    },
+    {
+      "id": "python3",
+      "provider": "system",
+      "helps": ["ensure"],
+      "is": "Python 3 interpreter",
+      "at": "python3",
+      "version": "v1"
+    }
+  ]
+}

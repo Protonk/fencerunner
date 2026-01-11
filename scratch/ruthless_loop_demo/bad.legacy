@@ -1,0 +1,5 @@
+#!/bin/bash
+# deliberately violates the boundary contract
+set -euo pipefail
+
+echo "hello from bad.sh"  # extra stdout, not JSON
