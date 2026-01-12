@@ -1,0 +1,4 @@
+script.id\thazard\tmatch\tlegacy_path
+sudo-librarian-puppet	privilege.sudo	3:sudo -i <<EOF	/Users/achyland/Desktop/fencerunner/scratch/inheritance/sudo-librarian-puppet/sudo-librarian-puppet.legacy
+untag	git.push	16:git tag | xargs git push origin --delete	/Users/achyland/Desktop/fencerunner/scratch/inheritance/untag/untag.legacy
+untag	git.tag_delete	6:git tag | xargs git tag -d	/Users/achyland/Desktop/fencerunner/scratch/inheritance/untag/untag.legacy

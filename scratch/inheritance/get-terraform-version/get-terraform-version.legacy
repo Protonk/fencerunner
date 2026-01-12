@@ -15,20 +15,21 @@
 function get_terraform_version()
 {
     local terraform_version
+    local command
 
     command=$(command -v "terraform")
     if [[ -z $command ]]; then
-        echo "Terraform is not installed - Aborting"
-        exit
+        printf '%s\n' "terraform not installed" >&2
+        return 0
     fi
 
-    terraform_version=$(terraform --version | head -n 1)
+    terraform_version=$("${command}" --version 2>/dev/null | head -n 1)
     terraform_version=${terraform_version##* }                  # retain the part after the last space
     terraform_version=${terraform_version#?}                    # strip the first letter
 
     if [[ -z ${terraform_version} ]]; then
-        echo "Could not determine terraform version - Aborting"
-        exit
+        printf '%s\n' "terraform version unknown" >&2
+        return 0
     fi
 
     echo "${terraform_version}"
@@ -43,7 +44,9 @@ function get_terraform_version()
 function run_tests()
 {
     tf_version=$(get_terraform_version)
-    echo "${tf_version}"
+    if [[ -n "${tf_version}" ]]; then
+        echo "${tf_version}"
+    fi
 }
 
 # -------------------------------------------------------------------------------- #
@@ -59,4 +62,3 @@ run_tests
 # -------------------------------------------------------------------------------- #
 # This is the end - nothing more to see here.                                      #
 # -------------------------------------------------------------------------------- #
-

@@ -1,0 +1,2 @@
+count	bucket	operation.kind	result.outcome	message	example_ids	example_run_dirs
+25	other	legacy.exec	success		abs,array-contains,array-to-string,center-text,check-prerequisites	/Users/achyland/Desktop/fencerunner/scratch/inheritance/abs,/Users/achyland/Desktop/fencerunner/scratch/inheritance/array-contains,/Users/achyland/Desktop/fencerunner/scratch/inheritance/array-to-string

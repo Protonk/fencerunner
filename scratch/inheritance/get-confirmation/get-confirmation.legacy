@@ -19,16 +19,28 @@ function get_confirmation()
 {
     local valid_response=false
     local return_value=0
+    local response=''
 
     while [[ "$valid_response" = false ]]
     do
-        read -r -p "${1:-Are you sure? [y/N]} " response
-        case $response in
+        if test -t 0; then
+            printf '%s ' "${1:-Are you sure? [y/N]}" 1>&2
+        fi
+
+        if ! read -r response; then
+            response=''
+        fi
+
+        case "${response}" in
             [yY][eE][sS]|[yY])
                 valid_response=true
                 return_value=1
                 ;;
             [nN][oO]|[nN])
+                valid_response=true
+                return_value=0
+                ;;
+            '')
                 valid_response=true
                 return_value=0
                 ;;
@@ -48,6 +60,11 @@ function get_confirmation()
 function run_tests()
 {
     response=0
+
+    if ! test -t 0; then
+        get_confirmation "Do you want to exit? [y/N]" > /dev/null
+        return
+    fi
 
     while [[ $response == 0 ]]
     do
@@ -69,4 +86,3 @@ run_tests
 # -------------------------------------------------------------------------------- #
 # This is the end - nothing more to see here.                                      #
 # -------------------------------------------------------------------------------- #
-

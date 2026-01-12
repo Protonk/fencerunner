@@ -17,11 +17,16 @@ function countdown()
 {
     local seconds=${1:-0}
     local message=${2:-''}
+    local sleep_seconds=1
+
+    if ! test -t 0; then
+        sleep_seconds=0
+    fi
 
     while [ "${seconds}" -gt 0 ]; do
         eval_message=$(eval "echo ${message}")
         echo -ne "${eval_message}\033[0K\r"
-        sleep 1
+        sleep "${sleep_seconds}"
         : $((seconds--))
     done
     echo

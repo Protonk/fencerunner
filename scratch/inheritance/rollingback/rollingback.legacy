@@ -105,13 +105,19 @@ function unset_traps()
 
 function run_tests()
 {
+    local sleep_seconds=10
+
+    if ! test -t 0; then
+        sleep_seconds=0
+    fi
+
     set_traps
 
     add_rollback abc
     add_rollback def
 
     printf '\nSleeping for the next 10 seconds - try hitting '\''control C'\'' to see the rollbacks in action\n\n'
-    sleep 10
+    sleep "${sleep_seconds}"
     printf '\nSleeping Over - Exiting cleanly\n\n'
 
     unset_traps

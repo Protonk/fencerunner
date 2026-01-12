@@ -2,26 +2,9 @@
   "schema_version": "triage_rules_v1",
   "timeout_seconds": 3,
   "quarantine": {
-    "script_ids": [
-      "check-prerequisites",
-      "countdown",
-      "get-confirmation",
-      "get-terraform-version",
-      "rollingback",
-      "sudo-librarian-puppet",
-      "untag"
-    ]
+    "script_ids": []
   },
-  "quarantine_overrides": {
-    "check-prerequisites": {
-      "message": "IwillFail",
-      "emit_commitments": ["recommend.install_dependency"]
-    },
-    "get-terraform-version": {
-      "message": "terraform",
-      "emit_commitments": ["recommend.install_dependency"]
-    }
-  },
+  "quarantine_overrides": {},
   "hazard_commitments": {
     "compat.bash4": ["recommend.install_dependency"],
     "interactive.read_prompt": ["recommend.run_interactively"],

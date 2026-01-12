@@ -1,0 +1,102 @@
+{
+  "abs": {
+    "run_dir": "/Users/achyland/Desktop/fencerunner/scratch/inheritance/abs",
+    "script_path": "/Users/achyland/Desktop/fencerunner/scratch/inheritance/abs/abs.sh"
+  },
+  "array-contains": {
+    "run_dir": "/Users/achyland/Desktop/fencerunner/scratch/inheritance/array-contains",
+    "script_path": "/Users/achyland/Desktop/fencerunner/scratch/inheritance/array-contains/array-contains.sh"
+  },
+  "array-to-string": {
+    "run_dir": "/Users/achyland/Desktop/fencerunner/scratch/inheritance/array-to-string",
+    "script_path": "/Users/achyland/Desktop/fencerunner/scratch/inheritance/array-to-string/array-to-string.sh"
+  },
+  "center-text": {
+    "run_dir": "/Users/achyland/Desktop/fencerunner/scratch/inheritance/center-text",
+    "script_path": "/Users/achyland/Desktop/fencerunner/scratch/inheritance/center-text/center-text.sh"
+  },
+  "check-prerequisites": {
+    "run_dir": "/Users/achyland/Desktop/fencerunner/scratch/inheritance/check-prerequisites",
+    "script_path": "/Users/achyland/Desktop/fencerunner/scratch/inheritance/check-prerequisites/check-prerequisites.sh"
+  },
+  "compare-versions": {
+    "run_dir": "/Users/achyland/Desktop/fencerunner/scratch/inheritance/compare-versions",
+    "script_path": "/Users/achyland/Desktop/fencerunner/scratch/inheritance/compare-versions/compare-versions.sh"
+  },
+  "contains": {
+    "run_dir": "/Users/achyland/Desktop/fencerunner/scratch/inheritance/contains",
+    "script_path": "/Users/achyland/Desktop/fencerunner/scratch/inheritance/contains/contains.sh"
+  },
+  "countdown": {
+    "run_dir": "/Users/achyland/Desktop/fencerunner/scratch/inheritance/countdown",
+    "script_path": "/Users/achyland/Desktop/fencerunner/scratch/inheritance/countdown/countdown.sh"
+  },
+  "error-messages": {
+    "run_dir": "/Users/achyland/Desktop/fencerunner/scratch/inheritance/error-messages",
+    "script_path": "/Users/achyland/Desktop/fencerunner/scratch/inheritance/error-messages/error-messages.sh"
+  },
+  "get-confirmation": {
+    "run_dir": "/Users/achyland/Desktop/fencerunner/scratch/inheritance/get-confirmation",
+    "script_path": "/Users/achyland/Desktop/fencerunner/scratch/inheritance/get-confirmation/get-confirmation.sh"
+  },
+  "get-git-root": {
+    "run_dir": "/Users/achyland/Desktop/fencerunner/scratch/inheritance/get-git-root",
+    "script_path": "/Users/achyland/Desktop/fencerunner/scratch/inheritance/get-git-root/get-git-root.sh"
+  },
+  "get-script-info": {
+    "run_dir": "/Users/achyland/Desktop/fencerunner/scratch/inheritance/get-script-info",
+    "script_path": "/Users/achyland/Desktop/fencerunner/scratch/inheritance/get-script-info/get-script-info.sh"
+  },
+  "get-terraform-version": {
+    "run_dir": "/Users/achyland/Desktop/fencerunner/scratch/inheritance/get-terraform-version",
+    "script_path": "/Users/achyland/Desktop/fencerunner/scratch/inheritance/get-terraform-version/get-terraform-version.sh"
+  },
+  "get-version-string": {
+    "run_dir": "/Users/achyland/Desktop/fencerunner/scratch/inheritance/get-version-string",
+    "script_path": "/Users/achyland/Desktop/fencerunner/scratch/inheritance/get-version-string/get-version-string.sh"
+  },
+  "is-git-repo": {
+    "run_dir": "/Users/achyland/Desktop/fencerunner/scratch/inheritance/is-git-repo",
+    "script_path": "/Users/achyland/Desktop/fencerunner/scratch/inheritance/is-git-repo/is-git-repo.sh"
+  },
+  "rollingback": {
+    "run_dir": "/Users/achyland/Desktop/fencerunner/scratch/inheritance/rollingback",
+    "script_path": "/Users/achyland/Desktop/fencerunner/scratch/inheritance/rollingback/rollingback.sh"
+  },
+  "stacktrace": {
+    "run_dir": "/Users/achyland/Desktop/fencerunner/scratch/inheritance/stacktrace",
+    "script_path": "/Users/achyland/Desktop/fencerunner/scratch/inheritance/stacktrace/stacktrace.sh"
+  },
+  "strict-mode": {
+    "run_dir": "/Users/achyland/Desktop/fencerunner/scratch/inheritance/strict-mode",
+    "script_path": "/Users/achyland/Desktop/fencerunner/scratch/inheritance/strict-mode/strict-mode.sh"
+  },
+  "sudo-librarian-puppet": {
+    "run_dir": "/Users/achyland/Desktop/fencerunner/scratch/inheritance/sudo-librarian-puppet",
+    "script_path": "/Users/achyland/Desktop/fencerunner/scratch/inheritance/sudo-librarian-puppet/sudo-librarian-puppet.sh"
+  },
+  "terminal-or-not": {
+    "run_dir": "/Users/achyland/Desktop/fencerunner/scratch/inheritance/terminal-or-not",
+    "script_path": "/Users/achyland/Desktop/fencerunner/scratch/inheritance/terminal-or-not/terminal-or-not.sh"
+  },
+  "untag": {
+    "run_dir": "/Users/achyland/Desktop/fencerunner/scratch/inheritance/untag",
+    "script_path": "/Users/achyland/Desktop/fencerunner/scratch/inheritance/untag/untag.sh"
+  },
+  "using-colour": {
+    "run_dir": "/Users/achyland/Desktop/fencerunner/scratch/inheritance/using-colour",
+    "script_path": "/Users/achyland/Desktop/fencerunner/scratch/inheritance/using-colour/using-colour.sh"
+  },
+  "using-set": {
+    "run_dir": "/Users/achyland/Desktop/fencerunner/scratch/inheritance/using-set",
+    "script_path": "/Users/achyland/Desktop/fencerunner/scratch/inheritance/using-set/using-set.sh"
+  },
+  "variable-replace": {
+    "run_dir": "/Users/achyland/Desktop/fencerunner/scratch/inheritance/variable-replace",
+    "script_path": "/Users/achyland/Desktop/fencerunner/scratch/inheritance/variable-replace/variable-replace.sh"
+  },
+  "verbose-mode": {
+    "run_dir": "/Users/achyland/Desktop/fencerunner/scratch/inheritance/verbose-mode",
+    "script_path": "/Users/achyland/Desktop/fencerunner/scratch/inheritance/verbose-mode/verbose-mode.sh"
+  }
+}

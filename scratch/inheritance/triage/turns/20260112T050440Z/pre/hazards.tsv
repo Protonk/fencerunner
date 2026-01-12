@@ -1,0 +1,7 @@
+script.id\thazard\tmatch\tlegacy_path
+countdown	timebox.sleep	24:        sleep 1	/Users/achyland/Desktop/fencerunner/scratch/inheritance/countdown/countdown.legacy
+get-confirmation	interactive.read_prompt	25:        read -r -p "${1:-Are you sure? [y/N]} " response	/Users/achyland/Desktop/fencerunner/scratch/inheritance/get-confirmation/get-confirmation.legacy
+rollingback	timebox.sleep	114:    sleep 10	/Users/achyland/Desktop/fencerunner/scratch/inheritance/rollingback/rollingback.legacy
+sudo-librarian-puppet	privilege.sudo	3:sudo -i <<EOF	/Users/achyland/Desktop/fencerunner/scratch/inheritance/sudo-librarian-puppet/sudo-librarian-puppet.legacy
+untag	git.push	16:git tag | xargs git push origin --delete	/Users/achyland/Desktop/fencerunner/scratch/inheritance/untag/untag.legacy
+untag	git.tag_delete	6:git tag | xargs git tag -d	/Users/achyland/Desktop/fencerunner/scratch/inheritance/untag/untag.legacy

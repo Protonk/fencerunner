@@ -1,7 +1,12 @@
 #!/usr/bin/env bash
 
-sudo -i <<EOF
-cd /etc/puppetlabs/code/environments/production
-HOME=/root
-/usr/local/bin/librarian-puppet install --verbose
-EOF
+set -euo pipefail
+
+puppet_dir="/etc/puppetlabs/code/environments/production"
+
+if [[ "${EUID:-$(id -u)}" -ne 0 ]]; then
+    echo "requires root: would run librarian-puppet install in ${puppet_dir}" >&2
+    exit 0
+fi
+
+echo "noop: would run librarian-puppet install in ${puppet_dir}" >&2

@@ -1,0 +1,5 @@
+count	bucket	operation.kind	result.outcome	message	example_ids	example_run_dirs
+22	other	legacy.exec	success		abs,array-contains,array-to-string,center-text,check-prerequisites	/Users/achyland/Desktop/fencerunner/scratch/inheritance/abs,/Users/achyland/Desktop/fencerunner/scratch/inheritance/array-contains,/Users/achyland/Desktop/fencerunner/scratch/inheritance/array-to-string
+1	quarantined:destructive	legacy.quarantined	partial	quarantined	untag	/Users/achyland/Desktop/fencerunner/scratch/inheritance/untag
+1	quarantined:install_dependency	legacy.quarantined	partial	terraform	get-terraform-version	/Users/achyland/Desktop/fencerunner/scratch/inheritance/get-terraform-version
+1	quarantined:needs_privilege	legacy.quarantined	partial	quarantined	sudo-librarian-puppet	/Users/achyland/Desktop/fencerunner/scratch/inheritance/sudo-librarian-puppet

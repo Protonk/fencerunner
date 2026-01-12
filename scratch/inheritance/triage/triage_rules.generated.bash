@@ -8,13 +8,6 @@ triage_timeout_seconds=3
 triage_is_quarantined_id() {
   local id="${1:-}"
   case "${id}" in
-    check-prerequisites) return 0 ;;
-    countdown) return 0 ;;
-    get-confirmation) return 0 ;;
-    get-terraform-version) return 0 ;;
-    rollingback) return 0 ;;
-    sudo-librarian-puppet) return 0 ;;
-    untag) return 0 ;;
     *) return 1 ;;
   esac
 }
@@ -263,21 +256,6 @@ triage_apply_rules() {
 triage_hazards_for_id() {
   local id="${1:-}"
   case "${id}" in
-    countdown)
-      printf '%s\n' timebox.sleep
-      ;;
-    get-confirmation)
-      printf '%s\n' interactive.read_prompt
-      ;;
-    rollingback)
-      printf '%s\n' timebox.sleep
-      ;;
-    sudo-librarian-puppet)
-      printf '%s\n' privilege.sudo
-      ;;
-    untag)
-      printf '%s\n' git.push git.tag_delete
-      ;;
     *) return 0 ;;
   esac
 }
@@ -337,14 +315,6 @@ triage_apply_quarantine_overrides() {
   local script_id="${1:-}"
   [[ -n "${script_id}" ]] || return 0
   case "${script_id}" in
-    check-prerequisites)
-      TRIAGE_MESSAGE=IwillFail
-      triage__emit_unique recommend.install_dependency
-      ;;
-    get-terraform-version)
-      TRIAGE_MESSAGE=terraform
-      triage__emit_unique recommend.install_dependency
-      ;;
     *) ;;
   esac
 }

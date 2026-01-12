@@ -1,0 +1,2 @@
+script.id\thazard\tmatch\tlegacy_path
+sudo-librarian-puppet	privilege.sudo	3:sudo -i <<EOF	/Users/achyland/Desktop/fencerunner/scratch/inheritance/sudo-librarian-puppet/sudo-librarian-puppet.legacy
