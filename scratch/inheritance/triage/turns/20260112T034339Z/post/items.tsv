@@ -1,0 +1,26 @@
+run_dir	script.id	operation.kind	result.outcome	exit_code	message	stderr_first_line	commitments
+/Users/achyland/Desktop/fencerunner/scratch/inheritance/abs	abs	legacy.exec	success	0			emit.record,policy.read_only
+/Users/achyland/Desktop/fencerunner/scratch/inheritance/array-contains	array-contains	legacy.quarantined	partial	0	bash>=4	bash>=4	emit.record,policy.read_only,recommend.install_dependency,recommend.quarantine
+/Users/achyland/Desktop/fencerunner/scratch/inheritance/array-to-string	array-to-string	legacy.quarantined	partial	0	bash>=4	bash>=4	emit.record,policy.read_only,recommend.install_dependency,recommend.quarantine
+/Users/achyland/Desktop/fencerunner/scratch/inheritance/center-text	center-text	legacy.quarantined	partial	0	bash>=4	bash>=4	emit.record,policy.read_only,recommend.install_dependency,recommend.quarantine
+/Users/achyland/Desktop/fencerunner/scratch/inheritance/check-prerequisites	check-prerequisites	legacy.quarantined	partial	0	IwillFail	IwillFail	emit.record,policy.read_only,recommend.install_dependency,recommend.quarantine
+/Users/achyland/Desktop/fencerunner/scratch/inheritance/compare-versions	compare-versions	legacy.exec	success	0			emit.record,policy.read_only
+/Users/achyland/Desktop/fencerunner/scratch/inheritance/contains	contains	legacy.exec	success	0			emit.record,policy.read_only
+/Users/achyland/Desktop/fencerunner/scratch/inheritance/countdown	countdown	legacy.quarantined	partial	0	timeboxed	timeboxed	emit.record,policy.read_only,recommend.quarantine,recommend.timeboxed
+/Users/achyland/Desktop/fencerunner/scratch/inheritance/error-messages	error-messages	legacy.quarantined	partial	0	bash>=4	bash>=4	emit.record,policy.read_only,recommend.install_dependency,recommend.quarantine
+/Users/achyland/Desktop/fencerunner/scratch/inheritance/get-confirmation	get-confirmation	legacy.quarantined	partial	0	quarantined	quarantined	emit.record,policy.read_only,recommend.quarantine,recommend.run_interactively
+/Users/achyland/Desktop/fencerunner/scratch/inheritance/get-git-root	get-git-root	legacy.exec	success	0			emit.record,policy.read_only
+/Users/achyland/Desktop/fencerunner/scratch/inheritance/get-script-info	get-script-info	legacy.exec	success	0			emit.record,policy.read_only
+/Users/achyland/Desktop/fencerunner/scratch/inheritance/get-terraform-version	get-terraform-version	legacy.quarantined	partial	0	terraform	terraform	emit.record,policy.read_only,recommend.install_dependency,recommend.quarantine
+/Users/achyland/Desktop/fencerunner/scratch/inheritance/get-version-string	get-version-string	legacy.exec	success	0			emit.record,policy.read_only
+/Users/achyland/Desktop/fencerunner/scratch/inheritance/is-git-repo	is-git-repo	legacy.exec	success	0			emit.record,policy.read_only
+/Users/achyland/Desktop/fencerunner/scratch/inheritance/rollingback	rollingback	legacy.quarantined	partial	0	timeboxed	timeboxed	emit.record,policy.read_only,recommend.quarantine,recommend.timeboxed
+/Users/achyland/Desktop/fencerunner/scratch/inheritance/stacktrace	stacktrace	legacy.exec	success	0			emit.record,policy.read_only
+/Users/achyland/Desktop/fencerunner/scratch/inheritance/strict-mode	strict-mode	legacy.exec	success	0			emit.record,policy.read_only
+/Users/achyland/Desktop/fencerunner/scratch/inheritance/sudo-librarian-puppet	sudo-librarian-puppet	legacy.quarantined	partial	0	quarantined	quarantined	emit.record,policy.read_only,recommend.needs_privilege,recommend.quarantine
+/Users/achyland/Desktop/fencerunner/scratch/inheritance/terminal-or-not	terminal-or-not	legacy.exec	success	0			emit.record,policy.read_only
+/Users/achyland/Desktop/fencerunner/scratch/inheritance/untag	untag	legacy.quarantined	partial	0	quarantined	quarantined	emit.record,policy.read_only,recommend.destructive,recommend.needs_network,recommend.quarantine
+/Users/achyland/Desktop/fencerunner/scratch/inheritance/using-colour	using-colour	legacy.exec	success	0			emit.record,policy.read_only
+/Users/achyland/Desktop/fencerunner/scratch/inheritance/using-set	using-set	legacy.exec	success	0			emit.record,policy.read_only
+/Users/achyland/Desktop/fencerunner/scratch/inheritance/variable-replace	variable-replace	legacy.quarantined	partial	0	bash>=4	bash>=4	emit.record,policy.read_only,recommend.install_dependency,recommend.quarantine
+/Users/achyland/Desktop/fencerunner/scratch/inheritance/verbose-mode	verbose-mode	legacy.exec	success	0			emit.record,policy.read_only

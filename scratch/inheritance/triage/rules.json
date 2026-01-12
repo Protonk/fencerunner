@@ -1,0 +1,169 @@
+{
+  "schema_version": "triage_rules_v1",
+  "timeout_seconds": 3,
+  "quarantine": {
+    "script_ids": [
+      "array-contains",
+      "array-to-string",
+      "center-text",
+      "check-prerequisites",
+      "countdown",
+      "error-messages",
+      "get-confirmation",
+      "get-terraform-version",
+      "rollingback",
+      "sudo-librarian-puppet",
+      "untag",
+      "variable-replace"
+    ]
+  },
+  "quarantine_overrides": {
+    "check-prerequisites": {
+      "message": "IwillFail",
+      "emit_commitments": ["recommend.install_dependency"]
+    },
+    "get-terraform-version": {
+      "message": "terraform",
+      "emit_commitments": ["recommend.install_dependency"]
+    }
+  },
+  "hazard_commitments": {
+    "compat.bash4": ["recommend.install_dependency"],
+    "interactive.read_prompt": ["recommend.run_interactively"],
+    "privilege.sudo": ["recommend.needs_privilege"],
+    "git.push": ["recommend.needs_network"],
+    "git.tag_delete": ["recommend.destructive"],
+    "git.reset_hard": ["recommend.destructive"],
+    "git.clean_fdx": ["recommend.destructive"],
+    "timebox.sleep": ["recommend.timeboxed"],
+    "network.curl_wget": ["recommend.needs_network"],
+    "network.ssh_scp": ["recommend.needs_network"],
+    "destructive.rm_rf": ["recommend.destructive"],
+    "destructive.disk": ["recommend.destructive"],
+    "destructive.dd": ["recommend.destructive"]
+  },
+  "rules": [
+    {
+      "id": "bash_ge_4_required",
+      "when": {
+        "stderr_regex": "local: -n: invalid option|declare: -g: invalid option|declare: -A: invalid option"
+      },
+      "then": {
+        "outcome": "error",
+        "message": "bash>=4",
+        "emit_commitments": ["recommend.install_dependency"]
+      }
+    },
+    {
+      "id": "terraform_missing",
+      "when": {
+        "stdout_regex": "Terraform is not installed|Could not determine terraform version",
+        "stderr_regex": "Terraform is not installed|Could not determine terraform version"
+      },
+      "then": {
+        "outcome": "error",
+        "message": "terraform",
+        "emit_commitments": ["recommend.install_dependency"]
+      }
+    },
+    {
+      "id": "missing_command_in_path",
+      "when": {
+        "stdout_regex": "is not in your command path"
+      },
+      "then": {
+        "outcome": "error",
+        "message_from": "stdout.command_path",
+        "emit_commitments": ["recommend.install_dependency"]
+      }
+    },
+    {
+      "id": "command_not_found",
+      "when": {
+        "stderr_regex": "command not found"
+      },
+      "then": {
+        "outcome": "error",
+        "message_from": "stderr.command_not_found",
+        "emit_commitments": ["recommend.install_dependency"]
+      }
+    },
+    {
+      "id": "env_missing_interpreter",
+      "when": {
+        "stderr_regex": "env: .*No such file or directory"
+      },
+      "then": {
+        "outcome": "error",
+        "message_from": "stderr.env_missing",
+        "emit_commitments": ["recommend.install_dependency"]
+      }
+    },
+    {
+      "id": "bad_interpreter_missing",
+      "when": {
+        "stderr_regex": "bad interpreter:.*(No such file or directory|no such file or directory)"
+      },
+      "then": {
+        "outcome": "error",
+        "message_from": "stderr.bad_interpreter",
+        "emit_commitments": ["recommend.install_dependency"]
+      }
+    },
+    {
+      "id": "dyld_library_not_loaded",
+      "when": {
+        "stderr_regex": "dyld: Library not loaded:|Library not loaded:"
+      },
+      "then": {
+        "outcome": "error",
+        "message_from": "stderr.dyld_library_not_loaded",
+        "emit_commitments": ["recommend.install_dependency"]
+      }
+    },
+    {
+      "id": "python_module_missing",
+      "when": {
+        "stderr_regex": "ModuleNotFoundError: No module named|ImportError: No module named"
+      },
+      "then": {
+        "outcome": "error",
+        "message_from": "stderr.python_module_missing",
+        "emit_commitments": ["recommend.install_dependency"]
+      }
+    },
+    {
+      "id": "node_module_missing",
+      "when": {
+        "stderr_regex": "Cannot find module"
+      },
+      "then": {
+        "outcome": "error",
+        "message_from": "stderr.node_module_missing",
+        "emit_commitments": ["recommend.install_dependency"]
+      }
+    },
+    {
+      "id": "ruby_load_error",
+      "when": {
+        "stderr_regex": "cannot load such file --"
+      },
+      "then": {
+        "outcome": "error",
+        "message_from": "stderr.ruby_load_error",
+        "emit_commitments": ["recommend.install_dependency"]
+      }
+    },
+    {
+      "id": "exec_no_such_file_or_directory",
+      "when": {
+        "stderr_regex": "^(bash|sh|zsh): .*: (No such file or directory|no such file or directory)|: line [0-9]+: .*: (No such file or directory|no such file or directory)"
+      },
+      "then": {
+        "outcome": "error",
+        "message_from": "stderr.exec_no_such_file_or_directory",
+        "emit_commitments": ["recommend.install_dependency"]
+      }
+    }
+  ]
+}

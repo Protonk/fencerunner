@@ -4,7 +4,9 @@
     {
       "id": "emit.record",
       "provider": "runner",
-      "helps": ["emit"],
+      "helps": [
+        "emit"
+      ],
       "is": "Boundary record emitter",
       "at": "emit-record",
       "version": "v1"
@@ -12,8 +14,80 @@
     {
       "id": "policy.read_only",
       "provider": "user",
-      "helps": ["ensure"],
+      "helps": [
+        "ensure"
+      ],
       "is": "Run is intended to be non-destructive",
+      "at": "runbook:triage",
+      "version": "v1"
+    },
+    {
+      "id": "recommend.destructive",
+      "provider": "user",
+      "helps": [
+        "emit"
+      ],
+      "is": "Triage recommendation signal",
+      "at": "runbook:triage",
+      "version": "v1"
+    },
+    {
+      "id": "recommend.install_dependency",
+      "provider": "user",
+      "helps": [
+        "emit"
+      ],
+      "is": "Install a missing dependency",
+      "at": "runbook:triage",
+      "version": "v1"
+    },
+    {
+      "id": "recommend.needs_network",
+      "provider": "user",
+      "helps": [
+        "emit"
+      ],
+      "is": "Triage recommendation signal",
+      "at": "runbook:triage",
+      "version": "v1"
+    },
+    {
+      "id": "recommend.needs_privilege",
+      "provider": "user",
+      "helps": [
+        "emit"
+      ],
+      "is": "Triage recommendation signal",
+      "at": "runbook:triage",
+      "version": "v1"
+    },
+    {
+      "id": "recommend.quarantine",
+      "provider": "user",
+      "helps": [
+        "emit"
+      ],
+      "is": "Quarantine (do not auto-exec)",
+      "at": "runbook:triage",
+      "version": "v1"
+    },
+    {
+      "id": "recommend.run_interactively",
+      "provider": "user",
+      "helps": [
+        "emit"
+      ],
+      "is": "Triage recommendation signal",
+      "at": "runbook:triage",
+      "version": "v1"
+    },
+    {
+      "id": "recommend.timeboxed",
+      "provider": "user",
+      "helps": [
+        "emit"
+      ],
+      "is": "Triage recommendation signal",
       "at": "runbook:triage",
       "version": "v1"
     }

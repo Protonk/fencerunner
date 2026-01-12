@@ -1,0 +1,4 @@
+script.id\thazard\tmatch\tlegacy_path
+get-confirmation	interactive.read_prompt	25:        read -r -p "${1:-Are you sure? [y/N]} " response	/Users/achyland/Desktop/fencerunner/scratch/inheritance/get-confirmation/get-confirmation.legacy
+sudo-librarian-puppet	privilege.sudo	3:sudo -i <<EOF	/Users/achyland/Desktop/fencerunner/scratch/inheritance/sudo-librarian-puppet/sudo-librarian-puppet.legacy
+untag	git.push	16:git tag | xargs git push origin --delete	/Users/achyland/Desktop/fencerunner/scratch/inheritance/untag/untag.legacy

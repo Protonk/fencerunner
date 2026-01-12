@@ -1,0 +1,7 @@
+count	bucket	operation.kind	result.outcome	message	example_ids	example_run_dirs
+14	other	legacy.exec	success		abs,compare-versions,contains,error-messages,get-git-root	/Users/achyland/Desktop/fencerunner/scratch/inheritance/abs,/Users/achyland/Desktop/fencerunner/scratch/inheritance/compare-versions,/Users/achyland/Desktop/fencerunner/scratch/inheritance/contains
+4	bash>=4 evidence	legacy.exec	error	bash>=4	array-contains,array-to-string,center-text,variable-replace	/Users/achyland/Desktop/fencerunner/scratch/inheritance/array-contains,/Users/achyland/Desktop/fencerunner/scratch/inheritance/array-to-string,/Users/achyland/Desktop/fencerunner/scratch/inheritance/center-text
+3	quarantined	legacy.quarantined	partial	quarantined	get-confirmation,sudo-librarian-puppet,untag	/Users/achyland/Desktop/fencerunner/scratch/inheritance/get-confirmation,/Users/achyland/Desktop/fencerunner/scratch/inheritance/sudo-librarian-puppet,/Users/achyland/Desktop/fencerunner/scratch/inheritance/untag
+2	quarantined	legacy.quarantined	partial	timed_out	countdown,rollingback	/Users/achyland/Desktop/fencerunner/scratch/inheritance/countdown,/Users/achyland/Desktop/fencerunner/scratch/inheritance/rollingback
+1	missing dependency	legacy.exec	error	IwillFail	check-prerequisites	/Users/achyland/Desktop/fencerunner/scratch/inheritance/check-prerequisites
+1	missing dependency	legacy.exec	error	terraform	get-terraform-version	/Users/achyland/Desktop/fencerunner/scratch/inheritance/get-terraform-version

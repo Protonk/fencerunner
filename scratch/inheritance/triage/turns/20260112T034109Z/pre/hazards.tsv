@@ -1,0 +1,12 @@
+script.id\thazard\tmatch\tlegacy_path
+array-contains	compat.bash4	19:    local -n haystack=$1	/Users/achyland/Desktop/fencerunner/scratch/inheritance/array-contains/array-contains.legacy
+array-to-string	compat.bash4	19:    local -n arr=$2	/Users/achyland/Desktop/fencerunner/scratch/inheritance/array-to-string/array-to-string.legacy
+center-text	compat.bash4	34:    declare -g screen_width	/Users/achyland/Desktop/fencerunner/scratch/inheritance/center-text/center-text.legacy
+countdown	timebox.sleep	24:        sleep 1	/Users/achyland/Desktop/fencerunner/scratch/inheritance/countdown/countdown.legacy
+error-messages	compat.bash4	88:    declare -g red	/Users/achyland/Desktop/fencerunner/scratch/inheritance/error-messages/error-messages.legacy
+get-confirmation	interactive.read_prompt	25:        read -r -p "${1:-Are you sure? [y/N]} " response	/Users/achyland/Desktop/fencerunner/scratch/inheritance/get-confirmation/get-confirmation.legacy
+rollingback	timebox.sleep	114:    sleep 10	/Users/achyland/Desktop/fencerunner/scratch/inheritance/rollingback/rollingback.legacy
+sudo-librarian-puppet	privilege.sudo	3:sudo -i <<EOF	/Users/achyland/Desktop/fencerunner/scratch/inheritance/sudo-librarian-puppet/sudo-librarian-puppet.legacy
+untag	git.push	16:git tag | xargs git push origin --delete	/Users/achyland/Desktop/fencerunner/scratch/inheritance/untag/untag.legacy
+untag	git.tag_delete	6:git tag | xargs git tag -d	/Users/achyland/Desktop/fencerunner/scratch/inheritance/untag/untag.legacy
+variable-replace	compat.bash4	61:    declare -A config	/Users/achyland/Desktop/fencerunner/scratch/inheritance/variable-replace/variable-replace.legacy

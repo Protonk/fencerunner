@@ -57,7 +57,7 @@ IFS=$'\n\t'
 
 function run_tests()
 {
-    local filename="strict-mode.sh"
+    local filename="strict-mode.legacy"
     local string="test"
 
     # Gotcha Number 1:
