@@ -16,8 +16,15 @@
 
 function array_contains()
 {
-    local -n haystack=$1
-    local needle=$2
+    local haystack_name="$1"
+    local needle="$2"
+    local -a haystack
+
+    if [[ ! "${haystack_name}" =~ ^[a-zA-Z_][a-zA-Z0-9_]*$ ]]; then
+        return 2
+    fi
+
+    eval "haystack=(\"\${${haystack_name}[@]}\")"
 
     for i in "${haystack[@]}"; do
         if [[ $i == "${needle}" ]]; then
@@ -67,4 +74,3 @@ run_tests
 # -------------------------------------------------------------------------------- #
 # This is the end - nothing more to see here.                                      #
 # -------------------------------------------------------------------------------- #
-
