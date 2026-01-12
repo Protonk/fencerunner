@@ -1,0 +1,51 @@
+fencerunner: supervised: running 25 script(s) across 25 run dir(s)
+fencerunner: [1/25] abs
+fencerunner: script abs -> success
+fencerunner: [2/25] array-contains
+fencerunner: script array-contains -> partial
+fencerunner: [3/25] array-to-string
+fencerunner: script array-to-string -> partial
+fencerunner: [4/25] center-text
+fencerunner: script center-text -> partial
+fencerunner: [5/25] check-prerequisites
+fencerunner: script check-prerequisites -> partial
+fencerunner: [6/25] compare-versions
+fencerunner: script compare-versions -> success
+fencerunner: [7/25] contains
+fencerunner: script contains -> success
+fencerunner: [8/25] countdown
+fencerunner: script countdown -> partial
+fencerunner: [9/25] error-messages
+fencerunner: script error-messages -> partial
+fencerunner: [10/25] get-confirmation
+fencerunner: script get-confirmation -> partial
+fencerunner: [11/25] get-git-root
+fencerunner: script get-git-root -> success
+fencerunner: [12/25] get-script-info
+fencerunner: script get-script-info -> success
+fencerunner: [13/25] get-terraform-version
+fencerunner: script get-terraform-version -> partial
+fencerunner: [14/25] get-version-string
+fencerunner: script get-version-string -> success
+fencerunner: [15/25] is-git-repo
+fencerunner: script is-git-repo -> success
+fencerunner: [16/25] rollingback
+fencerunner: script rollingback -> partial
+fencerunner: [17/25] stacktrace
+fencerunner: script stacktrace -> success
+fencerunner: [18/25] strict-mode
+fencerunner: script strict-mode -> success
+fencerunner: [19/25] sudo-librarian-puppet
+fencerunner: script sudo-librarian-puppet -> partial
+fencerunner: [20/25] terminal-or-not
+fencerunner: script terminal-or-not -> success
+fencerunner: [21/25] untag
+fencerunner: script untag -> partial
+fencerunner: [22/25] using-colour
+fencerunner: script using-colour -> success
+fencerunner: [23/25] using-set
+fencerunner: script using-set -> success
+fencerunner: [24/25] variable-replace
+fencerunner: script variable-replace -> partial
+fencerunner: [25/25] verbose-mode
+fencerunner: script verbose-mode -> success

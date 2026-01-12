@@ -8,18 +8,13 @@ triage_timeout_seconds=3
 triage_is_quarantined_id() {
   local id="${1:-}"
   case "${id}" in
-    array-contains) return 0 ;;
-    array-to-string) return 0 ;;
-    center-text) return 0 ;;
     check-prerequisites) return 0 ;;
     countdown) return 0 ;;
-    error-messages) return 0 ;;
     get-confirmation) return 0 ;;
     get-terraform-version) return 0 ;;
     rollingback) return 0 ;;
     sudo-librarian-puppet) return 0 ;;
     untag) return 0 ;;
-    variable-replace) return 0 ;;
     *) return 1 ;;
   esac
 }
@@ -268,20 +263,8 @@ triage_apply_rules() {
 triage_hazards_for_id() {
   local id="${1:-}"
   case "${id}" in
-    array-contains)
-      printf '%s\n' compat.bash4
-      ;;
-    array-to-string)
-      printf '%s\n' compat.bash4
-      ;;
-    center-text)
-      printf '%s\n' compat.bash4
-      ;;
     countdown)
       printf '%s\n' timebox.sleep
-      ;;
-    error-messages)
-      printf '%s\n' compat.bash4
       ;;
     get-confirmation)
       printf '%s\n' interactive.read_prompt
@@ -294,9 +277,6 @@ triage_hazards_for_id() {
       ;;
     untag)
       printf '%s\n' git.push git.tag_delete
-      ;;
-    variable-replace)
-      printf '%s\n' compat.bash4
       ;;
     *) return 0 ;;
   esac

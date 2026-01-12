@@ -3,18 +3,13 @@
   "timeout_seconds": 3,
   "quarantine": {
     "script_ids": [
-      "array-contains",
-      "array-to-string",
-      "center-text",
       "check-prerequisites",
       "countdown",
-      "error-messages",
       "get-confirmation",
       "get-terraform-version",
       "rollingback",
       "sudo-librarian-puppet",
-      "untag",
-      "variable-replace"
+      "untag"
     ]
   },
   "quarantine_overrides": {

@@ -15,17 +15,26 @@
 
 function array_to_string()
 {
-    separator="$1"
-    local -n arr=$2
+    local separator="$1"
+    local arr_name="$2"
+    local replacement="${3:-}"
+    local -a arr
+    local regex
+
+    if [[ ! "${arr_name}" =~ ^[a-zA-Z_][a-zA-Z0-9_]*$ ]]; then
+        return 2
+    fi
+
+    eval "arr=(\"\${${arr_name}[@]}\")"
 
     regex="$( printf "${separator}%s" "${arr[@]}" )"
     regex="${regex:${#separator}}" # remove leading separator
 
-    if [[ -n $3 ]]; then
+    if [[ -n "${replacement}" ]]; then
         if [[ $regex = *"$separator"* ]]; then
             prefix=${regex%"$separator"*}               # Extract content before the last instance
             suffix=${regex#"$prefix"}                   # Extract content *after* our prefix
-            regex=${prefix}${suffix/"$separator"/"$3"}  # Append unmodified prefix w/ suffix w/ replacement
+            regex=${prefix}${suffix/"$separator"/"${replacement}"}  # Append unmodified prefix w/ suffix w/ replacement
         fi
     fi
 
@@ -61,4 +70,3 @@ run_tests
 # -------------------------------------------------------------------------------- #
 # This is the end - nothing more to see here.                                      #
 # -------------------------------------------------------------------------------- #
-

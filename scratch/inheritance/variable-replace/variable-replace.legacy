@@ -3,45 +3,29 @@
 # -------------------------------------------------------------------------------- #
 # Description                                                                      #
 # -------------------------------------------------------------------------------- #
-# Replace template variables in a file with values from an associative array.      #
+# Replace template variables in a file with key/value pairs.                       #
 # -------------------------------------------------------------------------------- #
-
-# -------------------------------------------------------------------------------- #
-# Ref Array                                                                        #
-# -------------------------------------------------------------------------------- #
-# Take the name of an array and create a vaid reference to it.                     #
-# -------------------------------------------------------------------------------- #
-
-function ref_array()
-{
-    local varname="$1"
-    local export_as="$2"
-    local code
-
-    code=$(declare -p "$varname")
-
-    echo "${code/$varname/$export_as}"
-}
 
 # -------------------------------------------------------------------------------- #
 # Replace Variables                                                                #
 # -------------------------------------------------------------------------------- #
-# Take the name of an array and create a vaid reference to it.                     #
+# Replace each search string with its replacement.                                 #
 # -------------------------------------------------------------------------------- #
 
 function replace_variables()
 {
-    eval "$(ref_array "$1" array)"
-    filename="${2}"
+    local filename="$1"
+    shift
 
-    local i
-    local search
-    local replace
+    if (( $# % 2 != 0 )); then
+        echo "replace_variables: expected pairs of <search> <replace>" 1>&2
+        return 2
+    fi
 
-    # shellcheck disable=SC2154
-    for i in "${!array[@]}"; do
-        search="${i}"
-        replace="${array[$i]}"
+    while (( $# >= 2 )); do
+        local search="$1"
+        local replace="$2"
+        shift 2
 
         if grep -q "${search}" "${filename}"; then
             sed -i '' "s/${search}/${replace}/g" "${filename}"
@@ -58,15 +42,16 @@ function replace_variables()
 
 function run_tests()
 {
-    declare -A config
+    local tmpfile
 
-# shellcheck disable=SC2034
-    config=(
-        ['{{ USERNAME_PLACE_HOLDER }}']='admin'
-        ['{{ PASSWORD_PLACE_HOLDER }}']='password'
-    )
+    tmpfile="$(mktemp -t variable-replace.XXXXXX)"
+    cp "test.template" "${tmpfile}"
 
-    replace_variables "config" "test.template"
+    replace_variables "${tmpfile}" \
+        '{{ USERNAME_PLACE_HOLDER }}' 'admin' \
+        '{{ PASSWORD_PLACE_HOLDER }}' 'password'
+
+    rm -f "${tmpfile}"
 }
 
 # -------------------------------------------------------------------------------- #
