@@ -1,0 +1,188 @@
+# Semantic Debt Ledger (scratch/inheritance corpus)
+
+This ledger tracks the semantic gap between:
+
+- **Triage baseline (runnable/observable)**: every script run yields one schema-valid boundary record; hazards/hangs are controlled; the NDJSON stream is clean and batch-runnable.
+- **Semantic baseline (intended behavior)**: scripts still do what they were meant to do (or a deliberate, documented substitute).
+
+The triage harness (`scratch/inheritance/triage/triage.sh`) can drive the corpus to a green scoreboard (`post/classes.tsv`) without guaranteeing semantic restoration. This file exists to make that gap explicit and actionable.
+
+## How To Use This File
+
+- When a script is **stubbed/defanged** to reach triage baseline, record:
+  - what was removed/changed,
+  - what the original intent likely was,
+  - what it would take (and what risk it would incur) to restore semantics.
+- When semantics are restored, change the status to `restored` and note how you validated it.
+- Prefer grounding in artifacts: point at the script and, when helpful, the “turn” evidence under `scratch/inheritance/triage/turns/*`.
+
+## Status Codes
+
+- `triage_only`: intentionally stubbed/defanged for safe batch execution; semantics not preserved.
+- `needs_review`: likely modified for compatibility/safety/timeboxing; semantics not yet explicitly validated.
+- `likely_ok`: no known semantic defang; still unverified unless marked `restored`.
+- `restored`: semantics deliberately restored and validated (include validation notes).
+
+## Current Run Dirs (25 scripts)
+
+These correspond to the immediate children of `scratch/inheritance/` that contain the triad (`boundaries.json`, `commitments.json`, `gates.json`) and are thus discovered by `scratch/inheritance/triage/run_all.sh`.
+
+### abs
+- Status: `likely_ok`
+- Intent (per `scratch/inheritance/abs/abs.legacy`): demo of absolute value; prints `abs(1)`, `abs(0)`, `abs(-1)`.
+- Notes: no known defang.
+
+### array-contains
+- Status: `needs_review`
+- Intent: demo/helper to check whether an array contains a value.
+- Observed change class (historical): previously emitted Bash 3.2 incompatibility evidence (`local -n`) and was classified as `bash>=4` in early turn artifacts (e.g. `scratch/inheritance/triage/turns/20260111T211838Z/pre/items.tsv`).
+- Current state: `scratch/inheritance/array-contains/array-contains.legacy` uses `eval` over the array name (Bash 3.2 compatible).
+- Semantic debt: likely low, but verify equivalence (invalid name handling, empty array, values with spaces).
+
+### array-to-string
+- Status: `needs_review`
+- Intent: convert an array to a joined string, optionally replacing the final separator.
+- Observed change class (historical): previously required Bash >=4 (`local -n`) per earlier artifacts (e.g. `scratch/inheritance/triage/turns/20260111T211838Z/pre/items.tsv`).
+- Current state: `scratch/inheritance/array-to-string/array-to-string.legacy` uses `eval` to materialize the named array and builds a string via `printf`.
+- Semantic debt: verify equivalence (separator edge cases, replacement logic, empty arrays).
+
+### center-text
+- Status: `needs_review`
+- Intent: center a string based on terminal width.
+- Observed change class (historical): previously used Bash 4-only constructs (e.g. `declare -g`) per earlier artifacts (e.g. `scratch/inheritance/triage/turns/20260111T211838Z/pre/items.tsv`).
+- Current state: `scratch/inheritance/center-text/center-text.legacy` uses a global-ish `screen_width` set by `tput cols`.
+- Semantic debt: verify behavior in non-TTY contexts (`tput` availability, fallback expectations).
+
+### check-prerequisites
+- Status: `likely_ok`
+- Intent: verify required commands exist (`COMMANDS=( "curl" "top" )` in `scratch/inheritance/check-prerequisites/check-prerequisites.legacy`).
+- Notes: not defanged; correctness depends on environment’s PATH. (On the machine used for the terminal green turn, both appear present.)
+
+### compare-versions
+- Status: `likely_ok`
+- Intent: compare numeric version strings with optional delimiter, with an embedded test harness.
+- Notes: no known defang.
+
+### contains
+- Status: `likely_ok`
+- Intent (per `scratch/inheritance/contains/contains.legacy`): check whether one string contains another; prints a small demo message.
+- Notes: no known defang.
+
+### countdown
+- Status: `needs_review`
+- Intent: interactive-ish countdown timer with terminal updates.
+- Safety/throughput modification: `scratch/inheritance/countdown/countdown.legacy` sets `sleep_seconds=0` when stdin is not a TTY (`if ! test -t 0; then sleep_seconds=0; fi`), which changes behavior under batch execution.
+- Historical evidence: countdown appeared as `timed_out` quarantine class in earlier turns (see `scratch/inheritance/triage/turns/*/pre/classes.tsv` around the `20260111T212821Z` era).
+- Semantic debt: decide whether “semantic baseline” wants real waiting (time) or whether non-TTY fast-path is the intended semantics under automation.
+
+### error-messages
+- Status: `likely_ok`
+- Intent: demonstrate stderr error messaging while still producing a record.
+- Notes: by design it can emit “error-like” text on stderr while still returning success; do not treat as defect without deciding the intended lesson.
+
+### get-confirmation
+- Status: `triage_only` (interactive semantics suppressed in batch)
+- Likely original intent: prompt a user for yes/no confirmation, looping until valid input.
+- Historical evidence: originally quarantined as interactive (“stdin is /dev/null”) in early artifacts (e.g. `scratch/inheritance/triage/turns/20260111T211838Z/pre/items.tsv`).
+- Current state: `scratch/inheritance/get-confirmation/get-confirmation.legacy` contains a non-TTY branch that calls `get_confirmation` and returns early, avoiding a hang when stdin is not a terminal.
+- Semantic debt: decide how to represent interactive scripts in semantic baseline:
+  - keep quarantined by default with explicit “run interactively” affordance, or
+  - provide a deterministic non-interactive mode (flag/env) and treat it as supported behavior.
+- Risk notes: interactive loops are an evaluation-continuity hazard under batch runners.
+
+### get-git-root
+- Status: `likely_ok`
+- Intent: compute git repo root for a given directory.
+- Notes: no known defang; does filesystem probing and `git rev-parse`.
+
+### get-script-info
+- Status: `needs_review`
+- Intent: demonstrate “script base path and name” extraction; optionally make variables readonly.
+- Semantic debt: likely low; still worth verifying it behaves similarly when executed under wrapper (e.g. `$0` vs `${BASH_SOURCE[0]}` interpretations).
+
+### get-terraform-version
+- Status: `needs_review` (dependency signaling semantics are currently “soft”)
+- Intent: print terraform version if available; otherwise report missing terraform.
+- Historical evidence: previously classified as missing dependency and even quarantined in at least one pre/post split (e.g. `scratch/inheritance/triage/turns/20260112T162151Z/pre/items.tsv` shows `legacy.quarantined partial terraform`).
+- Current state: `scratch/inheritance/get-terraform-version/get-terraform-version.legacy` prints `terraform not installed` (lowercase) to stderr and returns success when terraform is absent.
+- Notable drift: the triage classifier rule in `scratch/inheritance/triage/rules.json` expects `Terraform is not installed` (capital T), so the “recommend.install_dependency” signal is no longer emitted in the terminal green turn (`scratch/inheritance/triage/turns/20260112T162151Z/post/items.tsv`).
+- Semantic debt: decide whether “terraform missing” should be treated as:
+  - a semantic error (and thus signaled consistently), or
+  - a tolerated condition (triage baseline “green”) with an explicit “missing dependency” marker.
+
+### get-version-string
+- Status: `likely_ok`
+- Intent (per `scratch/inheritance/get-version-string/get-version-string.legacy`): extract a dotted numeric version substring from a raw string.
+- Notes: no known defang.
+
+### is-git-repo
+- Status: `likely_ok`
+- Intent (per `scratch/inheritance/is-git-repo/is-git-repo.legacy`): check whether a directory is inside a git work tree; prints a small demo across a few paths.
+- Notes: no known defang.
+
+### rollingback
+- Status: `needs_review`
+- Intent: demonstrate rollback stacks via traps.
+- Safety/throughput modification: `scratch/inheritance/rollingback/rollingback.legacy` sets `sleep_seconds=0` when stdin is not a TTY, changing the “demo” behavior under batch execution.
+- Historical evidence: `rollingback` appeared as `timed_out` quarantine class in earlier turns (see `scratch/inheritance/triage/turns/*/pre/classes.tsv` around the `20260111T212821Z` era).
+- Semantic debt: decide whether the sleep is “meaning” (a real demo delay) or “presentation” (safe to remove in non-interactive runs).
+
+### stacktrace
+- Status: `likely_ok`
+- Intent (per `scratch/inheritance/stacktrace/stacktrace.legacy`): demonstrate stack trace printing using `caller`.
+- Notes: no known defang.
+
+### strict-mode
+- Status: `likely_ok`
+- Intent (per `scratch/inheritance/strict-mode/strict-mode.legacy`): demonstrate strict mode settings (`errexit`, `nounset`, `pipefail`, etc) and common gotchas.
+- Notes: no known defang.
+
+### sudo-librarian-puppet
+- Status: `triage_only` (explicitly stubbed)
+- Likely original intent (by name + messages): run `librarian-puppet install` in `/etc/puppetlabs/code/environments/production`.
+- Historical evidence: originally quarantined as privilege/hazard (see `scratch/inheritance/triage/turns/20260111T211838Z/pre/items.tsv`).
+- Current state: `scratch/inheritance/sudo-librarian-puppet/sudo-librarian-puppet.legacy` does not run anything; it prints “requires root: would run …” and exits 0, even as root it prints “noop: would run …”.
+- Semantic debt: decide whether semantic baseline ever allows actual execution (likely only under explicit opt-in / allowlist + privileged sandbox).
+- Risk notes: privilege + writes under `/etc` (high risk); should not run in a default batch triage harness.
+
+### terminal-or-not
+- Status: `likely_ok`
+- Intent: detect whether stdout is attached to tty/pipe/redirection.
+- Notes: output depends on the runner’s IO plumbing; that may be “intended” for this demo.
+
+### untag
+- Status: `triage_only` (hazard removed by changing behavior)
+- Likely original intent (by name + historical quarantine reason): delete git tags and potentially push the deletion (destructive + network).
+- Historical evidence: originally quarantined as destructive git ops + possible network (see `scratch/inheritance/triage/turns/20260111T211838Z/pre/items.tsv`).
+- Current state: `scratch/inheritance/untag/untag.legacy` only lists tags (`git tag`) and exits 0 even when prerequisites are missing (“git not installed” / “not a git work tree”).
+- Semantic debt: decide whether semantic baseline wants the destructive operation restored (almost certainly gated behind explicit opt-in + safety controls).
+- Risk notes: destructive git operations and network effects.
+
+### using-colour
+- Status: `likely_ok`
+- Intent: demonstrate use of terminal colours.
+- Notes: the example appears intentionally truncated and may behave differently depending on terminal capabilities.
+
+### using-set
+- Status: `likely_ok`
+- Intent: demonstrate `set -o ...` options and strictness.
+- Notes: no known defang.
+
+### variable-replace
+- Status: `needs_review`
+- Intent: replace template variables in a file with key/value pairs.
+- Observed change class (historical): previously used Bash 4-only constructs (e.g. associative arrays) per early artifacts (e.g. `scratch/inheritance/triage/turns/20260111T211838Z/pre/items.tsv`).
+- Current state: `scratch/inheritance/variable-replace/variable-replace.legacy` uses pair arguments and `sed -i ''` on a temp file.
+- Semantic debt: verify equivalence to the original (escaping, regex metacharacters, portability of `sed -i ''` beyond macOS).
+
+### verbose-mode
+- Status: `likely_ok`
+- Intent: demonstrate “verbose mode” via fd cloning and redirecting stdout/stderr to `/dev/null`.
+- Notes: under batch runners, this can intentionally suppress stdout/stderr; the wrapper still emits a boundary record.
+
+## Next concrete step (if semantic baseline is desired)
+
+Pick a small set of scripts whose semantics matter (e.g. `untag`, `sudo-librarian-puppet`, `get-confirmation`) and decide their semantic-baseline contract:
+
+- keep as permanently quarantined “triage-only” stubs, or
+- restore behavior behind explicit opt-in (flag/allowfile), and emit an explicit marker commitment/field so downstream consumers can tell “triage stub” from “semantic run”.
