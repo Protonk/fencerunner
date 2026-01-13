@@ -330,3 +330,313 @@ Keep it messy. That’s the point.
 - We should have named the “unit of work mismatch” explicitly earlier: if you’re editing one wrapper at a time without a batch queue, you’re doing craft, not triage.
 - The phrase “queue with a constitution” was accurate: once process becomes the product, it will always expand to fill attention.
 - “Artifacts are leverage” is only true if you can point at the artifact row that changed; otherwise you’re paying rent to the idea of leverage.
+
+## an epic poem
+
+Sing, Muse of Stdout, of the covenanted stream,
+  of scripts inherited like driftwood on a shore,
+  and of a runner—quiet, stern, and oddly kind—
+  that asked not what the work meant,
+  only that the work be seen.
+
+  Sing of the bag: a flat directory of names,
+  each name a door cut from a different season,
+  each door hung by a different hand,
+  some opening on gentle probes,
+  some on half-made charms,
+  some on secrets, mounts, and weathered keys,
+  some on a prompt that waits forever
+  for a human breath.
+
+  Sing of our pact: that every word would count.
+  That we would not rush.
+  That we would learn by doing,
+  turn by turn, atom by atom,
+  and that the tale would live not in confidence,
+  but in artifacts—cold, comparable,
+  and shared without pleading.
+
+  CANTO I — SOUP
+
+  We came upon the soup first:
+  not a recipe, not a meal,
+  but a pot where anything might float—
+  a curl of network,
+  a clink of privilege,
+  a blade of deletion,
+  a lullaby of sleep,
+  a lie of exit code,
+  a print to stdout that shattered the glass.
+
+  The bag had no single law.
+  Success meant “green” in one script
+  and “warning” in another.
+  Stderr was confession or noise,
+  stdout was result or diary,
+  and the same gesture—harmless here—
+  could be a wound elsewhere.
+
+  Triage was not a concept then,
+  but a feeling:
+  too many unknowns,
+  too little time,
+  and the cost of touching the wrong thing
+  higher than ignorance could pay.
+
+  CANTO II — THREE RUNES
+
+  Then the three runes were laid on the table:
+  commitments, gates, and boundaries—
+  not chained together by the runner’s hand,
+  but offered as separate levers,
+  so the wielder could orchestrate without entangling.
+
+  Commitments: a small glossary,
+  not permission, not policing,
+  but flares burned in the record—
+  “recommend.*” like colored smoke,
+  “finding.” like a rough compass,
+  “policy.read_only” as an oath spoken aloud.
+
+  Boundaries: the banks of the river,
+  where each line must flow as one shape,
+  a schema that made the stream legible
+  even when the meanings fought in the dark.
+
+  Gates: the cliffs where discipline could be demanded,
+  not to learn more,
+  but to make drift undeniable
+  once learning had yielded an island worth protecting.
+
+  And supervised—merciful mode—
+  where failure was not a broken run,
+  but a synthetic ghost stamped with “harness.supervised,”
+  so the river kept running
+  and the dead still counted.
+
+  CANTO III — STEP LADDER AND SELF-INJECTION
+
+  At first we built steps like stairs in a storm.
+  Each turn, a numbered stone,
+  each stone a promise to add the next.
+  We made a queue, clean as a ledger,
+  and admired its order.
+
+  But the queue began to comfort us.
+  The paperwork grew a constitution.
+  We argued about the third dial,
+  about route and risk and confidence,
+  and the doc—bright, persuasive—
+  started to speak in voices that sounded like law.
+
+  A strange inversion took hold:
+  the artifact became the instruction,
+  the instruction became the next artifact,
+  and we could climb forever
+  without touching the bag.
+
+  The user—keeper of constraints, breaker of spells—
+  heard the opera forming
+  and cut through the chorus.
+
+  “Where is the urgency?”
+  “What is bleeding?”
+  “Does this help you touch more scripts safely today,
+  or does it only polish receipts for tomorrow?”
+
+  The words struck like a gate slamming shut,
+  not to stop work,
+  but to stop the wrong kind of work.
+
+  CANTO IV — AUTHORITY MAP
+
+  So we forged a shield named Authority Map,
+  etched with a hard ranking of truth:
+  the harness message first,
+  then the empirical record,
+  then repo excerpts—quoted, anchored,
+  and last of all the doc’s own long voice,
+  which could be beautiful,
+  and therefore dangerous.
+
+  We hung a law above the door:
+  No New Process.
+  Not until a delta existed.
+  Not until a named id moved,
+  not in theory,
+  but in the river itself.
+
+  And the litany was rewritten as a blade:
+  Run.
+  Pick the synthetic.
+  Touch one id.
+  Rerun.
+  Report the delta.
+  No ceremony that could not point to the line it changed.
+
+  CANTO V — THE TABLET OF COUNTS
+
+  Even that was too slow
+  once the bag grew teeth and gravity.
+  One-by-one was craft,
+  and triage demanded classes.
+
+  So we built a single entrypoint,
+  a turn that minted a timestamped vault,
+  and from the vault we took two tablets:
+
+  items.tsv: the roll of every voice,
+  one row per script,
+  who spoke, how, and what it enrolled.
+
+  classes.tsv: the scoreboard,
+  grouped and counted,
+  the queue made honest—
+  not “what we want to do,”
+  but “what exists.”
+
+  And we swore a new oath:
+  if it doesn’t move a count,
+  it isn’t work.
+
+  Hazards came first, as they must.
+  Before execution, we scanned the bodies—
+  static prophecy over *.legacy—
+  for sudo and read -p,
+  for rm -rf and git push,
+  for sleeps that would steal the day,
+  for Bash 4 incantations
+  that Bash 3.2 would reject with quiet poison.
+
+  Quarantine became a fast action:
+  not exile into silence,
+  but a typed record saying,
+  “I did not run this, and here is why.”
+  Even refusal became signal,
+  a cymbal resting with intent,
+  still present in the score.
+
+  Wrappers ceased to be artisanal.
+  They became generated artifacts,
+  uniform as stamped coin,
+  and our hands were forbidden
+  to chisel them one at a time.
+
+  The levers narrowed:
+  rules.json for policy,
+  scan_legacy for hazard sight,
+  and the bodies themselves
+  when the only way forward
+  was to change what they were.
+
+  CANTO VI — CLASS SWEEPS
+
+  Then came the campaigns, row by row.
+
+  Bash 4 first: namerefs and declares,
+  the tempting local -n that promised elegance
+  and delivered incompatibility with an exit code that lied.
+  We did not debate it.
+  We counted it.
+  We ported it.
+  We watched the row fall.
+
+  Interactive loops next:
+  a prompt waiting on /dev/null,
+  a question that never heard an answer.
+  We made the scripts non-interactive-safe—
+  defaulting, returning, refusing to hang.
+  The class shrank.
+  The stream kept breathing.
+
+  Privilege after that:
+  the sudo masquerade,
+  the appetite for root.
+  We did not grant it.
+  We defanged it into honest stderr,
+  a safe no-op that still spoke,
+  and the needs_privilege quarantine dissolved.
+
+  Destructive git rites:
+  tag deletions, pushes, irreversible cleans.
+  We stripped their teeth,
+  made them inspect rather than cut,
+  and the destructive class quieted.
+
+  Timeboxes: sleeps like sand in gears.
+  We removed the slow drama,
+  or skipped it when unattended,
+  and the day returned to us.
+
+  Missing dependencies, too:
+  terraform and phantom tools.
+  Sometimes we quarantined them as signal.
+  Sometimes we chose a triage baseline
+  and defanged the noise away.
+  Each choice was policy,
+  not accident,
+  and the scoreboard recorded what we valued.
+
+  All the while, the same refrain:
+  Run the turn.
+  Read the tablets.
+  Pick one row.
+  Sweep the class.
+  Rerun and verify.
+
+  CANTO VII — DUCK
+
+  At last the river was clear:
+  hazards.tsv empty,
+  classes.tsv a single line:
+  legacy.exec success—counted, unromantic,
+  like a heartbeat measured by a machine.
+
+  The bag was not understood.
+  It did not need to be.
+  The polyphonic ensemble was still polyphonic—
+  whatever it might become—
+  but every instrument now had a mic,
+  every silence an explicit rest,
+  every refusal a typed note.
+
+  And we remembered the last, quiet warning:
+  a green scoreboard can be purchased
+  by making everything harmless,
+  by turning meaning into no-op.
+  That is a legitimate baseline,
+  but not the same as truth.
+
+  So we named the fork:
+  triage baseline, where the stream stays runnable,
+  and semantic baseline, where purpose is restored.
+  We refused to let success in one
+  pretend it had achieved the other.
+
+  EPILOGUE — WHAT WE LEARNED
+
+  This collaboration was a forge of constraints.
+  The user held the pace like a metronome,
+  cutting ceremony when it grew self-referential.
+  We—two agents—learned to speak in artifacts,
+  to keep the channel alive without turning it into myth,
+  and to let counts settle arguments.
+
+  We began with soup: everything mixed, untrusted, unnamed.
+  We ended with duck: a stable shape you can point at,
+  a system that can be operated,
+  and a rule sharp enough to keep us honest:
+
+  If it doesn’t move a class count,
+  it isn’t work.
+
+  So when the next bag arrives,
+  and the next flat directory makes a new weather,
+  we will not build an opera first.
+  We will run.
+  We will count.
+  We will quarantine what bites.
+  We will sweep what repeats.
+  We will make every script—whether it sings or rests—
+  contribute to the ensemble,
+  whatever it may be.
