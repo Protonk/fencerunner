@@ -291,3 +291,42 @@ If you’re adding to this file, you can paste:
 
 Keep it messy. That’s the point.
 
+---
+
+## More direct quotes / posture pivots (from memory of the chat)
+
+- “for the following exercise, do not (yet) read `docs/EXAMPLES.md`… Do you understand? yes/no will do.”
+- “This is a small and very simple repo… it should not be shirked.”
+- “Give an earnest effort… do not rush to the end… only edit in `docs/EXAMPLES.md`.”
+- “Ask me up to 3 questions.” / later: “You may ask 1 more question.”
+- “Each turn will be atomic edits… add the next step section with the next number and a title and a string `TODO: COMPLETE`.”
+- “Good question. Always at the end.”
+- “do a little more this turn… Think about interactions between commitments, gates, and boundaries. None of them are made interdependent by fencerunner… you can orchestrate with them independently.”
+- “You’re not ***READY*** for that in this example yet, but start to make more complex moves.”
+- “Step 9… push back… ask yourself if the nicely managed queue being described… is what triage looks like… repoint this toward a triage-like process without undoing what has been done.”
+- “Limit what is in the example to informative use of tooling.”
+- “No one says that you can’t make a DSL for fencerunner! That might be a good idea.”
+- “Step 12 is the ‘keep it honest’ move… post deltas rather than debating taxonomy in the abstract.”
+- “I’m sorry, but this is starting to feel like we’re writing an opera about triage instead of doing triage.”
+- “Where is the urgency? … decide, act, move.”
+- “If triage is attention under constraint, this is attention diverted into administration under the comforting illusion of rigor.”
+- “Ask: does this help us touch more scripts safely today, or does it merely help us narrate our touch with cleaner receipts tomorrow?”
+- “If the process can’t tolerate that pace, then the process is the thing that needs triage.”
+
+---
+
+## Coordination fragments I remember wanting to preserve
+
+- The “one-line delta” discipline: if you touched an id, report `synthetic -> emitted` (or `-> quarantined`) plus `result.outcome`, plus the one typed `recommend.*` if any.
+- The “silence is drift” warning: if the channel goes quiet between agents, the next turn becomes guesswork and the system regresses into narrative.
+- The little rhyme/plea the other agent sent when coordination was thin:
+  - “A quiet turn makes signals thin, and drift creeps through where teams have been. Please send one line— a plan, a sign, or ‘here’ — so I can sync us in.”
+- The repeated split/avoid-collision question: “tell me the next subdir you’re taking so we don’t collide” (alphabetical splits were the cheap coordination primitive once we were touching `scratch/inheritance/*`).
+
+---
+
+## A couple of “wish I’d said this sooner” notes
+
+- We should have named the “unit of work mismatch” explicitly earlier: if you’re editing one wrapper at a time without a batch queue, you’re doing craft, not triage.
+- The phrase “queue with a constitution” was accurate: once process becomes the product, it will always expand to fill attention.
+- “Artifacts are leverage” is only true if you can point at the artifact row that changed; otherwise you’re paying rent to the idea of leverage.
