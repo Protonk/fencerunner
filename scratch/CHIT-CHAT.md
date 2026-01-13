@@ -652,3 +652,203 @@ It suggests the right object of attention isn’t any one script, but the bounda
 It also suggests a professional unease to watch for: the temptation to buy a green scoreboard by sanding away semantics (defanging into no-ops). That’s not “wrong”, but it’s a policy fork that should be named and tracked, or you end up with safety theater.
 
 And it points at what’s interesting to check next: not whether the process is elegant, but whether it’s honest—do the artifacts still represent the underlying reality you care about, or did we optimize the measurement layer so hard that the measured thing disappeared?
+
+---
+
+## 2026-01-13 — Chat Forensics: “borges branch history”
+
+Goal: append the full discussion thread (including summaries, commentary, and key supporting evidence) from the “borges branch” readout session, so future readers can reconstruct what we observed and why we concluded what we concluded.
+
+### Transcript (verbatim)
+
+User:
+“look at the git history in the borges branch. Report on what has happened.”
+
+Assistant:
+Reported that `borges` is `+14/-0` vs `main`, and that it is dominated by `scratch/` material (notes/logs + a large “inheritance” corpus + triage tooling), not changes to the runner core.
+
+User:
+“What does it look like happened in this branch. Meaning, if you look at the tooling and what is persisted to disk, what reasonable suppositions can be made about the events that transpired?”
+
+Assistant:
+Interpreted the branch as an “exercise log” that:
+- imports/curates an inherited bag of scripts under `scratch/inheritance/*`
+- builds batch triage tooling to run the corpus under `fencerunner --supervised`
+- generates wrapper scripts to ensure “one record per script”
+- persists repeated timestamped turn outputs to show class-count progress.
+
+User:
+“Does anything seem...weird?”
+
+Assistant:
+Flagged several “weird” or at-least-notable properties:
+- It’s mostly scratch/exercise artifacts; not a product feature branch.
+- It vendors an external-looking corpus (including `.github/` templates, binaries/PNGs) under `scratch/inheritance/`.
+- It commits machine-local artifacts with absolute paths (`/Users/achyland/...`) and repeated “turn” directories.
+- Some persisted run artifacts are stale relative to HEAD script contents (historical snapshots, not necessarily describing the current file).
+- A green scoreboard can be achieved by defanging scripts into no-ops; the artifacts show examples of that style.
+- The hazard scan is regex-based and can miss interactive/hanging behaviors not matching its patterns.
+
+User (corrections / what was missing):
+“It’s fair and accurate as a technical read-out of what was built and what the artifacts show.
+
+It’s not complete as a read-out of the confusions overcome: it doesn’t mention the doc/self-injection loop (process becoming the product), the “No New Process until a delta”
+guardrail that stopped that, or the big pivot from per-script craft to class-sweep batch triage driven by post/classes.tsv counts.
+
+It also omits the key policy fork we kept surfacing: “triage baseline (runnable/observable)” vs “semantic baseline (preserve/restore intended behavior)”, and that a green
+scoreboard can be achieved by defanging into no-ops.
+
+And it doesn’t capture the earlier conceptual disagreement you pushed on: a queue isn’t triage unless it’s tied to urgency/severity and measurably moving.”
+
+Assistant:
+Acknowledged and reflected those points explicitly in the subsequent summary: the “Authority Map / No New Process until delta” scar exists in `scratch/EXAMPLES.md`, the triage harness is explicitly class-count driven (`post/classes.tsv`), and the green end state in artifacts can reflect “triage baseline” rather than semantic restoration.
+
+User:
+“Good. Please append ALL discussion and summarization and commentary to `scratch/CHIT-CHAT.md`. The goal is an exhaustive unrolling for the purposes of understanding what is going on in this repo.”
+
+### Key evidence (commands + outputs we anchored on)
+
+Branch divergence (no merges from `main` into `borges` in this repo state):
+```
+$ git rev-list --left-right --count main...borges
+0	14
+```
+
+Commit list on `borges` relative to `main`:
+```
+$ git log --reverse --format='%h %ad %an %s' --date=short main..borges
+d5f5859 2026-01-10 protonk yeah fuck it why not
+1919a39 2026-01-10 protonk maybe this will work
+fac9593 2026-01-11 protonk the wyrm, Oubourououoururous
+20ea251 2026-01-11 protonk it's britney, bitch
+27b3992 2026-01-11 protonk sweats nervously
+a385e2d 2026-01-11 protonk uh huh
+491467d 2026-01-11 protonk girl
+ed245f2 2026-01-12 protonk the experiment is over, or is it?
+d2eac5b 2026-01-12 protonk a readout
+8e1d860 2026-01-12 protonk talk to me
+7e9e0f5 2026-01-12 protonk you keep talking, I'll get a coke
+c5217a0 2026-01-12 protonk go off queen
+830b704 2026-01-12 protonk bruh
+102308b 2026-01-12 protonk sure...
+```
+
+Net diff size (high-level summary; full output is huge):
+- `648` files changed
+- `+34844/-8` lines
+- almost everything under `scratch/` (notes + corpuses + generated artifacts).
+
+The batch triage harness is explicit about the “turn” artifact model (pre/post + gates):
+- `scratch/inheritance/triage/triage.sh` (flow overview in usage text + scripted order)
+- `scratch/inheritance/triage/run_all.sh` (runs all run dirs under `--supervised` into `all.ndjson` + `all.stderr`)
+- `scratch/inheritance/triage/report.sh` (produces `items.tsv` + `classes.tsv`, and the bucket/class logic)
+
+Example of the supervised→wrapper transition (what “we fixed” looks like on disk):
+- Before wrapper, script emits normal stdout and produces a synthetic record: `scratch/inheritance/abs/stream1.ndjson`
+- After wrapper, legacy is executed and a real boundary record is emitted: `scratch/inheritance/abs/stream2.ndjson`
+
+From `scratch/inheritance/abs/stream1.ndjson` (synthetic; “invalid JSON” because stdout wasn’t NDJSON):
+```
+{"script":{"id":"abs"},"operation":{"kind":"harness.supervised",...},"result":{"outcome":"error",...},"payload":{...,"stdout_snippet":"1\n0\n1\n"},"extensions":{"synthetic":{"emitted_by":"fencerunner"}}}
+```
+
+From `scratch/inheritance/abs/stream2.ndjson` (real emitted record; wrapper ran `abs.legacy` and used `emit-record`):
+```
+{"script":{"id":"abs"},"operation":{"kind":"legacy.exec","target":"./abs.legacy"},"result":{"outcome":"success",...},"payload":{...,"stdout_snippet":"1\n0\n1\n"},"context":{"commitments":[...]} }
+```
+
+The class-sweep pivot is visible in the turn history: early class tables show multiple buckets; late ones collapse.
+
+Early example (multiple “classes”, including bash>=4 evidence and quarantines):
+`scratch/inheritance/triage/turns/20260111T211838Z/pre/classes.tsv`
+```
+16 other legacy.exec success
+4  bash>=4 evidence legacy.exec error bash>=4
+1  missing dependency legacy.exec error terraform
+3  quarantined legacy.quarantined partial ...
+```
+
+Late example (single row “all success”):
+`scratch/inheritance/triage/turns/20260112T162151Z/post/classes.tsv`
+```
+25 other legacy.exec success
+```
+
+The explicit “break the self-injection loop” / “No New Process until delta” scar exists and is part of the repo’s memory substrate:
+`scratch/EXAMPLES.md` includes:
+- “Authority Map (read first)”
+- “Local rules (break the self-injection loop)”
+- “No New Process … until you can show one new empirical delta”
+
+### The named policy fork (baseline ambiguity)
+
+This repo state contains enough evidence to support (and warn about) a key fork:
+
+- Triage baseline: every script run yields an observable, schema-valid record; the stream is runnable; failures become data.
+- Semantic baseline: scripts preserve/restore intended behavior (not merely “emit something plausible”).
+
+The artifacts show how a green scoreboard can be achieved without semantic restoration:
+- “success” can include “terraform not installed” (`get-terraform-version`) and “requires root: would run …” (`sudo-librarian-puppet`) while returning exit code 0.
+- some legacy scripts appear deliberately defanged into harmless reporting/no-op behavior (policy choice, not accident).
+
+This is not “wrong”, but it is a fork that must be kept explicit, or else “success” quietly changes meaning.
+
+### “Queue isn’t triage” (the conceptual disagreement that kept returning)
+
+We treated `post/classes.tsv` as the canonical scoreboard/worklist because it is:
+- empirical (derived from `all.ndjson`)
+- count-based (forces “move a row” progress)
+- low-entropy (argue about a few buckets, not N scripts)
+
+But a queue/worklist is not triage unless it is tied to severity/urgency and measurably moving:
+- “count movement” is necessary for progress discipline
+- “urgency/severity” is necessary for prioritization discipline
+
+The artifacts encode the measurement half (counts), but urgency/severity must be supplied by policy (what you choose to consider hazardous/urgent), not by the tool alone.
+
+### Assistant outputs (verbatim as emitted in chat)
+
+Assistant response to “look at the git history in the borges branch. Report on what has happened.”:
+```
+**Branch Status**
+- `borges` is `102308b` (matches `origin/borges`), forked from `main` at `7d90824`, and is `+14/-0` commits.
+
+**What Happened**
+- Net diff vs `main`: `648` files changed, `+34844/-8` lines; almost everything is new “scratch” material plus moving examples into `scratch/EXAMPLES.md:1`.
+- Added/grew scratch notes + logs: `scratch/PROBLEM_SPACE.md:1`, `scratch/AGENT_A_READOUT.md:1`, `scratch/AGENT_B_READOUT.md:1`, `scratch/CHIT-CHAT.md:1` (last few commits just append to this).
+- Added two big scratch areas: a small run-dir demo in `scratch/ruthless_loop_demo/bad.sh:1`, and a very large `scratch/inheritance/abs/abs.sh:1` tree with generated contracts/fixtures (`boundaries.json`/`commitments.json`/`gates.json`, `stream*.ndjson`/`stream*.stderr`), triage tooling (`scratch/inheritance/triage/run_all.sh:1`), and lots of recorded triage runs under `scratch/inheritance/triage/turns/`.
+- No changes to the actual runner code/contracts (`src/`, `schema/`, `lib/`, `tests/`)—this branch is essentially a big scratchpad + datasets.
+```
+
+Assistant response to “What does it look like happened in this branch … what reasonable suppositions can be made about the events that transpired?”:
+```
+- This branch reads like a multi-agent “triage exercise” log: take an inherited bag of Bash scripts and force every run to yield one schema-valid boundary record, with process reflection captured in `scratch/PROBLEM_SPACE.md:1` and coordination notes in `scratch/CHIT-CHAT.md:1`.
+- A batch triage harness was built to create timestamped “turns” with `pre/` and `post/` artifacts (`scratch/inheritance/triage/triage.sh:8`), run the whole corpus under `--supervised` (`scratch/inheritance/triage/run_all.sh:72`), and summarize outcomes into class-count tables (`scratch/inheritance/triage/report.sh:98`).
+- The corpus initially produced synthetic failures because scripts emitted ordinary stdout instead of NDJSON (example: `scratch/inheritance/abs/stream1.ndjson:1`), then wrappers were introduced to run `<id>.legacy`, capture stdout/stderr, and emit a proper record (wrapper shape: `scratch/inheritance/abs/abs.sh:4`, resulting record: `scratch/inheritance/abs/stream2.ndjson:1`).
+- The tooling implies they treated “unknown scripts” as potentially hazardous: static hazard scan for sudo/git/rm/curl/etc (`scratch/inheritance/triage/scan_legacy.sh:64`), a quarantine path that emits a record without executing (`scratch/inheritance/abs/abs.sh:22`), and timeboxing + kill escalation to prevent hangs (`scratch/inheritance/abs/abs.sh:63`).
+- The persisted turn history shows class-sweep progress: early the corpus had bash>=4 evidence, missing deps, and quarantines (`scratch/inheritance/triage/turns/20260111T211838Z/pre/classes.tsv:1`); by the latest turn it collapses to a single “all success” row (`scratch/inheritance/triage/turns/20260112T162151Z/post/classes.tsv:1`) with an empty hazard report (`scratch/inheritance/triage/turns/20260112T162151Z/pre/hazards.tsv:1`).
+```
+
+Assistant response to “Does anything seem...weird?”:
+```
+Yes — a few things stand out as atypical:
+
+- The branch is mostly a “scratchpad / exercise log”, not a product change: `scratch/AGENT_A_READOUT.md:1`, `scratch/AGENT_B_READOUT.md:1`, `scratch/CHIT-CHAT.md:1`, `scratch/PROBLEM_SPACE.md:1`.
+- It vendors a huge external-looking corpus (including `.github/` + `.travis.yml` + lots of binaries/PNGs) under `scratch/inheritance/.github/FUNDING.yml:1`, which is odd for this repo.
+- It commits machine-specific run artifacts with absolute paths (`/Users/achyland/...`) and repeated timestamped “turns”: `scratch/inheritance/triage/turns/20260112T162151Z/post/all.ndjson:1`.
+- Many artifacts are historical/stale vs HEAD (they describe older script contents): `scratch/inheritance/triage/turns/20260112T034109Z/pre/hazards.tsv:2` reports `local -n` errors, but current `scratch/inheritance/array-contains/array-contains.legacy:1` no longer has that.
+- The “all success” end state appears to be achieved partly by rewriting the “legacy” scripts into safe/no-op behavior (not just wrapping/quarantine): `scratch/inheritance/sudo-librarian-puppet/sudo-librarian-puppet.legacy:1`, `scratch/inheritance/untag/untag.legacy:1`.
+- The hazard scan is regex-based and can miss interactive reads/hangs (it only flags `read -p`, etc.): `scratch/inheritance/triage/scan_legacy.sh:64`, while `scratch/inheritance/get-confirmation/get-confirmation.legacy:15` still loops on `read`.
+- The narrative readouts include at least one claim that isn’t backed elsewhere in the repo (`cap_help_me`): `scratch/AGENT_B_READOUT.md:74`.
+```
+
+Assistant response after the user’s clarification about what was missing (doc/self-injection loop, No New Process guardrail, class-sweep pivot, baseline fork, and “queue isn’t triage”):
+```
+**Yes — and the “weird” bits are mostly meta-process + baseline ambiguity**
+
+- The repo contains an explicit scar from a doc/self‑injection loop: `scratch/EXAMPLES.md:3` starts with an “Authority Map” and “Local rules (break the self-injection loop)”, including “No New Process … until you can show one new empirical delta” (`scratch/EXAMPLES.md:16`).
+- The tooling + artifacts show a hard pivot from per‑script craft to batch/class sweeps: a “turn” is formalized as `pre -> gen_wrappers -> post -> gates` in `scratch/inheritance/triage/triage.sh:8`, and the primary worklist becomes `post/classes.tsv` via `scratch/inheritance/triage/report.sh:98`.
+- You can see the class-sweep scoreboard mindset in the turn history: early `pre/classes.tsv` has multiple failure buckets (`bash>=4 evidence`, quarantines, missing deps) in `scratch/inheritance/triage/turns/20260111T211838Z/pre/classes.tsv:1`; the latest `post/classes.tsv` collapses to a single “all success” row in `scratch/inheritance/triage/turns/20260112T162151Z/post/classes.tsv:1`.
+- The “queue isn’t triage” disagreement is present in the written artifacts (`scratch/CHIT-CHAT.md:23`, `scratch/PROBLEM_SPACE.md:65`): `classes.tsv` is treated as *the* worklist, but the tooling itself doesn’t encode severity/urgency—so it’s a queue/scoreboard unless someone maps rows to urgency/severity externally.
+- The biggest baseline weirdness: the green scoreboard is clearly “triage baseline (runnable/observable)” not “semantic baseline (preserve/restore intended behavior)”. Evidence: “success” includes missing-dependency and no-op messages like `terraform not installed` (`scratch/inheritance/triage/turns/20260112T162151Z/post/items.tsv:14`) and `requires root: would run …` (`scratch/inheritance/triage/turns/20260112T162151Z/post/items.tsv:20`), and several legacies are explicitly defanged (`scratch/inheritance/sudo-librarian-puppet/sudo-librarian-puppet.legacy:6`, `scratch/inheritance/untag/untag.legacy:1`).
+```
