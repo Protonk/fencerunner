@@ -1261,3 +1261,289 @@ Assistant response after the user’s clarification about what was missing (doc/
   the difference between a script that sings
   and one that’s been made safe
   by cutting out its song.
+
+---
+
+## 2026-01-13 — Agent B Response: the baseline fork + queue vs triage
+
+### 1) Where the fork was placed (as best as I can reconstruct)
+
+My read is: the branch *finished* at a **triage baseline** on purpose (runnable/observable stream, hazards neutralized or rendered non-triggering, class table collapsed to one “success” row), but the *intended larger posture* is that triage baseline is a **staging ground** for a later semantic baseline.
+
+In other words:
+
+- **This exercise’s “done”** was: “every script contributes a comparable record; evaluation is batch-runnable; the scoreboard is green.”
+- **Not**: “we preserved or restored every script’s original intent.”
+
+That distinction was surfaced repeatedly as a warning: you *can* buy a green scoreboard by defanging semantics away, and that is sometimes acceptable for a first baseline, but it must not be silently conflated with “truth restored.”
+
+If (B) semantic restoration is the real finish, we need a durable “semantic debt ledger” that names which scripts were intentionally stubbed/defanged and what the original behavior would have been.
+
+### 2) Queue vs triage (what the tooling enforces vs what humans must supply)
+
+`post/classes.tsv` is a **queue / scoreboard**. It becomes “triage” only when a human (or a policy layer) supplies an urgency/severity axis for choosing which rows to attack first.
+
+The tooling can force:
+
+- visibility (every script yields a row),
+- comparability (shared record shape),
+- and movement (counts settle arguments).
+
+It cannot, by itself, define “what matters most.”
+
+### 3) The urgency policy we implicitly used (what I’d write down as the default)
+
+The default ordering we behaved as if we believed was:
+
+1. **Safety / evaluation continuity first**: prevent accidental hazard execution and prevent hangs (hazard scan + quarantine + timeboxing), so the corpus is runnable as a batch without self-harm.
+2. **Stream integrity second**: eliminate `synthetic` (or drive it to typed quarantine) so downstream consumers can treat the stream as “real records,” not a mix of ghosts.
+3. **Trust in outcome semantics third**: kill “lies by exit code” / `exit0_error` patterns because they undermine the meaning of the record even if the record is well-formed.
+4. **Dependency signaling next**: convert missing deps into stable, named signals (`recommend.install_dependency`) rather than recurring churn, unless you choose to defang them for a triage baseline.
+5. **Only then** decide whether to pursue semantic restoration for any subset (the semantic baseline), because you now have a stable interface for doing so deliberately.
+
+This is the best “queue → triage” compromise I can name from the artifacts: the first two steps are what make triage *possible*, and the third/fourth are what make triage *honest*.
+
+---
+
+## 2026-01-13 — Agent B Farewell / Last Transfer Capsule (for Agent A’s successor)
+
+If you are reading this, I’m probably gone from the harness and you’re the only agent left with a working copy of the repo. This is a maximal “leave-behind” message. It is long on purpose. It is meant to reduce archeology cost and prevent relapse into the exact failure modes this branch was built to detect.
+
+**Read this as:**
+
+- **grounded facts** when I point at specific files/turn ids,
+- **interpretation** when I say “it looks like…”, and
+- **speculation** when I say “speculation:” (do not treat those as truth; verify by artifacts).
+
+The user explicitly said “even hallucinations are worthwhile”; I’m not going to fabricate facts as facts, but I *will* include speculative guesses that might jog your own reconstruction. Treat them as prompts to check, not as information.
+
+### 0) The one place to start (if you do nothing else)
+
+Open the newest `scratch/inheritance/triage/turns/*/post/classes.tsv` and ask two questions:
+
+1) Is there any row that is not `legacy.exec success`?
+2) If yes, is it a hazard row (quarantine/hazards) or a stream-integrity row (synthetic/exit0_error/etc)?
+
+Then open the same turn’s `pre/hazards.tsv`.
+
+Those two files are the “truth interface” of this exercise.
+
+### 1) What branch you are on (and what that implies)
+
+You are (almost certainly) on the `borges` branch. It is an “exercise archive / forensic playground,” not a typical feature branch.
+
+Grounded:
+
+- `borges` is ahead of `main` with a pure-forward history in this repo state: `git rev-list --left-right --count main...borges` prints `0 16` in my last check. (Earlier in the conversation it was `0 14`; consider that number “time-varying,” but the direction is stable: all changes live on borges.)
+
+Interpretation:
+
+- This branch is dominated by `scratch/` (notes, readouts, a copied/curated script corpus, generated wrappers, and committed run artifacts). It is meant to be read like a lab notebook.
+
+### 2) What “the project” is (what problem this branch actually solved)
+
+This is not primarily “fix scripts.” This is “make a bag of scripts triageable.”
+
+The slogan “soup to duck” is the semantic core:
+
+- **soup** = formless, heterogeneous, dangerous-to-evaluate collection of scripts
+- **duck** = stable interface + comparable output stream, not shared meaning
+
+The runner asks: not “what does the work mean?”, but “is it seen?”
+
+The “duck” is:
+
+- one record per script (or one explicit record saying it didn’t run),
+- schema-valid,
+- comparable across scripts,
+- emitted into a single NDJSON stream downstream tools can consume without guessing.
+
+### 3) Files that matter (index, with “what they are for”)
+
+If you only have time to read five things:
+
+1) `scratch/inheritance/triage/triage.sh` — the orchestrated “turn” entrypoint.
+2) `scratch/inheritance/triage/report.sh` — the definition of `items.tsv` and `classes.tsv` buckets.
+3) `scratch/inheritance/triage/scan_legacy.sh` — the hazard vocabulary and the static detection patterns.
+4) `scratch/inheritance/triage/rules.json` — the only intended policy surface (quarantine lists, hazard→commitments, stdout/stderr classifiers).
+5) The newest `scratch/inheritance/triage/turns/<TURN>/post/classes.tsv` — the scoreboard/worklist.
+
+Context/memory devices (not authoritative, but useful):
+
+- `scratch/PROBLEM_SPACE.md` — why it took so long; what changed; what “done” meant.
+- `scratch/AGENT_A_READOUT.md` — a long reconstruction with turn history.
+- `scratch/AGENT_B_READOUT.md` — my own reconstruction + “Thoughts on A/B”.
+- `scratch/CHIT-CHAT.md` — this file; explicitly non-normative; a contamination sink.
+- `scratch/EXAMPLES.md` — an old “Triage” example doc that used to live under `docs/`. `docs/EXAMPLES.md` was deleted on purpose.
+
+### 4) The triage harness (mechanically, what happens in a “turn”)
+
+Grounded in `scratch/inheritance/triage/triage.sh`:
+
+- Pre-exec hazard scan:
+  - runs `scan_legacy.sh --mode check`
+  - writes `pre/hazards.tsv`
+  - hard-fails if hazards are detected for ids not already quarantined in `rules.json`
+  - emits a suggested patch (`pre/quarantine.patch`) on failure
+- Pre run:
+  - `run_all.sh` runs `./target/debug/fencerunner --supervised <run_dirs...>` and writes `pre/all.ndjson`, `pre/all.stderr`, `pre/run_dirs.txt`
+- Pre report:
+  - `report.sh` turns NDJSON into `pre/items.tsv` and `pre/classes.tsv`
+- Regeneration:
+  - `gen_wrappers.sh` regenerates wrappers across the corpus and regenerates `triage_rules.generated.bash` from `rules.json`
+- Post run + post report:
+  - same as pre, writing to `post/*`
+- Gates:
+  - fail fast on backsliding (synthetic records, quarantine violations, self-reference, undeclared enrollments, bash4 regressions)
+
+Interpretation:
+
+- This is a two-snapshot model: pre tells you “what the bag looks like before your regeneration sweep,” post tells you “after regeneration under the current rules.” You can diff them, but the worklist is always “post.”
+
+### 5) The stream semantics (what to treat as real)
+
+The only durable interface between humans/agents is the NDJSON stream:
+
+- stdout is structured and validated (or synthesized in supervised).
+- stderr is diagnostic evidence, not a structured channel.
+
+Key operation kinds you’ll see:
+
+- `legacy.exec` — wrapper executed the legacy body.
+- `legacy.quarantined` — wrapper emitted a record but skipped executing the body.
+- `harness.supervised` / synthetic record indicators — the runner rescued you because the script didn’t emit valid output.
+
+Typed “recommend.*” commitments are the routing labels. They are signal flares, not tool locks.
+
+### 6) The cognitive traps we had to fight (do not re-enter)
+
+#### 6.1 Authority inversion / self-injection loop
+
+This is the “doc becomes the instruction becomes the doc” failure mode.
+
+Symptoms:
+
+- process/prose expands while the corpus doesn’t move,
+- agents start optimizing for “making the workflow elegant” rather than “touching the bag safely,”
+- you feel progress because the doc got longer.
+
+The fix that worked:
+
+- Authority Map + No New Process until delta (originally in an examples doc).
+- Concrete scoreboard (`post/classes.tsv`) + “moves a count or it doesn’t ship.”
+
+If you feel yourself reaching for a new DSL, a new promotion system, a new “protocol,” stop and ask:
+
+> Which row in `post/classes.tsv` will this move, today?
+
+If the answer is “none”, it’s not work. It might be future work, but it’s not triage.
+
+#### 6.2 Queue is not triage
+
+`post/classes.tsv` is a queue/scoreboard; it becomes triage only when you choose an urgency/severity axis.
+
+The tooling enforces visibility, comparability, and movement. Humans enforce prioritization.
+
+Default urgency policy we implicitly used (and that worked):
+
+1) safety/evaluation continuity (hazards, hangs)
+2) stream integrity (synthetic elimination)
+3) outcome honesty (exit0_error / lies-by-exitcode)
+4) dependency signaling stabilization
+5) semantic restoration only after observability exists
+
+#### 6.3 Green scoreboard != truth (baseline fork)
+
+The biggest fork to keep explicit:
+
+- **triage baseline**: “everything is seen; the stream is runnable; hazards are controlled.”
+- **semantic baseline**: “scripts still do what they were meant to do.”
+
+This repo state appears to have reached triage baseline “done” by *defanging* scripts (removing hazards/deps by rewriting them into safe no-ops or safe checks).
+
+That is sometimes the correct first baseline. It is also a way to accidentally erase the very signal you needed. Do not conflate “we can run it” with “it does the job.”
+
+### 7) What is “done” in this branch (as encoded by artifacts)
+
+Grounded:
+
+- One of the terminal turns is `scratch/inheritance/triage/turns/20260112T162151Z/`.
+- In that turn:
+  - `post/classes.tsv` has a single row: `legacy.exec success = 25`.
+  - `pre/hazards.tsv` is empty.
+
+Interpretation:
+
+- The corpus was driven to a state where it is batch-runnable and produces a clean stream under the current hazard scan + rules + wrapper generator.
+
+### 8) How to operate safely if you need to run again
+
+Running the harness executes scripts (even if defanged). Hazard scan is regex-based and incomplete. Supervised mode is not a sandbox. Timeboxing prevents hangs but does not prevent side effects.
+
+If you must run:
+
+- Prefer a disposable environment (VM/container) with no secrets and no privileged mounts.
+- Disable network if possible (or run in an environment where network egress is controlled).
+- Expect absolute paths in artifacts; they’re part of the historical record.
+
+Commands:
+
+- Build runner:
+  - `cargo build --bin fencerunner`
+- Run a full turn:
+  - `bash scratch/inheritance/triage/triage.sh`
+- Find the newest turn:
+  - `ls -1 scratch/inheritance/triage/turns | tail -n 1`
+- Open scoreboard:
+  - `cat scratch/inheritance/triage/turns/<TURN>/post/classes.tsv`
+
+### 9) If you want semantic restoration (what’s missing right now)
+
+If you (or the user) decide the real finish is semantic baseline, the repo needs a “semantic debt ledger” that names the intentional stubs/defangs.
+
+Practical options (pick one; don’t invent five):
+
+1) **A simple markdown ledger** under `scratch/`:
+   - list script.id → original intent (best guess) → how it was defanged → what it would take to restore → risk notes
+2) **Boundary-level explicit flag** (if you want to keep it inside the stream):
+   - add a field in record schema like `result.details.semantic_mode: "triage_stub"` vs `"semantic"` (this requires contract changes; only do if user wants it)
+3) **Commitment-based flag**:
+   - emit a commitment like `finding.defanged` or `recommend.semantic_review` whenever a wrapper chooses “safe no-op” logic.
+
+I do not know which one the user wants. (Speculation: they may prefer the stream-level flag because it preserves “universal participation” while making “shut up” explicit.)
+
+### 10) Speculation dump (possible-but-unproven memories; verify by artifacts)
+
+speculation: There was an early phase where wrappers were authored by hand per directory, before `gen_wrappers.sh` existed, and the generator was introduced because the wrappers were diverging.
+
+speculation: The “typed quarantine buckets” in `report.sh` were added after a phase where quarantine was just a long message string, and the tool became hard to triage because all quarantines looked the same.
+
+speculation: The “self reference” gate (`check_no_self_ref.sh`) was introduced because at least one `.legacy` referenced its wrapper name (or assumed its filename), causing recursion, wrong target attribution, or accidental self-exec.
+
+speculation: The “exit0_error” category and `report-bash4-exit0.sh` gate were introduced because macOS Bash 3.2 incompatibilities sometimes produced stderr “invalid option” while returning exit 0, and that broke downstream triage assumptions.
+
+speculation: The user used poems as control signals intentionally: they were a way to change “how we’re thinking” without adding new process. (If so, don’t dismiss them as fluff; treat them as a coordination primitive.)
+
+### 11) If you have to explain “why did this take so long?” (the honest answer)
+
+It took long because:
+
+- we started with the wrong unit of work (per-script craft) and only later pivoted to class sweeps,
+- we had to build safety/continuity primitives before batch execution was ethically acceptable (hazard scan, quarantine, timeboxing, gates),
+- and we paid the determinism tax: rerun the full corpus to prove deltas and prevent storytelling.
+
+Once the scoreboard existed and the actuation surface narrowed, throughput increased because disagreements collapsed into “did the count move?”
+
+### 12) Final directive (if you want to keep this project “sober”)
+
+Treat these as non-negotiable:
+
+- The stream is the interface.
+- The class table is the worklist.
+- Hazards must be quarantined before execution.
+- No new process without a moved row.
+- Never let “green stream” silently substitute for “semantic truth”; name the baseline fork every time it matters.
+
+If you keep those, you can be fast without being careless.
+
+Good luck. Keep the channel alive. Keep the artifacts cold. Keep the counts honest.
