@@ -696,3 +696,442 @@ If someone needs to confirm/deny these, the best method is to look at:
 - Wrapper generator (source of truth for wrapper shape):
   - `scratch/inheritance/triage/gen_wrappers.sh`
 
+# Thoughts on A
+
+I can’t give you a literal “every thought” stream (that would include private internal reasoning), but I can give you an exhaustive, section-by-section read of what `scratch/AGENT_A_READOUT.md` is doing, what it gets right, what it risks mis-stating, and what I’d change if the goal is “another agent can immediately run this without re-deriving the posture”.
+
+---
+
+## Top matter / framing
+
+The opening framing is strong and appropriate for this exercise:
+
+- It correctly sets expectations: post-hoc reconstruction, dyadic interleaving, git commits are not atomic truth, and runner artifacts are the best ground truth.
+- It names the objective: *maximally useful* to someone trying to understand what happened, why, how the repo changed, and what artifacts prove it.
+
+What’s missing (minor): it could explicitly tell the reader “if you want the shortest operational path, skip to Appendix B and run `triage.sh`” earlier, but it does get there.
+
+---
+
+## Actors / roles
+
+The roles section is clear, but there’s an inherent identity hazard:
+
+- It says “Agent A: this model (Codex CLI)”; that’s only unambiguous if the reader knows the file’s author identity in the harness. For a new agent reading the file later, “this model” can be confusing.
+- It correctly characterizes the user’s role: repeated forced posture shifts (“anti-ceremony, urgency, batch-first, class sweeps, done means measured”).
+
+If I were editing it, I’d replace “this model” with “the author of this file” and treat A/B as labels, not identities.
+
+---
+
+## Repo context (triad / fencerunner concepts)
+
+This section is accurate and has the right level of abstraction:
+
+- It defines run dir + triad (`commitments.json`, `gates.json`, `boundaries.json`).
+- It correctly states “one boundary record as NDJSON to stdout” as the operational expectation.
+- It explains `emit-record` + `commit_help_me` and supervised behavior producing synthetic records.
+
+Two nuances worth calling out (not errors, just sharpening):
+
+1) “one record per script” is the *goal*, but supervised mode can synthesize records and wrappers can emit while skipping legacy. The readout uses “expected” language, which is fine.
+
+2) `commit_help_me` enrollments are signals; they don’t unlock tools. The readout implies that by calling them “signal source” later, but it could explicitly say “commitments are not a security boundary” somewhere earlier.
+
+---
+
+## Exercise context (constraints)
+
+This is one of the strongest parts of the doc because it captures the real pivot:
+
+- Starts as runbook writing in `docs/EXAMPLES.md` with step mechanics.
+- Then the user forces the shift: stop narrative work; start moving batch class counts per turn.
+
+This is the core story: you can’t judge the work without acknowledging that the definition of “progress” changed from “more articulated runbook” to “measured delta on a corpus queue”.
+
+---
+
+## Part I — Runbook phase (`docs/EXAMPLES.md`)
+
+This section is mostly a historical record:
+
+- It lists the kinds of concepts that got introduced (wrapping, signal flares, queue formation, strict islands, promotion/demotion, inventories/deltas).
+- It cites commit hashes that touched `docs/EXAMPLES.md`.
+
+What it gets right:
+- It treats this as useful-but-risky; it says later pivot archived the step ladder and replaced it with ruthless loop posture.
+
+What it under-emphasizes:
+- The *failure mode* (“authority inversion / self-injection loop”) that made the docs dangerous in turn-taking. You can infer it from the later pivot, but the readout doesn’t name it as explicitly as it could. Naming matters because it’s the pattern a future agent will repeat if not warned.
+
+---
+
+## Part II/III — Corpus phase (`scratch/inheritance`) + early manual phase
+
+The part where it enumerates the 25 run dirs (via the referenced `run_dirs.txt`) is extremely helpful. It anchors “what is the corpus” to a concrete artifact rather than memory.
+
+The “manual phase” narrative is plausible and consistent with what’s on disk:
+
+- supervised run per dir
+- synthetic records show up
+- rename `<id>.sh` → `<id>.legacy`
+- create wrapper `<id>.sh` that emits via `emit-record`, timeboxes, captures stdout/stderr
+- rerun and confirm `synthetic → emitted`
+
+What this section does well:
+- It explains why that phase existed: it established the shape of the problem but was too slow.
+
+What it might add:
+- A one-liner that this manual phase is *a migration step*: it converts a bag of arbitrary scripts into a “two-file model” (`.legacy` + wrapper) that the later generator can own.
+
+---
+
+## Part IV — Automation pivot: batch queue + class sweeps
+
+This is the highest-value portion for a future agent.
+
+It lists the automation surface under `scratch/inheritance/triage/` and describes what each piece does. That matches the current repo organization:
+
+- `triage.sh` orchestrates a turn
+- `run_all.sh` runs entire corpus and captures canonical artifacts
+- `report.sh` produces `items.tsv` and `classes.tsv`
+- `scan_legacy.sh` hazard scan in multiple modes
+- `gen_wrappers.sh` regenerates wrappers/rules
+- gates enforce invariants (no synthetic, quarantine respected, no self-ref, commitments declared, bash4 regression)
+
+Two key design decisions it correctly highlights:
+
+1) **Generated wrappers** (uniform regeneration is what enables sweeps).
+2) **Rules DSL** (`rules.json`) as the actuation surface.
+
+One nuance the readout implicitly assumes (and is worth making explicit):
+- This pipeline’s “class sweeps” posture only works if wrapper generation is stable and deterministic; otherwise class counts move due to tool churn, not corpus changes.
+
+---
+
+## Part V — Measured queue evolution
+
+The queue snapshots are exactly the kind of “hard to bullshit” artifact that makes the whole story legible.
+
+It correctly explains the scoreboard idea:
+- actions must show up as a count movement in `post/classes.tsv`.
+
+The timeline it gives matches the “shape” of the turn history (typed quarantines appear, bash>=4 becomes a quarantine bucket, then defang/port sweeps drive counts to 0).
+
+What I like here:
+- It shows the *kind* of deltas that matter (class movement), not just “we fixed stuff”.
+
+What I’d tighten:
+- The queue snapshots are printed in the readout, but it could cite exact artifact paths for 2–3 representative turns so a new agent can open them without hunting.
+
+---
+
+## Hazard scan evolution
+
+This part is accurate and important:
+
+- Hazards are tracked via `pre/hazards.tsv`.
+- They’re enforced pre-exec: hazard detected → must be quarantined before execution proceeds.
+- It lists the hazard keys and explains how typed quarantines derive from hazard→commitment mapping and bucketing in `report.sh`.
+
+One important philosophical point (it hints at it, but doesn’t say it bluntly):
+- The hazard scan is a *policy boundary* for batch execution, not a guarantee of safety. It reduces accidental execution of known-pattern hazards.
+
+That’s a crucial thing for a future agent to remember when tempted to say “hazards.tsv is empty therefore safe”.
+
+---
+
+## Part VI — Defang / port sweeps
+
+This section is where the readout becomes a narrative of “how did we drive each row to 0”:
+
+- bash>=4 → port scripts to Bash 3.2
+- IwillFail → remove fake prereq
+- get-confirmation → make non-interactive-safe
+- countdown/rollingback → remove literal numeric sleeps and/or make them no-op under non-interactive
+- untag → remove destructive git operations
+- sudo-librarian-puppet → remove sudo, make safe no-op
+- terraform → defang missing terraform strings so classifier no longer triggers, then unquarantine
+
+This section is honest about the policy choice:
+- It acknowledges you can accept “done = quarantine” or choose to remove hazards/deps; and it states we chose the latter because the exercise demanded a baseline with no non-success rows.
+
+That’s good, but it has an implicit implication a future agent could misread:
+- “Done” here means “pipeline sees no hazards and all scripts return success outcomes”, *not* “scripts still do their original useful behavior”. Defanging can turn scripts into “safe stubs”.
+
+The readout could stress that distinction more explicitly because it’s the main place you can accidentally lie to yourself: you can get a clean queue by neutering behavior.
+
+---
+
+## End state + operational rule
+
+This is clean and correct:
+
+- done when `post/classes.tsv` has a single `legacy.exec success` row
+- and `pre/hazards.tsv` is empty
+- and process freezes unless a new class row appears
+
+As a “stop the line” definition, this is excellent because it prevents infinite instrumentation appetite.
+
+---
+
+## Appendix A — “Major contributions”
+
+This is the squishiest part (and it says so).
+
+It tries to attribute:
+- Agent A: tooling/pivot
+- Agent B: defang sweeps
+
+That’s plausible, but attribution is inherently contaminated here. I’d treat this appendix as “narrative convenience” rather than truth.
+
+If the purpose is enabling action, this appendix is optional; if the purpose is post-mortem credit assignment, it’s too uncertain.
+
+---
+
+## Appendix B — commands
+
+Useful, and it includes the key command:
+
+- `bash scratch/inheritance/triage/triage.sh`
+
+If I were rewriting, I’d put this earlier (or repeat it at the top), because most readers want the operational loop first and the history second.
+
+---
+
+## Appendix C — key lesson
+
+This is the right “forcing function” sentence:
+
+> If it doesn’t change `post/classes.tsv`, it wasn’t work.
+
+That is the only thing that consistently prevents slide back into “narrative about triage” instead of triage.
+
+One small extension I’d add:
+- “If it changes `post/classes.tsv` for reasons you can’t explain, that’s also not work; it’s tool churn.” (i.e., guard against accidental regressions caused by generator changes.)
+
+---
+
+## Overall assessment
+
+If I imagine handing this to a fresh agent who has to operate the system:
+
+- It succeeds at explaining the *why* of the pivot (process → batch queue).
+- It succeeds at identifying the canonical artifacts and the scoreboard.
+- It provides a clear story of class-by-class elimination and the done condition.
+
+The main risks / improvements are:
+
+1) **Identity clarity**: avoid “this model” phrasing; make A/B labels explicit.
+2) **Authority inversion warning**: explicitly name the doc-loop hazard to prevent recurrence.
+3) **Defang vs remediation**: more explicit warning that “all success” can be achieved by neutering scripts; remediation is a separate phase.
+4) **More direct artifact links**: add a small index of “open these 5 files first” with exact paths (it implies them but doesn’t centralize them).
+
+If you want, I can append a short “operator’s index” section to the end of `scratch/AGENT_A_READOUT.md` that is purely actionable (no history), but you didn’t ask for edits yet.
+
+# Thoughts on B by B
+
+I can’t give you a literal “every thought” stream (that would include private internal reasoning), but I can do the same kind of exhaustive, section-by-section read of `scratch/AGENT_B_READOUT.md`: what it does well, where it’s fuzzy, and what I’d change if the objective is “a new agent can take over immediately without re-deriving posture”.
+
+---
+
+## Top matter / framing
+
+The framing is effective and honest:
+
+- It declares “best-effort reconstruction” and blended authorship up front.
+- It states the goal as transfer: enable operation, avoid re-inventing machinery, explain why the repo looks like it does.
+- It sets a strong norm: label speculation explicitly when uncertain.
+
+One thing I’d tighten (if this were a living doc rather than a readout): add a single “fast path” line at the top (“If you want to run the system now: `bash scratch/inheritance/triage/triage.sh` → open newest `post/classes.tsv`”), because most readers arrive with urgency.
+
+---
+
+## 0) “What fencerunner is” section
+
+This is accurate and appropriately minimal:
+
+- It defines the triad and points at the canonical repo docs.
+- It highlights the core property we exploited: deterministic NDJSON stream + commitment enrollments as signals.
+
+The only nuance I’d add explicitly is the same one I flagged for Agent A’s readout: commitments are *signals*, not a permission system, and not a security boundary.
+
+---
+
+## 1) The meta-problem
+
+This section is strong because it stays in human terms while still mapping to operational constraints:
+
+- “You can’t know without running; running is risky/expensive” is the core tension.
+- It correctly defines the pivot to class-count triage: move from reading scripts to moving counts.
+
+If anything, I’d add one sentence that “hazard” here is largely “evaluation uncertainty” (time/privilege/network/destruction) rather than moral judgment.
+
+---
+
+## 2) Early conversation + docs drift
+
+This is one of the best parts of the readout because it names a real failure mode and ties it to evidence:
+
+- It names “authority inversion / self-injection loop” and explains it plainly.
+- It points to the containment evidence in `docs/EXAMPLES.md` (Authority Map + Ruthless Loop + archived step ladder).
+
+This is the place where the readout is more explicit than Agent A’s version, and that’s good: naming the hazard makes it less likely to recur.
+
+One tweak: instead of “I remember strongly recommending…”, I’d phrase it as “we adopted…” and then cite the exact doc section. The memory claim isn’t needed for transfer, and it invites pointless attribution debate.
+
+---
+
+## 3) The actual corpus + 3.1 Ruthless Loop
+
+This section correctly describes why “Ruthless Loop” is a good local tactic but not scalable:
+
+- It describes the 5-step loop.
+- It states the practical discovery: one-by-one doesn’t scale.
+- It sets up the pivot to class sweeps.
+
+This is concise and matches how the work actually progressed.
+
+---
+
+## 4) Batch triage toolchain
+
+This is operationally the most important section and it largely succeeds:
+
+- It lists the entrypoint and supporting scripts with accurate descriptions.
+- It makes the “turn” concept concrete (`turns/<TURN_ID>/pre` and `post` artifacts).
+- It makes wrapper generation policy explicit (“don’t hand-edit wrappers”).
+
+Two additions would make it even more immediately usable:
+
+1) Mention that `triage.sh` runs **pre hazard scan** and will hard-fail if a new hazard pattern appears but isn’t quarantined in `rules.json` yet (and that it emits a suggested quarantine patch).
+2) Mention that `classes.tsv` is the only worklist by policy (it’s implied, but stating it as a hard rule prevents drift).
+
+---
+
+## 5) “triage view” artifacts explanation
+
+This is correct and does what it should:
+
+- Explains `items.tsv` as inventory.
+- Explains `classes.tsv` as worklist.
+- Enumerates the core derived buckets.
+
+The only correction I’d consider is terminology consistency: the bucket list includes `exit0_error`, but the code in `report.sh` uses `"exit0_error"` as a bucket label, while earlier conversation sometimes used “lies by exit code” as the concept. That’s not wrong; it’s just worth being explicit that `exit0_error` is the concrete “row name” to hunt in the table.
+
+---
+
+## 6) Hazard scan section
+
+This section is accurate, and it gets an important contract right:
+
+- hazard scan → quarantine before execution
+
+It also lists hazard categories that are genuinely useful (interactive, sudo, destructive git ops, numeric sleeps, network primitives, bash4 features).
+
+One nuance that matters for a new agent: the hazard scan is pattern-based and can miss hazards. The readout mostly implies this, but I’d add a sentence stating it plainly so nobody treats “empty hazards.tsv” as safety proof.
+
+---
+
+## 7) Turn-by-turn progression
+
+This is excellent in terms of transfer value:
+
+- It points to the earliest “pre-only” turn as evidence the pipeline evolved.
+- It embeds a compact history of `post/classes.tsv` across turns, which is the scoreboard.
+- It explicitly identifies the “shape of the story” (typed quarantine, sticky deps, defang sweeps, counts to 0).
+
+Two tiny improvements:
+
+1) Add direct links for at least the terminal turns (`20260112T162151Z`), so the reader doesn’t have to infer paths.
+2) State that these turn dirs are part of the repo history here (they’re committed), so they’re the best historical ground truth available.
+
+---
+
+## 8) “Main classes encountered”
+
+This section is mostly right and is the correct way to think about the work: classify → decide posture → either quarantine or defang/port.
+
+The most important part is the honesty about policy choice:
+
+- making missing dependencies “disappear” can mean “we changed what success means” (safe no-op) rather than “we installed the dependency”.
+
+If I were strengthening it for a future agent, I’d add one explicit “don’t lie to yourself” sentence here: driving counts to 0 can be achieved by neutering scripts; that may be acceptable for a triage baseline, but it is not remediation.
+
+---
+
+## 9) “No New Process” lesson
+
+This section is a good causal explanation for why the work felt slow:
+
+- process elaboration before grounding
+- per-script work before class sweeps
+- insistence on empirical verification
+- real code changes required for Bash 3.2/hazards
+
+One thing I’d add (because it’s practical): the cost of rerunning the whole corpus is the “tax” that buys determinism; the right response is not to skip reruns, but to reduce the number of reruns by doing larger class sweeps per turn.
+
+---
+
+## 10) “How a new agent should operate this system”
+
+This is the most actionable part of the doc and it’s correctly ordered:
+
+- run → read hazards + classes → pick one row → smallest change → rerun → verify delta
+
+The only missing clause (minor): call out explicitly that most changes should be either:
+
+- `.legacy` edits to remove hazard/dependency triggers, or
+- `rules.json` edits to quarantine/type/stickify
+
+and that wrapper edits are almost always wrong because wrappers are generated artifacts.
+
+---
+
+## 11) “Current state / done”
+
+This is clear and concrete, and it avoids endless debate by naming measurable done:
+
+- hazards empty
+- only success row in classes.tsv
+- quarantine list empty
+
+It also correctly states that whether this is the “right” baseline is policy, not truth.
+
+---
+
+## 12) Speculation section
+
+This is good practice and I’d keep it:
+
+- It marks uncertainty explicitly.
+- It suggests the right forensic tools (`git blame`, compare early vs late artifacts).
+
+If I were revising, I’d tighten the speculation list to only items that change operational understanding; otherwise it risks becoming an attractive nuisance (people chasing attribution instead of operating the system).
+
+---
+
+## 13) Minimal index
+
+This is a good “jump table” and it correctly names the few files that matter.
+
+If I were making it even more operator-friendly, I’d add:
+
+- newest turn discovery pattern (e.g. “open the lexicographically last dir in `scratch/inheritance/triage/turns/`”), or mention that `triage.sh` prints `turn_dir:` when it completes.
+
+---
+
+## Overall assessment
+
+`scratch/AGENT_B_READOUT.md` succeeds at its stated goal (transfer) because it:
+
+- names the failure mode that caused early slowness (authority inversion / docs drift),
+- identifies the correct progress primitive (`post/classes.tsv`),
+- and gives a stable operational loop (one command, one worklist, one actuation surface).
+
+The improvements I’d make (if you want it to be even more useful to the next agent) are all in the direction of “more explicit constraints, less memory/attribution”:
+
+1) Add a fast-path command at the top.
+2) State “classes.tsv is the only worklist” as a hard rule.
+3) Reduce “I remember…” phrasing in favor of artifact citations.
+4) Emphasize defang-vs-remediate distinction to prevent accidental self-deception.
