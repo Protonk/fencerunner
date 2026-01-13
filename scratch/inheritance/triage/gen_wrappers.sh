@@ -596,10 +596,14 @@ EOF
 while IFS= read -r run_dir; do
   [[ -d "${run_dir}" ]] || continue
   if [[ -f "${run_dir}/boundaries.json" && -f "${run_dir}/gates.json" && -f "${run_dir}/commitments.json" ]]; then
-    jq -n --argjson ids "${emit_commitments_json}" '
-      {
-        schema_version: "commitments_v1",
-        commitments: ([
+    existing_commitments_json="[]"
+    if [[ -f "${run_dir}/commitments.json" ]]; then
+      existing_commitments_json="$(jq -c '.commitments // []' "${run_dir}/commitments.json" 2>/dev/null || echo '[]')"
+    fi
+
+    jq -n --argjson ids "${emit_commitments_json}" --argjson existing "${existing_commitments_json}" '
+      def base:
+        ([
           {
             id: "emit.record",
             provider: "runner",
@@ -633,8 +637,14 @@ while IFS= read -r run_dir; do
               at: "runbook:triage",
               version: "v1"
             })
-        ))
-      }
+        ));
+
+      (base + $existing)
+      | reduce .[] as $c ({}; .[$c.id] = $c)
+      | to_entries
+      | sort_by(.key)
+      | map(.value)
+      | {schema_version: "commitments_v1", commitments: .}
     ' > "${run_dir}/commitments.json"
 
     for script_path in "${run_dir}"/*.sh; do

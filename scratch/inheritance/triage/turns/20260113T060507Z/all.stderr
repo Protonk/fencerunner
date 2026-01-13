@@ -1,0 +1,8 @@
+fencerunner: supervised: running 25 script(s) across 1 run dir(s)
+fencerunner: [1/25] abs
+fencerunner: script abs -> success
+fencerunner: [2/25] array-contains
+fencerunner: script array-contains -> success
+fencerunner: [3/25] array-to-string
+fencerunner: script array-to-string -> success
+fencerunner: [4/25] center-text

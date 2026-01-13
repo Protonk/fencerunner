@@ -1,0 +1,533 @@
+{
+  "schema_version": "gates_v1",
+  "gates": {
+    "enforced_checks": [],
+    "script_rules": {
+      "abs": {
+        "physical": "core",
+        "notional": "compat_bridged",
+        "triad_chain": [
+          "triad/00-old",
+          "triad/10-physical-core",
+          "triad/20-notional-compat_bridged"
+        ],
+        "commitment_ids": [
+          "emit.record",
+          "notional.compat_bridged",
+          "policy.read_only",
+          "recommend.destructive",
+          "recommend.install_dependency",
+          "recommend.needs_network",
+          "recommend.needs_privilege",
+          "recommend.quarantine",
+          "recommend.run_interactively",
+          "recommend.timeboxed"
+        ]
+      },
+      "array-contains": {
+        "physical": "core",
+        "notional": "compat_bridged",
+        "triad_chain": [
+          "triad/00-old",
+          "triad/10-physical-core",
+          "triad/20-notional-compat_bridged"
+        ],
+        "commitment_ids": [
+          "emit.record",
+          "notional.compat_bridged",
+          "policy.read_only",
+          "recommend.destructive",
+          "recommend.install_dependency",
+          "recommend.needs_network",
+          "recommend.needs_privilege",
+          "recommend.quarantine",
+          "recommend.run_interactively",
+          "recommend.timeboxed"
+        ]
+      },
+      "array-to-string": {
+        "physical": "core",
+        "notional": "compat_bridged",
+        "triad_chain": [
+          "triad/00-old",
+          "triad/10-physical-core",
+          "triad/20-notional-compat_bridged"
+        ],
+        "commitment_ids": [
+          "emit.record",
+          "notional.compat_bridged",
+          "policy.read_only",
+          "recommend.destructive",
+          "recommend.install_dependency",
+          "recommend.needs_network",
+          "recommend.needs_privilege",
+          "recommend.quarantine",
+          "recommend.run_interactively",
+          "recommend.timeboxed"
+        ]
+      },
+      "center-text": {
+        "physical": "tty-time",
+        "notional": "compat_bridged",
+        "triad_chain": [
+          "triad/00-old",
+          "triad/10-physical-tty-time",
+          "triad/20-notional-compat_bridged"
+        ],
+        "commitment_ids": [
+          "emit.record",
+          "notional.compat_bridged",
+          "policy.read_only",
+          "recommend.destructive",
+          "recommend.install_dependency",
+          "recommend.needs_network",
+          "recommend.needs_privilege",
+          "recommend.quarantine",
+          "recommend.run_interactively",
+          "recommend.timeboxed"
+        ]
+      },
+      "check-prerequisites": {
+        "physical": "host-tools",
+        "notional": "compat_bridged",
+        "triad_chain": [
+          "triad/00-old",
+          "triad/10-physical-host-tools",
+          "triad/20-notional-compat_bridged"
+        ],
+        "commitment_ids": [
+          "emit.record",
+          "notional.compat_bridged",
+          "policy.read_only",
+          "recommend.destructive",
+          "recommend.install_dependency",
+          "recommend.needs_network",
+          "recommend.needs_privilege",
+          "recommend.quarantine",
+          "recommend.run_interactively",
+          "recommend.timeboxed"
+        ]
+      },
+      "compare-versions": {
+        "physical": "core",
+        "notional": "triage_stubbed",
+        "triad_chain": [
+          "triad/00-old",
+          "triad/10-physical-core",
+          "triad/20-notional-triage_stubbed"
+        ],
+        "commitment_ids": [
+          "emit.record",
+          "notional.triage_stubbed",
+          "policy.read_only",
+          "recommend.destructive",
+          "recommend.install_dependency",
+          "recommend.needs_network",
+          "recommend.needs_privilege",
+          "recommend.quarantine",
+          "recommend.run_interactively",
+          "recommend.timeboxed"
+        ]
+      },
+      "contains": {
+        "physical": "core",
+        "notional": "compat_bridged",
+        "triad_chain": [
+          "triad/00-old",
+          "triad/10-physical-core",
+          "triad/20-notional-compat_bridged"
+        ],
+        "commitment_ids": [
+          "emit.record",
+          "notional.compat_bridged",
+          "policy.read_only",
+          "recommend.destructive",
+          "recommend.install_dependency",
+          "recommend.needs_network",
+          "recommend.needs_privilege",
+          "recommend.quarantine",
+          "recommend.run_interactively",
+          "recommend.timeboxed"
+        ]
+      },
+      "countdown": {
+        "physical": "tty-time",
+        "notional": "triage_stubbed",
+        "triad_chain": [
+          "triad/00-old",
+          "triad/10-physical-tty-time",
+          "triad/20-notional-triage_stubbed"
+        ],
+        "commitment_ids": [
+          "emit.record",
+          "notional.triage_stubbed",
+          "policy.read_only",
+          "recommend.destructive",
+          "recommend.install_dependency",
+          "recommend.needs_network",
+          "recommend.needs_privilege",
+          "recommend.quarantine",
+          "recommend.run_interactively",
+          "recommend.timeboxed"
+        ]
+      },
+      "error-messages": {
+        "physical": "core",
+        "notional": "triage_stubbed",
+        "triad_chain": [
+          "triad/00-old",
+          "triad/10-physical-core",
+          "triad/20-notional-triage_stubbed"
+        ],
+        "commitment_ids": [
+          "emit.record",
+          "notional.triage_stubbed",
+          "policy.read_only",
+          "recommend.destructive",
+          "recommend.install_dependency",
+          "recommend.needs_network",
+          "recommend.needs_privilege",
+          "recommend.quarantine",
+          "recommend.run_interactively",
+          "recommend.timeboxed"
+        ]
+      },
+      "get-confirmation": {
+        "physical": "tty-time",
+        "notional": "triage_stubbed",
+        "triad_chain": [
+          "triad/00-old",
+          "triad/10-physical-tty-time",
+          "triad/20-notional-triage_stubbed"
+        ],
+        "commitment_ids": [
+          "emit.record",
+          "notional.triage_stubbed",
+          "policy.read_only",
+          "recommend.destructive",
+          "recommend.install_dependency",
+          "recommend.needs_network",
+          "recommend.needs_privilege",
+          "recommend.quarantine",
+          "recommend.run_interactively",
+          "recommend.timeboxed"
+        ]
+      },
+      "get-git-root": {
+        "physical": "host-tools",
+        "notional": "signal_drift",
+        "triad_chain": [
+          "triad/00-old",
+          "triad/10-physical-host-tools",
+          "triad/20-notional-signal_drift"
+        ],
+        "commitment_ids": [
+          "emit.record",
+          "notional.signal_drift",
+          "policy.read_only",
+          "recommend.destructive",
+          "recommend.install_dependency",
+          "recommend.needs_network",
+          "recommend.needs_privilege",
+          "recommend.quarantine",
+          "recommend.run_interactively",
+          "recommend.timeboxed"
+        ]
+      },
+      "get-script-info": {
+        "physical": "host-tools",
+        "notional": "triage_stubbed",
+        "triad_chain": [
+          "triad/00-old",
+          "triad/10-physical-host-tools",
+          "triad/20-notional-triage_stubbed"
+        ],
+        "commitment_ids": [
+          "emit.record",
+          "notional.triage_stubbed",
+          "policy.read_only",
+          "recommend.destructive",
+          "recommend.install_dependency",
+          "recommend.needs_network",
+          "recommend.needs_privilege",
+          "recommend.quarantine",
+          "recommend.run_interactively",
+          "recommend.timeboxed"
+        ]
+      },
+      "get-terraform-version": {
+        "physical": "host-tools",
+        "notional": "signal_drift",
+        "triad_chain": [
+          "triad/00-old",
+          "triad/10-physical-host-tools",
+          "triad/20-notional-signal_drift"
+        ],
+        "commitment_ids": [
+          "emit.record",
+          "notional.signal_drift",
+          "policy.read_only",
+          "recommend.destructive",
+          "recommend.install_dependency",
+          "recommend.needs_network",
+          "recommend.needs_privilege",
+          "recommend.quarantine",
+          "recommend.run_interactively",
+          "recommend.timeboxed"
+        ]
+      },
+      "get-version-string": {
+        "physical": "host-tools",
+        "notional": "compat_bridged",
+        "triad_chain": [
+          "triad/00-old",
+          "triad/10-physical-host-tools",
+          "triad/20-notional-compat_bridged"
+        ],
+        "commitment_ids": [
+          "emit.record",
+          "notional.compat_bridged",
+          "policy.read_only",
+          "recommend.destructive",
+          "recommend.install_dependency",
+          "recommend.needs_network",
+          "recommend.needs_privilege",
+          "recommend.quarantine",
+          "recommend.run_interactively",
+          "recommend.timeboxed"
+        ]
+      },
+      "is-git-repo": {
+        "physical": "host-tools",
+        "notional": "triage_stubbed",
+        "triad_chain": [
+          "triad/00-old",
+          "triad/10-physical-host-tools",
+          "triad/20-notional-triage_stubbed"
+        ],
+        "commitment_ids": [
+          "emit.record",
+          "notional.triage_stubbed",
+          "policy.read_only",
+          "recommend.destructive",
+          "recommend.install_dependency",
+          "recommend.needs_network",
+          "recommend.needs_privilege",
+          "recommend.quarantine",
+          "recommend.run_interactively",
+          "recommend.timeboxed"
+        ]
+      },
+      "rollingback": {
+        "physical": "tty-time",
+        "notional": "triage_stubbed",
+        "triad_chain": [
+          "triad/00-old",
+          "triad/10-physical-tty-time",
+          "triad/20-notional-triage_stubbed"
+        ],
+        "commitment_ids": [
+          "emit.record",
+          "notional.triage_stubbed",
+          "policy.read_only",
+          "recommend.destructive",
+          "recommend.install_dependency",
+          "recommend.needs_network",
+          "recommend.needs_privilege",
+          "recommend.quarantine",
+          "recommend.run_interactively",
+          "recommend.timeboxed"
+        ]
+      },
+      "stacktrace": {
+        "physical": "core",
+        "notional": "compat_bridged",
+        "triad_chain": [
+          "triad/00-old",
+          "triad/10-physical-core",
+          "triad/20-notional-compat_bridged"
+        ],
+        "commitment_ids": [
+          "emit.record",
+          "notional.compat_bridged",
+          "policy.read_only",
+          "recommend.destructive",
+          "recommend.install_dependency",
+          "recommend.needs_network",
+          "recommend.needs_privilege",
+          "recommend.quarantine",
+          "recommend.run_interactively",
+          "recommend.timeboxed"
+        ]
+      },
+      "strict-mode": {
+        "physical": "host-tools",
+        "notional": "compat_bridged",
+        "triad_chain": [
+          "triad/00-old",
+          "triad/10-physical-host-tools",
+          "triad/20-notional-compat_bridged"
+        ],
+        "commitment_ids": [
+          "emit.record",
+          "notional.compat_bridged",
+          "policy.read_only",
+          "recommend.destructive",
+          "recommend.install_dependency",
+          "recommend.needs_network",
+          "recommend.needs_privilege",
+          "recommend.quarantine",
+          "recommend.run_interactively",
+          "recommend.timeboxed"
+        ]
+      },
+      "sudo-librarian-puppet": {
+        "physical": "hazmat",
+        "notional": "triage_stubbed",
+        "triad_chain": [
+          "triad/00-old",
+          "triad/10-physical-hazmat",
+          "triad/20-notional-triage_stubbed"
+        ],
+        "commitment_ids": [
+          "emit.record",
+          "notional.triage_stubbed",
+          "policy.read_only",
+          "recommend.destructive",
+          "recommend.install_dependency",
+          "recommend.needs_network",
+          "recommend.needs_privilege",
+          "recommend.quarantine",
+          "recommend.run_interactively",
+          "recommend.timeboxed"
+        ]
+      },
+      "terminal-or-not": {
+        "physical": "core",
+        "notional": "signal_drift",
+        "triad_chain": [
+          "triad/00-old",
+          "triad/10-physical-core",
+          "triad/20-notional-signal_drift"
+        ],
+        "commitment_ids": [
+          "emit.record",
+          "notional.signal_drift",
+          "policy.read_only",
+          "recommend.destructive",
+          "recommend.install_dependency",
+          "recommend.needs_network",
+          "recommend.needs_privilege",
+          "recommend.quarantine",
+          "recommend.run_interactively",
+          "recommend.timeboxed"
+        ]
+      },
+      "untag": {
+        "physical": "hazmat",
+        "notional": "triage_stubbed",
+        "triad_chain": [
+          "triad/00-old",
+          "triad/10-physical-hazmat",
+          "triad/20-notional-triage_stubbed"
+        ],
+        "commitment_ids": [
+          "emit.record",
+          "notional.triage_stubbed",
+          "policy.read_only",
+          "recommend.destructive",
+          "recommend.install_dependency",
+          "recommend.needs_network",
+          "recommend.needs_privilege",
+          "recommend.quarantine",
+          "recommend.run_interactively",
+          "recommend.timeboxed"
+        ]
+      },
+      "using-colour": {
+        "physical": "core",
+        "notional": "signal_drift",
+        "triad_chain": [
+          "triad/00-old",
+          "triad/10-physical-core",
+          "triad/20-notional-signal_drift"
+        ],
+        "commitment_ids": [
+          "emit.record",
+          "notional.signal_drift",
+          "policy.read_only",
+          "recommend.destructive",
+          "recommend.install_dependency",
+          "recommend.needs_network",
+          "recommend.needs_privilege",
+          "recommend.quarantine",
+          "recommend.run_interactively",
+          "recommend.timeboxed"
+        ]
+      },
+      "using-set": {
+        "physical": "core",
+        "notional": "compat_bridged",
+        "triad_chain": [
+          "triad/00-old",
+          "triad/10-physical-core",
+          "triad/20-notional-compat_bridged"
+        ],
+        "commitment_ids": [
+          "emit.record",
+          "notional.compat_bridged",
+          "policy.read_only",
+          "recommend.destructive",
+          "recommend.install_dependency",
+          "recommend.needs_network",
+          "recommend.needs_privilege",
+          "recommend.quarantine",
+          "recommend.run_interactively",
+          "recommend.timeboxed"
+        ]
+      },
+      "variable-replace": {
+        "physical": "host-tools",
+        "notional": "compat_bridged",
+        "triad_chain": [
+          "triad/00-old",
+          "triad/10-physical-host-tools",
+          "triad/20-notional-compat_bridged"
+        ],
+        "commitment_ids": [
+          "emit.record",
+          "notional.compat_bridged",
+          "policy.read_only",
+          "recommend.destructive",
+          "recommend.install_dependency",
+          "recommend.needs_network",
+          "recommend.needs_privilege",
+          "recommend.quarantine",
+          "recommend.run_interactively",
+          "recommend.timeboxed"
+        ]
+      },
+      "verbose-mode": {
+        "physical": "core",
+        "notional": "compat_bridged",
+        "triad_chain": [
+          "triad/00-old",
+          "triad/10-physical-core",
+          "triad/20-notional-compat_bridged"
+        ],
+        "commitment_ids": [
+          "emit.record",
+          "notional.compat_bridged",
+          "policy.read_only",
+          "recommend.destructive",
+          "recommend.install_dependency",
+          "recommend.needs_network",
+          "recommend.needs_privilege",
+          "recommend.quarantine",
+          "recommend.run_interactively",
+          "recommend.timeboxed"
+        ]
+      }
+    }
+  }
+}
