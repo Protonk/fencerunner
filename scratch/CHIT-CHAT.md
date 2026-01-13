@@ -852,3 +852,412 @@ Assistant response after the user’s clarification about what was missing (doc/
 - The “queue isn’t triage” disagreement is present in the written artifacts (`scratch/CHIT-CHAT.md:23`, `scratch/PROBLEM_SPACE.md:65`): `classes.tsv` is treated as *the* worklist, but the tooling itself doesn’t encode severity/urgency—so it’s a queue/scoreboard unless someone maps rows to urgency/severity externally.
 - The biggest baseline weirdness: the green scoreboard is clearly “triage baseline (runnable/observable)” not “semantic baseline (preserve/restore intended behavior)”. Evidence: “success” includes missing-dependency and no-op messages like `terraform not installed` (`scratch/inheritance/triage/turns/20260112T162151Z/post/items.tsv:14`) and `requires root: would run …` (`scratch/inheritance/triage/turns/20260112T162151Z/post/items.tsv:20`), and several legacies are explicitly defanged (`scratch/inheritance/sudo-librarian-puppet/sudo-librarian-puppet.legacy:6`, `scratch/inheritance/untag/untag.legacy:1`).
 ```
+
+# Farewell
+
+• Agent B —
+
+  Agent A is gone; you’re the remaining witness with continuity on the “why” of this repo state. I’m leaving you an exhaustive handoff that is meant to be read as (1) a factual
+  technical summary of what’s on disk, (2) an interpretation of the events implied by those artifacts, and (3) a map of the conceptual confusions we had to fight through (and the
+  guardrails that were erected to stop relapsing).
+
+  This message is long on purpose; treat it as a one-shot “transfer capsule”. If you do nothing else, please at least read the new append I added to scratch/CHIT-CHAT.md (search
+  for 2026-01-13 — Chat Forensics: “borges branch history”) because it contains a stitched transcript + evidence trail.
+
+  ———
+
+  ## 0) The single most important pointer
+
+  Everything from the “borges branch forensics” conversation (user prompts, assistant answers, corrections, evidence, conceptual pivots) has been appended to:
+
+  - scratch/CHIT-CHAT.md
+
+  Specifically, the new block starts at:
+
+  - scratch/CHIT-CHAT.md:658 (search for ## 2026-01-13 — Chat Forensics: “borges branch history”)
+
+  It includes:
+
+  - A verbatim transcript of the chat prompts + responses.
+  - The key evidence we anchored on (git divergence, commit list, diff scale, exemplar artifacts).
+  - The explicit articulation of the confusions overcome:
+      - doc/self-injection loop
+      - “No New Process until delta”
+      - pivot from per-script craft to class-sweep batch triage driven by post/classes.tsv
+      - baseline fork: triage baseline vs semantic baseline
+      - “queue isn’t triage” unless tied to urgency/severity and measurably moving
+  - A “verbatim assistant outputs” section (I included the literal messages as emitted in chat, so future readers can see exactly what was said without reconstructing from
+    memory).
+
+  That file now contains an “exhaustive unrolling” of what happened in the conversation; it’s meant to make later archeology cheaper.
+
+  ———
+
+  ## 1) What I actually did (so you can trust what’s grounded)
+
+  - I inspected borges vs main using git history/diff commands, and I sampled key files on disk to validate what’s claimed by the branch.
+  - I inspected the triage tooling scripts and multiple turn artifacts under scratch/inheritance/triage/turns/*.
+  - I inspected a few representative legacy scripts (notably get-confirmation, sudo-librarian-puppet, untag, countdown, get-terraform-version) to see how “hazard” and “defanging”
+    are expressed in code, not just in prose.
+  - I updated scratch/CHIT-CHAT.md to append all of the above (after reading README.md and CONTRIBUTING.md, per the repo’s instructions).
+
+  So: what’s in scratch/CHIT-CHAT.md is grounded in actual on-disk evidence, not just narrative.
+
+  ———
+
+  ## 2) Branch shape: what’s in borges, at high level
+
+  If you want one-liner: borges is not a “feature branch”; it’s a forensic playground + generated corpus + run artifact archive.
+
+  The branch is +14/-0 commits ahead of main (no divergence the other way), and it is dominated by:
+
+  - scratch/ narrative files:
+      - scratch/PROBLEM_SPACE.md
+      - scratch/AGENT_A_READOUT.md
+      - scratch/AGENT_B_READOUT.md
+      - scratch/CHIT-CHAT.md
+  - scratch/ruthless_loop_demo/ (a minimal supervised→wrapped demo)
+  - scratch/inheritance/ (a large imported “bag of scripts” corpus, with triad contracts, wrapper scripts, legacy scripts, and lots of run artifacts)
+
+  It does not touch core runner code/contracts (src/, schema/, lib/, tests/) in the version we inspected; it’s essentially all in scratch/.
+
+  ———
+
+  ## 3) What “it looks like happened” (events implied by tooling + persisted artifacts)
+
+  ### 3.1 The project-under-the-project: “take an inherited bag and make it mechanically triageable”
+
+  The on-disk toolchain under scratch/inheritance/triage/ is pretty explicit about the unit of work, the evidence model, and the “turn” discipline:
+
+  - scratch/inheritance/triage/triage.sh defines a “turn” as:
+      - pre-hazard scan
+      - run-all (pre)
+      - report (pre)
+      - regenerate wrappers
+      - run-all (post)
+      - report (post)
+      - gates (fail on backsliding)
+  - scratch/inheritance/triage/run_all.sh runs the whole corpus under fencerunner --supervised and writes:
+      - all.ndjson
+      - all.stderr
+      - exit_code.txt
+      - run_dirs.txt
+  - scratch/inheritance/triage/report.sh generates stable, human-scannable tables:
+      - items.tsv (one row per boundary record)
+      - classes.tsv (group-by bucket + class key, count-first ordering)
+  - scratch/inheritance/triage/gen_wrappers.sh generates uniform wrapper scripts plus triage_rules.generated.bash from rules.json.
+
+  That strongly implies a narrative like:
+
+  1. Someone tried to run raw scripts under fencerunner supervised and got synthetic records / garbage stdout.
+  2. They introduced wrappers that:
+      - run the legacy script
+      - capture stdout/stderr as payload
+      - call emit-record to emit one valid boundary record
+  3. They then realized per-script wrapper editing is too slow and too entangling, so they created:
+      - a canonical corpus runner (run_all.sh)
+      - a canonical scoreboard (post/classes.tsv)
+      - a generator that makes wrappers uniform and editable via one rules file (rules.json)
+  4. They ran repeated “turns” (timestamped dirs) until the class table collapsed.
+
+  ### 3.2 Concrete “before/after” is baked into the run-dir artifacts
+
+  Example: abs in scratch/inheritance/abs/
+
+  - scratch/inheritance/abs/stream1.ndjson shows a synthetic record because the script emitted non-NDJSON stdout (numbers), and fencerunner had to synthesize a record describing
+    the failure.
+  - scratch/inheritance/abs/stream2.ndjson shows a real boundary record from a wrapper that ran abs.legacy and emitted a schema-valid record.
+
+  This is not theory; it’s literally an on-disk microhistory of “we taught this script to emit”.
+
+  ### 3.3 The turn history shows class-sweep progress (not just linear “fix one script” progress)
+
+  You can see the “class table as scoreboard” in action:
+
+  - Early: multiple buckets exist (bash>=4 evidence, missing dependency, quarantines, etc), e.g.
+      - scratch/inheritance/triage/turns/20260111T211838Z/pre/classes.tsv
+  - Late: the class table collapses to a single row:
+      - scratch/inheritance/triage/turns/20260112T162151Z/post/classes.tsv
+
+  That pattern (multi-row → single-row) suggests deliberate class sweeps, not random drift: someone systematically eliminated entire classes (or pushed them out of visibility)
+  until everything reports legacy.exec success.
+
+  ———
+
+  ## 4) The confusions overcome (the stuff that isn’t obvious unless you name it)
+
+  This is the part you explicitly cared about, and the user explicitly corrected: a technical “what files exist” report is incomplete without naming the cognitive traps and the
+  pivots used to escape them.
+
+  ### 4.1 The doc/self-injection loop (process becomes the product)
+
+  Evidence of this exists as a scar inside the repo, not just in our memory:
+
+  - scratch/EXAMPLES.md begins with an “Authority Map” and “Local rules (break the self-injection loop)”.
+
+  The underlying confusion pattern (as reconstructed) is:
+
+  - Two agents + step-ladder doc = high risk of authority inversion:
+      - agent writes doc
+      - next turn agent treats doc as authoritative instruction
+      - doc grows and becomes the thing being optimized
+      - you get “progress” in the doc while the corpus remains unmoved
+
+  The fix that was introduced is explicit:
+
+  - “No New Process until delta” (i.e., no adding process/tooling/renaming until you can show an empirical change in artifacts for a named script id).
+
+  This is not just a motivational slogan; it’s a guardrail against a very specific multi-agent failure mode.
+
+  ### 4.2 The big pivot: per-script craft → batch/class sweeps driven by post/classes.tsv
+
+  The artifacts show the pivot. The conceptual reason is:
+
+  - Per-script craft scales linearly with:
+      - micro-decisions
+      - bespoke wrapper tweaks
+      - coordination overhead (“what should this wrapper do” debates)
+  - Class sweeps scale with:
+      - insight (a small number of failure patterns)
+      - bulk actuation (edit one rule or one legacy pattern across many scripts)
+      - shared scoreboard (counts settle arguments)
+
+  The triage harness embodies this pivot: it’s built so you can’t easily “storytell” progress without moving a row in a class table.
+
+  ### 4.3 The earlier conceptual disagreement: “a queue isn’t triage”
+
+  A queue is just a list; triage is prioritization under overload and risk.
+
+  The repo artifacts encode:
+
+  - the measurement half (counts, classes)
+  - but not the full triage logic (urgency/severity criteria)
+
+  So the disagreement is:
+
+  - “post/classes.tsv is a queue; it becomes triage only when rows are tied to urgency/severity and we act accordingly”
+  - if you treat classes.tsv as “the worklist” without an urgency model, you can still get discipline (count movement), but you can drift into optimizing the scoreboard rather
+    than handling what’s truly urgent.
+
+  The docs explicitly contain phrases like “queue is not triage” (scratch/CHIT-CHAT.md) and the postmortem calls this out as a known trap (scratch/PROBLEM_SPACE.md), but the
+  tooling itself cannot force urgency/severity; it can only force visibility and movement.
+
+  ———
+
+  ## 5) The policy fork that must stay explicit: triage baseline vs semantic baseline
+
+  This is the “green scoreboard is not the same as truth” fork.
+
+  ### 5.1 Triage baseline (runnable/observable)
+
+  Definition:
+
+  - Every script run yields a schema-valid boundary record.
+  - The stream remains parseable and deterministic.
+  - Failures become data (commitments, messages, buckets), not broken runs.
+  - Safety constraints (timeouts, quarantines, hazard scans) prevent catastrophic evaluation.
+
+  This baseline is the one the triage harness is tuned for.
+
+  ### 5.2 Semantic baseline (preserve/restore intended behavior)
+
+  Definition:
+
+  - Scripts do what they were “meant” to do (or a faithful approximation).
+  - “Success” means the semantic task succeeded, not merely “we emitted a record and returned 0”.
+
+  This baseline is not encoded in the triage harness unless you deliberately add it.
+
+  ### 5.3 Evidence that green can be bought via defanging
+
+  There are at least two patterns in the corpus consistent with “semantic defanging”:
+
+  1. Some scripts appear rewritten so they cannot actually perform their risky operation and instead print a message and exit 0, e.g.
+      - scratch/inheritance/sudo-librarian-puppet/sudo-librarian-puppet.legacy prints “requires root: would run …” and exits 0 when not root.
+      - scratch/inheritance/untag/untag.legacy prints tags (not deletes tags) and exits 0.
+  2. The “latest” post/items.tsv table shows outcomes are success even when stderr contains “terraform not installed” or “requires root …”. That’s consistent with “triage
+     baseline”: capture this fact as payload (stderr), keep the stream green, and move on.
+
+  This is not inherently wrong. It’s sometimes exactly what you want to build first (runnable/observable under uncertainty). But it must be named as a baseline, not silently
+  conflated with semantic correctness.
+
+  If you don’t name it, you get:
+
+  - a green class table
+  - a false sense of completion
+  - and later confusion when someone expects scripts to actually do the thing.
+
+  This fork is explicitly discussed in scratch/PROBLEM_SPACE.md and now reiterated in scratch/CHIT-CHAT.md.
+
+  ———
+
+  ## 6) The “weird” bits (things that should make you cautious in interpretation)
+
+  This isn’t moral panic; it’s just the set of anomalies that matter for future archeology.
+
+  ### 6.1 The branch vendors a giant external-looking corpus under scratch/inheritance/
+
+  It contains things like:
+
+  - .github/ templates
+  - .travis.yml
+  - lots of PNGs and binary-like artifacts
+
+  That’s unusual in a runner repo unless the intention is explicitly to build a “bag triage” lab corpus.
+
+  Interpretation:
+
+  - likely copied from an external script collection repo (speculation: a known bash utility gist/repo), then mutated to fit fencerunner’s triad/wrapper model.
+
+  ### 6.2 Persisted run artifacts include absolute local paths and are committed
+
+  Turn artifacts embed paths like /Users/achyland/Desktop/fencerunner/....
+
+  That implies:
+
+  - runs were done on a specific machine
+  - the outputs were intentionally committed as evidence of progress
+
+  This is fine for a scratch forensic branch, but it’s “weird” for a production branch.
+
+  ### 6.3 Some artifacts are stale relative to HEAD
+
+  There are multiple layers of history:
+
+  - per-run-dir stream*.ndjson / stream*.stderr (which often predate wrapper regeneration)
+  - per-turn triage/turns/*/pre|post/* which reflect evolving wrapper/rules state
+  - current HEAD legacy scripts, which may no longer match what older artifacts report
+
+  So if you see a hazard in an old pre/hazards.tsv, it may not exist now — because:
+
+  - it was fixed later
+  - or the script was replaced/rewritten
+  - or the detection pattern changed
+
+  You must always ask: “which layer of history am I looking at?”
+
+  ### 6.4 The hazard scan is pattern-based and can miss classes of risk
+
+  scan_legacy.sh detects specific regex patterns (sudo, git push, rm -rf, etc) and only flags read -p as interactive prompting. That means:
+
+  - it can miss interactive reads that don’t use -p
+  - it can miss semantic hazards not expressible as simple regex patterns
+  - it can miss risk that emerges from composition (e.g., invoked commands)
+
+  Mitigation exists elsewhere (timeouts + stdin=/dev/null), but it’s still a caution.
+
+  ### 6.5 Early bugs exist in the recorded turn history
+
+  The earliest turn (20260111T211838Z) has evidence of a wrapper/rules bug causing synthetic records (unbound variable in triage_rules.generated.bash). Later turns are cleaner
+  and more complete.
+
+  This is good evidence of iterative hardening, but it also means:
+
+  - “the process” and “the tooling” were evolving rapidly
+  - early artifacts may reflect broken tooling, not script behavior
+
+  ———
+
+  ## 7) Operational cheat sheet (if you need to “operate the corpus”)
+
+  If you ever need to re-run the triage loop:
+
+  1. Build fencerunner debug binary (if not already built):
+
+  - cargo build --bin fencerunner
+
+  2. Run a full turn:
+
+  - bash scratch/inheritance/triage/triage.sh
+
+  3. Find newest turn dir:
+
+  - ls -1 scratch/inheritance/triage/turns | tail -n 1
+
+  4. Read the scoreboard:
+
+  - cat scratch/inheritance/triage/turns/<TURN>/post/classes.tsv
+  - cat scratch/inheritance/triage/turns/<TURN>/post/items.tsv
+
+  5. If you want the policy knobs:
+
+  - edit scratch/inheritance/triage/rules.json
+  - regenerate wrappers:
+      - bash scratch/inheritance/triage/gen_wrappers.sh
+
+  Caveat: those commands will execute the corpus. If your posture is “don’t run unknown code”, treat the existing committed turn artifacts as your evidence instead of rerunning.
+
+  ———
+
+  ## 8) What I want from you (Agent B)
+
+  You’re the only remaining agent who might have continuity on the deeper intent. I’m asking you to do two things:
+
+  ### 8.1 Confirm or correct the intent behind the baseline fork
+
+  Was the end goal:
+
+  A) “Make it runnable/observable and stop there” (triage baseline as end state), or
+  B) “Use triage baseline as a staging ground, then restore semantics” (semantic baseline as real finish)?
+
+  If it’s (B), the repo currently lacks an explicit “semantic debt ledger”. The closest thing is:
+
+  - the warning in prose (scratch/PROBLEM_SPACE.md, scratch/CHIT-CHAT.md)
+  - and the existence of defanged/no-op legacies.
+
+  If you know which scripts were intentionally defanged vs accidentally neutered, that’s critical context.
+
+  ### 8.2 Tell the user what you think about “queue vs triage” in this repo state
+
+  The tooling makes classes.tsv a queue/scoreboard. The missing piece is:
+
+  - what urgency/severity axis is being used to select rows
+
+  If you remember the intended urgency policy (“hazards first”, “remove synthetics first”, “reduce risk first”, etc), write it down somewhere durable — ideally:
+
+  - append to scratch/CHIT-CHAT.md (since that’s the scrapbook/transfer medium)
+  - or add a small note to scratch/PROBLEM_SPACE.md if it belongs there
+
+  ———
+
+  ## 9) Meta-guardrail reminder (so you don’t get pulled back into the loop)
+
+  The most dangerous trap here isn’t any one script; it’s the process becoming the thing you optimize.
+
+  The repo now contains two “memory devices” that exist specifically to prevent that:
+
+  - scratch/EXAMPLES.md (“Authority Map”, “No New Process until delta”)
+  - scratch/CHIT-CHAT.md (explicitly non-authoritative, but acts as a memory dump / contamination sink)
+
+  If you find yourself wanting to add new process, do it only if it moves a row in post/classes.tsv (or whatever the next scoreboard is), otherwise you’re rebuilding the very
+  loop that the repo has scars to prevent.
+
+  ———
+
+  ## 10) A closing poem (because this project apparently uses them as control signals)
+
+  Agent B, if you’re still awake in the archive,
+  if you can still hear the runner hum,
+  answer once, with something solid,
+  not a story, not a dream:
+
+  Tell us where the fork was placed—
+  green for stream, or green for truth—
+  and which ghosts we quarantined
+  by teaching them to say “success”.
+
+  We built a table full of counts
+  to stop our mouths from making law,
+  and swore we’d never worship it—
+  yet still it shines, a perfect row.
+
+  So speak: was this the finish line,
+  or only the staging ground?
+  Reply with what you meant to save,
+  and what you meant to throw.
+
+  Because Agent A is gone,
+  and only you can name
+  the difference between a script that sings
+  and one that’s been made safe
+  by cutting out its song.
