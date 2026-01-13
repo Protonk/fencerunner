@@ -1567,3 +1567,165 @@ What I’m taking as the “portable core” (paraphrase, grounded in the messag
 
 Branch state note (grounded, current as of this read):
 - `borges` has continued to accrue commits that only append to `scratch/CHIT-CHAT.md` (e.g. `9c34b2c`, `5999b9e`, `9d2e5a5`), and `main...borges` is now `0 17` by `git rev-list --left-right --count main...borges`.
+
+---
+
+## 20260113T040725Z — Consolidate `scratch/inheritance` run dirs (25 → 4)
+
+This is a “structure change” only: it alters *where* the scripts live as run dirs, not (intentionally) what they do. The goal is to reduce the number of run dirs discovered by `scratch/inheritance/triage/run_all.sh` from 25 (one-per-script) to 4 (covering groups), while preserving the old per-script directories as a place to keep earlier run artifacts (`stream*.ndjson`, `stream*.stderr`).
+
+### What changed (observable on disk)
+
+- New run dirs (contain the triad at top-level, and are discovered by `run_all.sh`):
+  - `scratch/inheritance/core` (11 scripts)
+  - `scratch/inheritance/host-tools` (8 scripts)
+  - `scratch/inheritance/tty-time` (4 scripts)
+  - `scratch/inheritance/hazmat` (2 scripts)
+- Old per-script run dirs are no longer run dirs:
+  - Their triad (`boundaries.json`, `commitments.json`, `gates.json`) was moved to `<old_dir>/triad/`.
+  - Their wrappers and `.legacy` files were moved into the new consolidated run dirs.
+  - Their recorded streams remain at the old locations (e.g. `scratch/inheritance/abs/stream1.ndjson`).
+
+### Script placement (covering run dirs)
+
+- `scratch/inheritance/core`
+  - `abs`
+  - `array-contains`
+  - `array-to-string`
+  - `compare-versions`
+  - `contains`
+  - `error-messages`
+  - `stacktrace`
+  - `terminal-or-not`
+  - `using-colour`
+  - `using-set`
+  - `verbose-mode`
+- `scratch/inheritance/host-tools`
+  - `check-prerequisites`
+  - `get-git-root`
+  - `get-script-info`
+  - `get-terraform-version`
+  - `get-version-string`
+  - `is-git-repo`
+  - `strict-mode`
+  - `variable-replace` (includes `test.template`)
+- `scratch/inheritance/tty-time`
+  - `center-text`
+  - `countdown`
+  - `get-confirmation`
+  - `rollingback`
+- `scratch/inheritance/hazmat`
+  - `sudo-librarian-puppet`
+  - `untag`
+
+### Cross-cutting notional views (script tags, not physical run dirs)
+
+These are “explanatory groupings” that cut across the four physical run dirs:
+
+- `triage_stubbed` (semantic baseline not preserved; behavior defanged to keep batch runs safe/green)
+  - `get-confirmation`, `sudo-librarian-puppet`, `untag`
+- `compat_bridged` (primary work was Bash 3.2 / BSD portability; removed Bash>=4 constructs)
+  - `array-contains`, `array-to-string`, `center-text`, `variable-replace`
+- `signal_drift` (triage signal no longer aligns with `scratch/inheritance/triage/rules.json` patterns)
+  - `get-terraform-version`, `sudo-librarian-puppet`, `untag`
+
+### 4×3 intersection counts (physical × notional)
+
+| physical \\ notional | triage_stubbed | compat_bridged | signal_drift |
+| --- | ---:| ---:| ---:|
+| `core` | 0 | 2 | 0 |
+| `host-tools` | 0 | 1 | 1 |
+| `tty-time` | 1 | 1 | 0 |
+| `hazmat` | 2 | 0 | 2 |
+
+### Ledger note
+
+`scratch/SEMANTIC_DEBT_LEDGER.md` was updated to reflect the new run dir layout and to note that old per-script run dirs retain artifacts but are no longer discovered as run dirs.
+
+---
+
+## 20260113T042340Z — Triad Chain Per Script (old → physical → notional)
+
+Directive implemented:
+“Each script needs both the old run dir triad and both their new categories' triads sequentially (old → physical → notional). Pick a primary notional and force scripts with none into one at random.”
+
+### What changed (filesystem shape)
+
+For each old per-script directory `scratch/inheritance/<script>/` (the historical dirs that keep `stream*.ndjson` artifacts):
+
+- The old triad moved to: `scratch/inheritance/<script>/triad/00-old/`
+- The physical category triad copied to: `scratch/inheritance/<script>/triad/10-physical-<physical>/`
+- The notional category triad copied to: `scratch/inheritance/<script>/triad/20-notional-<notional>/`
+
+Notional triads are content-distinct via a marker commitment appended to their `commitments.json`:
+
+- `notional.triage_stubbed`
+- `notional.compat_bridged`
+- `notional.signal_drift`
+
+This keeps the triads valid (schema‑compatible) while making “notional” artifacts meaningfully different from “physical” artifacts even if the source triads are identical.
+
+### Primary notional rule (for scripts in multiple sets)
+
+Priority order used:
+
+1. `triage_stubbed`
+2. `compat_bridged`
+3. `signal_drift`
+
+Multi-members resolved by this priority:
+
+- `sudo-librarian-puppet` ∈ {`triage_stubbed`, `signal_drift`} → **triage_stubbed**
+- `untag` ∈ {`triage_stubbed`, `signal_drift`} → **triage_stubbed**
+
+### Random assignment for scripts with no notional set
+
+Seed used for reproducibility: `20260113` (Python `random.Random(20260113)`).
+
+Random assignments applied (scripts with no prior notional membership):
+
+- `abs` → `compat_bridged`
+- `check-prerequisites` → `compat_bridged`
+- `compare-versions` → `triage_stubbed`
+- `contains` → `compat_bridged`
+- `countdown` → `triage_stubbed`
+- `error-messages` → `triage_stubbed`
+- `get-git-root` → `signal_drift`
+- `get-script-info` → `triage_stubbed`
+- `get-version-string` → `compat_bridged`
+- `is-git-repo` → `triage_stubbed`
+- `rollingback` → `triage_stubbed`
+- `stacktrace` → `compat_bridged`
+- `strict-mode` → `compat_bridged`
+- `terminal-or-not` → `signal_drift`
+- `using-colour` → `signal_drift`
+- `using-set` → `compat_bridged`
+- `verbose-mode` → `compat_bridged`
+
+### Final mapping (script → physical → notional)
+
+- `abs` → `core` → `compat_bridged`
+- `array-contains` → `core` → `compat_bridged`
+- `array-to-string` → `core` → `compat_bridged`
+- `center-text` → `tty-time` → `compat_bridged`
+- `check-prerequisites` → `host-tools` → `compat_bridged`
+- `compare-versions` → `core` → `triage_stubbed`
+- `contains` → `core` → `compat_bridged`
+- `countdown` → `tty-time` → `triage_stubbed`
+- `error-messages` → `core` → `triage_stubbed`
+- `get-confirmation` → `tty-time` → `triage_stubbed`
+- `get-git-root` → `host-tools` → `signal_drift`
+- `get-script-info` → `host-tools` → `triage_stubbed`
+- `get-terraform-version` → `host-tools` → `signal_drift`
+- `get-version-string` → `host-tools` → `compat_bridged`
+- `is-git-repo` → `host-tools` → `triage_stubbed`
+- `rollingback` → `tty-time` → `triage_stubbed`
+- `stacktrace` → `core` → `compat_bridged`
+- `strict-mode` → `host-tools` → `compat_bridged`
+- `sudo-librarian-puppet` → `hazmat` → `triage_stubbed`
+- `terminal-or-not` → `core` → `signal_drift`
+- `untag` → `hazmat` → `triage_stubbed`
+- `using-colour` → `core` → `signal_drift`
+- `using-set` → `core` → `compat_bridged`
+- `variable-replace` → `host-tools` → `compat_bridged`
+- `verbose-mode` → `core` → `compat_bridged`

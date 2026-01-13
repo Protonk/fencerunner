@@ -1,0 +1,149 @@
+{
+  "schema_version": "boundaries_v1",
+  "stdout": { "format": "ndjson" },
+  "record_schema": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "title": "Boundary object schema (default scripts/ contract)",
+    "description": "Default boundary record contract shipped with the repository. Run dirs may supply their own boundaries.json with a different record_schema as long as it preserves /script/id, /result/outcome, and /context/commitments.",
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["script", "operation", "result", "context", "payload"],
+    "properties": {
+      "script": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_.-]+$"
+          }
+        }
+      },
+      "operation": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["kind", "target"],
+        "properties": {
+          "kind": {
+            "type": "string",
+            "description": "Operation kind such as fs.write or net.connect."
+          },
+          "target": {
+            "type": "string",
+            "description": "Primary target of the operation (path, host, command, etc.)."
+          },
+          "args": {
+            "type": "object",
+            "description": "Optional structured arguments for the operation."
+          }
+        }
+      },
+      "result": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["outcome"],
+        "properties": {
+          "outcome": {
+            "type": "string",
+            "enum": ["success", "denied", "partial", "error"]
+          },
+          "details": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "exit_code": {
+                "type": "integer"
+              },
+              "errno": {
+                "type": "string"
+              },
+              "message": {
+                "type": "string"
+              },
+              "error_detail": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      },
+      "context": {
+        "type": "object",
+        "description": "Context block for run, stack, and enrolled commitments.",
+        "additionalProperties": true,
+        "required": ["commitments"],
+        "properties": {
+          "commitments": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["id", "helps"],
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9_.-]+$"
+                },
+                "helps": {
+                  "type": "array",
+                  "minItems": 1,
+                  "uniqueItems": true,
+                  "items": {
+                    "type": "string",
+                    "enum": ["ensure", "detect", "emit"]
+                  }
+                }
+              }
+            }
+          },
+          "run": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["command"],
+            "properties": {
+              "workspace_root": {
+                "type": "string"
+              },
+              "command": {
+                "type": "string"
+              }
+            }
+          },
+          "stack": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["os"],
+            "properties": {
+              "os": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      },
+      "payload": {
+        "type": "object",
+        "description": "Captured stdout/stderr snippets plus optional raw payload fields.",
+        "additionalProperties": true,
+        "required": ["stdout_snippet", "stderr_snippet"],
+        "properties": {
+          "stdout_snippet": {
+            "type": "string"
+          },
+          "stderr_snippet": {
+            "type": "string"
+          },
+          "raw": {
+            "type": "object",
+            "description": "Optional script-specific payload data."
+          }
+        }
+      },
+      "extensions": {
+        "type": "object",
+        "description": "Optional extension point for non-standard fields."
+      }
+    }
+  }
+}

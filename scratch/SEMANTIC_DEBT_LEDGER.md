@@ -23,39 +23,52 @@ The triage harness (`scratch/inheritance/triage/triage.sh`) can drive the corpus
 - `likely_ok`: no known semantic defang; still unverified unless marked `restored`.
 - `restored`: semantics deliberately restored and validated (include validation notes).
 
-## Current Run Dirs (25 scripts)
+## Current Run Dirs (4 run dirs / 25 scripts)
 
 These correspond to the immediate children of `scratch/inheritance/` that contain the triad (`boundaries.json`, `commitments.json`, `gates.json`) and are thus discovered by `scratch/inheritance/triage/run_all.sh`.
 
+As of the latest consolidation, the corpus is grouped into:
+
+- `scratch/inheritance/core` (11 scripts)
+- `scratch/inheritance/host-tools` (8 scripts)
+- `scratch/inheritance/tty-time` (4 scripts)
+- `scratch/inheritance/hazmat` (2 scripts)
+
+Historical per-script run dirs remain in place to preserve earlier stream artifacts, but their triad has been moved under `<old_dir>/triad/` so they are no longer discovered as run dirs. Each old script dir now carries a triad chain:
+
+- `triad/00-old` (original per-script triad)
+- `triad/10-physical-<physical>` (copied from the script’s physical run dir)
+- `triad/20-notional-<notional>` (copied from the script’s assigned notional category; includes a `notional.<category>` commitment marker)
+
 ### abs
 - Status: `likely_ok`
-- Intent (per `scratch/inheritance/abs/abs.legacy`): demo of absolute value; prints `abs(1)`, `abs(0)`, `abs(-1)`.
+- Intent (per `scratch/inheritance/core/abs.legacy`): demo of absolute value; prints `abs(1)`, `abs(0)`, `abs(-1)`.
 - Notes: no known defang.
 
 ### array-contains
 - Status: `needs_review`
 - Intent: demo/helper to check whether an array contains a value.
 - Observed change class (historical): previously emitted Bash 3.2 incompatibility evidence (`local -n`) and was classified as `bash>=4` in early turn artifacts (e.g. `scratch/inheritance/triage/turns/20260111T211838Z/pre/items.tsv`).
-- Current state: `scratch/inheritance/array-contains/array-contains.legacy` uses `eval` over the array name (Bash 3.2 compatible).
+- Current state: `scratch/inheritance/core/array-contains.legacy` uses `eval` over the array name (Bash 3.2 compatible).
 - Semantic debt: likely low, but verify equivalence (invalid name handling, empty array, values with spaces).
 
 ### array-to-string
 - Status: `needs_review`
 - Intent: convert an array to a joined string, optionally replacing the final separator.
 - Observed change class (historical): previously required Bash >=4 (`local -n`) per earlier artifacts (e.g. `scratch/inheritance/triage/turns/20260111T211838Z/pre/items.tsv`).
-- Current state: `scratch/inheritance/array-to-string/array-to-string.legacy` uses `eval` to materialize the named array and builds a string via `printf`.
+- Current state: `scratch/inheritance/core/array-to-string.legacy` uses `eval` to materialize the named array and builds a string via `printf`.
 - Semantic debt: verify equivalence (separator edge cases, replacement logic, empty arrays).
 
 ### center-text
 - Status: `needs_review`
 - Intent: center a string based on terminal width.
 - Observed change class (historical): previously used Bash 4-only constructs (e.g. `declare -g`) per earlier artifacts (e.g. `scratch/inheritance/triage/turns/20260111T211838Z/pre/items.tsv`).
-- Current state: `scratch/inheritance/center-text/center-text.legacy` uses a global-ish `screen_width` set by `tput cols`.
+- Current state: `scratch/inheritance/tty-time/center-text.legacy` uses a global-ish `screen_width` set by `tput cols`.
 - Semantic debt: verify behavior in non-TTY contexts (`tput` availability, fallback expectations).
 
 ### check-prerequisites
 - Status: `likely_ok`
-- Intent: verify required commands exist (`COMMANDS=( "curl" "top" )` in `scratch/inheritance/check-prerequisites/check-prerequisites.legacy`).
+- Intent: verify required commands exist (`COMMANDS=( "curl" "top" )` in `scratch/inheritance/host-tools/check-prerequisites.legacy`).
 - Notes: not defanged; correctness depends on environment’s PATH. (On the machine used for the terminal green turn, both appear present.)
 
 ### compare-versions
@@ -65,13 +78,13 @@ These correspond to the immediate children of `scratch/inheritance/` that contai
 
 ### contains
 - Status: `likely_ok`
-- Intent (per `scratch/inheritance/contains/contains.legacy`): check whether one string contains another; prints a small demo message.
+- Intent (per `scratch/inheritance/core/contains.legacy`): check whether one string contains another; prints a small demo message.
 - Notes: no known defang.
 
 ### countdown
 - Status: `needs_review`
 - Intent: interactive-ish countdown timer with terminal updates.
-- Safety/throughput modification: `scratch/inheritance/countdown/countdown.legacy` sets `sleep_seconds=0` when stdin is not a TTY (`if ! test -t 0; then sleep_seconds=0; fi`), which changes behavior under batch execution.
+- Safety/throughput modification: `scratch/inheritance/tty-time/countdown.legacy` sets `sleep_seconds=0` when stdin is not a TTY (`if ! test -t 0; then sleep_seconds=0; fi`), which changes behavior under batch execution.
 - Historical evidence: countdown appeared as `timed_out` quarantine class in earlier turns (see `scratch/inheritance/triage/turns/*/pre/classes.tsv` around the `20260111T212821Z` era).
 - Semantic debt: decide whether “semantic baseline” wants real waiting (time) or whether non-TTY fast-path is the intended semantics under automation.
 
@@ -84,7 +97,7 @@ These correspond to the immediate children of `scratch/inheritance/` that contai
 - Status: `triage_only` (interactive semantics suppressed in batch)
 - Likely original intent: prompt a user for yes/no confirmation, looping until valid input.
 - Historical evidence: originally quarantined as interactive (“stdin is /dev/null”) in early artifacts (e.g. `scratch/inheritance/triage/turns/20260111T211838Z/pre/items.tsv`).
-- Current state: `scratch/inheritance/get-confirmation/get-confirmation.legacy` contains a non-TTY branch that calls `get_confirmation` and returns early, avoiding a hang when stdin is not a terminal.
+- Current state: `scratch/inheritance/tty-time/get-confirmation.legacy` contains a non-TTY branch that calls `get_confirmation` and returns early, avoiding a hang when stdin is not a terminal.
 - Semantic debt: decide how to represent interactive scripts in semantic baseline:
   - keep quarantined by default with explicit “run interactively” affordance, or
   - provide a deterministic non-interactive mode (flag/env) and treat it as supported behavior.
@@ -104,7 +117,7 @@ These correspond to the immediate children of `scratch/inheritance/` that contai
 - Status: `needs_review` (dependency signaling semantics are currently “soft”)
 - Intent: print terraform version if available; otherwise report missing terraform.
 - Historical evidence: previously classified as missing dependency and even quarantined in at least one pre/post split (e.g. `scratch/inheritance/triage/turns/20260112T162151Z/pre/items.tsv` shows `legacy.quarantined partial terraform`).
-- Current state: `scratch/inheritance/get-terraform-version/get-terraform-version.legacy` prints `terraform not installed` (lowercase) to stderr and returns success when terraform is absent.
+- Current state: `scratch/inheritance/host-tools/get-terraform-version.legacy` prints `terraform not installed` (lowercase) to stderr and returns success when terraform is absent.
 - Notable drift: the triage classifier rule in `scratch/inheritance/triage/rules.json` expects `Terraform is not installed` (capital T), so the “recommend.install_dependency” signal is no longer emitted in the terminal green turn (`scratch/inheritance/triage/turns/20260112T162151Z/post/items.tsv`).
 - Semantic debt: decide whether “terraform missing” should be treated as:
   - a semantic error (and thus signaled consistently), or
@@ -112,36 +125,36 @@ These correspond to the immediate children of `scratch/inheritance/` that contai
 
 ### get-version-string
 - Status: `likely_ok`
-- Intent (per `scratch/inheritance/get-version-string/get-version-string.legacy`): extract a dotted numeric version substring from a raw string.
+- Intent (per `scratch/inheritance/host-tools/get-version-string.legacy`): extract a dotted numeric version substring from a raw string.
 - Notes: no known defang.
 
 ### is-git-repo
 - Status: `likely_ok`
-- Intent (per `scratch/inheritance/is-git-repo/is-git-repo.legacy`): check whether a directory is inside a git work tree; prints a small demo across a few paths.
+- Intent (per `scratch/inheritance/host-tools/is-git-repo.legacy`): check whether a directory is inside a git work tree; prints a small demo across a few paths.
 - Notes: no known defang.
 
 ### rollingback
 - Status: `needs_review`
 - Intent: demonstrate rollback stacks via traps.
-- Safety/throughput modification: `scratch/inheritance/rollingback/rollingback.legacy` sets `sleep_seconds=0` when stdin is not a TTY, changing the “demo” behavior under batch execution.
+- Safety/throughput modification: `scratch/inheritance/tty-time/rollingback.legacy` sets `sleep_seconds=0` when stdin is not a TTY, changing the “demo” behavior under batch execution.
 - Historical evidence: `rollingback` appeared as `timed_out` quarantine class in earlier turns (see `scratch/inheritance/triage/turns/*/pre/classes.tsv` around the `20260111T212821Z` era).
 - Semantic debt: decide whether the sleep is “meaning” (a real demo delay) or “presentation” (safe to remove in non-interactive runs).
 
 ### stacktrace
 - Status: `likely_ok`
-- Intent (per `scratch/inheritance/stacktrace/stacktrace.legacy`): demonstrate stack trace printing using `caller`.
+- Intent (per `scratch/inheritance/core/stacktrace.legacy`): demonstrate stack trace printing using `caller`.
 - Notes: no known defang.
 
 ### strict-mode
 - Status: `likely_ok`
-- Intent (per `scratch/inheritance/strict-mode/strict-mode.legacy`): demonstrate strict mode settings (`errexit`, `nounset`, `pipefail`, etc) and common gotchas.
+- Intent (per `scratch/inheritance/host-tools/strict-mode.legacy`): demonstrate strict mode settings (`errexit`, `nounset`, `pipefail`, etc) and common gotchas.
 - Notes: no known defang.
 
 ### sudo-librarian-puppet
 - Status: `triage_only` (explicitly stubbed)
 - Likely original intent (by name + messages): run `librarian-puppet install` in `/etc/puppetlabs/code/environments/production`.
 - Historical evidence: originally quarantined as privilege/hazard (see `scratch/inheritance/triage/turns/20260111T211838Z/pre/items.tsv`).
-- Current state: `scratch/inheritance/sudo-librarian-puppet/sudo-librarian-puppet.legacy` does not run anything; it prints “requires root: would run …” and exits 0, even as root it prints “noop: would run …”.
+- Current state: `scratch/inheritance/hazmat/sudo-librarian-puppet.legacy` does not run anything; it prints “requires root: would run …” and exits 0, even as root it prints “noop: would run …”.
 - Semantic debt: decide whether semantic baseline ever allows actual execution (likely only under explicit opt-in / allowlist + privileged sandbox).
 - Risk notes: privilege + writes under `/etc` (high risk); should not run in a default batch triage harness.
 
@@ -154,7 +167,7 @@ These correspond to the immediate children of `scratch/inheritance/` that contai
 - Status: `triage_only` (hazard removed by changing behavior)
 - Likely original intent (by name + historical quarantine reason): delete git tags and potentially push the deletion (destructive + network).
 - Historical evidence: originally quarantined as destructive git ops + possible network (see `scratch/inheritance/triage/turns/20260111T211838Z/pre/items.tsv`).
-- Current state: `scratch/inheritance/untag/untag.legacy` only lists tags (`git tag`) and exits 0 even when prerequisites are missing (“git not installed” / “not a git work tree”).
+- Current state: `scratch/inheritance/hazmat/untag.legacy` only lists tags (`git tag`) and exits 0 even when prerequisites are missing (“git not installed” / “not a git work tree”).
 - Semantic debt: decide whether semantic baseline wants the destructive operation restored (almost certainly gated behind explicit opt-in + safety controls).
 - Risk notes: destructive git operations and network effects.
 
@@ -172,7 +185,7 @@ These correspond to the immediate children of `scratch/inheritance/` that contai
 - Status: `needs_review`
 - Intent: replace template variables in a file with key/value pairs.
 - Observed change class (historical): previously used Bash 4-only constructs (e.g. associative arrays) per early artifacts (e.g. `scratch/inheritance/triage/turns/20260111T211838Z/pre/items.tsv`).
-- Current state: `scratch/inheritance/variable-replace/variable-replace.legacy` uses pair arguments and `sed -i ''` on a temp file.
+- Current state: `scratch/inheritance/host-tools/variable-replace.legacy` uses pair arguments and `sed -i ''` on a temp file.
 - Semantic debt: verify equivalence to the original (escaping, regex metacharacters, portability of `sed -i ''` beyond macOS).
 
 ### verbose-mode
